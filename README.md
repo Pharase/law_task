@@ -31,7 +31,7 @@ Browsers never talk to the database directly. Every table has RLS on with no pol
 
 ## Uploads
 
-- Pictures and PDFs, 10 MB max.
+- Pictures (JPG, PNG, WEBP) and PDFs, 10 MB max. HEIC is rejected because only Apple devices can display it. Safari and LINE on iPhone convert HEIC to JPEG before upload anyway.
 - Before upload, the browser shrinks pictures to at most 1600 px on the long side and re-encodes them as JPEG, aiming for 50% of the original size or less.
 - A daily job (03:00 UTC, `pg_cron`) deletes files older than **365 days** (`RETENTION_DAYS` in `supabase/functions/api/index.ts`). Only use uploads for working copies, not legal documents you must keep.
 
@@ -82,8 +82,20 @@ Add the page's actions to `supabase/functions/api/index.ts`. Put admin-only ones
 node --test supabase/functions/api/codes.test.ts
 ```
 
+### Manual check: the invite gate (run after every change to `redeem`)
+
+Use a second LINE account that isn't approved yet.
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Admin creates a code; enter it within 15 min | Approved; menu shows |
+| 2 | Enter the same code again from another pending account | "wrong or expired code" |
+| 3 | Create a code, wait 16 min, enter it | "wrong or expired code" |
+| 4 | Enter 5 random codes | 5th shows "Account locked"; admin page shows LOCKED |
+| 5 | While locked, enter a fresh valid code | Still locked until an admin clicks Unlock |
+
 ## Troubleshooting
 
 - **400 Bad Request on login**: the page URL doesn't match the LIFF Endpoint URL.
-- **"invalid or expired LINE ID token"**: `LINE_CHANNEL_ID` is wrong or not set.
+- **"Login check failed (invalid or expired LINE ID token)"**: `LINE_CHANNEL_ID` is wrong or not set (`npx supabase secrets list`).
 - **Supabase free tier** pauses a project after 7 days with no activity. While it's paused, the app and the cleanup job stop. Restore it from the dashboard.

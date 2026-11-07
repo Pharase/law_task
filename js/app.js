@@ -5,6 +5,7 @@ const API_URL = "https://edymfgeecbsmepdveqkj.supabase.co/functions/v1/api";
 const HOME = new URL("../", document.currentScript.src).href;
 
 const $ = (id) => document.getElementById(id);
+const login = () => liff.login({ redirectUri: location.origin + location.pathname });
 
 async function api(action, data = {}) {
   const isForm = data instanceof FormData;
@@ -15,22 +16,30 @@ async function api(action, data = {}) {
     body: isForm ? data : JSON.stringify({ action, ...data }),
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 401) { // ID token expired (~1 h): get a fresh one
-    liff.logout();
-    liff.login({ redirectUri: location.origin + location.pathname });
-    throw new Error("Session expired, logging in again…");
+  if (res.status === 401) {
+    // Token expired (~1 h): log in again, but only once, so a server misconfig shows an error instead of a redirect loop.
+    if (!liff.isInClient() && !sessionStorage.getItem("relogin")) {
+      sessionStorage.setItem("relogin", "1");
+      liff.logout();
+      login();
+      return new Promise(() => {}); // page is navigating away
+    }
+    throw new Error(`Login check failed (${body.error || "401"}). Close and reopen the app; if it keeps happening, tell an admin.`);
   }
+  sessionStorage.removeItem("relogin");
   if (!res.ok) throw new Error(body.error || res.statusText);
   return body;
 }
 
 // Call at the top of every page. Resolves to the profile, or redirects away.
-// need: "member" (members and admins), "admin", or "any" (home page: shows invite-code screen itself).
+// need: "member" (members and admins), "admin", or "any" (home page: resolves null when
+// logged out instead of redirecting, and shows the invite-code screen itself).
 async function start(need = "member") {
   await liff.init({ liffId: LIFF_ID });
   if (!liff.isLoggedIn()) {
-    liff.login({ redirectUri: location.origin + location.pathname });
-    return new Promise(() => {}); // page is navigating away
+    if (need === "any") return null;
+    login();
+    return new Promise(() => {});
   }
   const me = await api("me");
   const ok = need === "any" || (need === "admin" ? me.role === "admin" : me.role === "member" || me.role === "admin");
@@ -42,7 +51,7 @@ async function start(need = "member") {
 }
 
 // Pictures: max 1600 px long side, re-encoded as JPEG until <= 50% of the original (or best effort).
-// PDFs and anything the browser can't decode (e.g. HEIC outside Safari) upload unchanged.
+// PDFs and anything the browser can't decode (e.g. HEIC outside Safari) upload unchanged; the server rejects HEIC.
 async function shrinkImage(file) {
   if (!file.type.startsWith("image/")) return file;
   let bitmap;
@@ -51,7 +60,10 @@ async function shrinkImage(file) {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; // JPEG has no transparency; without this, transparent areas turn black
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   let blob;
   for (const q of [0.8, 0.65, 0.5, 0.35]) {
     blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", q));

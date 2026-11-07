@@ -38,7 +38,7 @@ alter table profiles enable row level security;
 alter table invites  enable row level security;
 alter table files    enable row level security;
 
--- Private bucket; 10 MB cap; pictures and PDFs only.
+-- Private bucket; 10 MB cap; pictures and PDFs only (no HEIC: only Apple devices can display it).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('uploads', 'uploads', false, 10485760,
-        array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf']);
+        array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);

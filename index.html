@@ -9,11 +9,32 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <h1>law_task</h1>
-  <p id="status">Loading…</p>
+  <header class="row header">
+    <h1>law_task</h1>
+    <span id="badge" class="badge">Loading…</span>
+  </header>
+  <p id="status" class="muted" role="status">Loading…</p>
 
-  <!-- Not approved yet: enter invite code -->
+  <!-- Logged out (external browser only; inside LINE you are always logged in) -->
+  <div class="card" id="loggedOutCard" hidden>
+    <h2>Welcome</h2>
+    <p>Log in with your LINE account to use law_task.</p>
+    <button id="loginBtn">Log in with LINE</button>
+  </div>
+
+  <!-- Logged in: who you are -->
+  <div class="card row" id="profileCard" hidden>
+    <img id="avatar" alt="">
+    <div class="grow">
+      <strong id="name"></strong>
+      <div class="muted" id="lineName"></div>
+      <span id="role" class="badge"></span>
+    </div>
+  </div>
+
+  <!-- Logged in, not approved yet -->
   <form class="card" id="codeCard" hidden>
+    <h2>Waiting for approval</h2>
     <label for="code">Enter the 8-character invite code from your admin</label>
     <input id="code" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" required>
     <button>Submit code</button>
@@ -21,17 +42,22 @@
   </form>
 
   <div class="card" id="lockedCard" hidden>
+    <h2>Account locked</h2>
     <p class="error">Too many wrong codes. Please contact an admin for a new code.</p>
   </div>
 
-  <!-- Approved -->
+  <!-- Logged in and approved -->
   <div id="appCard" hidden>
-    <div class="card row">
-      <img id="avatar" alt="">
-      <div><strong id="name"></strong><br><span id="role" class="muted"></span></div>
-    </div>
-    <div class="card" id="adminCard" hidden>
-      <a href="admin/members.html">Admin: members &amp; invite codes</a>
+    <div class="card">
+      <h2>Menu</h2>
+      <ul class="menu">
+        <li>Tracking task <span class="soon">Coming soon</span></li>
+        <li>News <span class="soon">Coming soon</span></li>
+        <li>Example documents &amp; process steps <span class="soon">Coming soon</span></li>
+        <li>Team performance <span class="soon">Coming soon</span></li>
+        <li>Finance &amp; accounting <span class="soon">Coming soon</span></li>
+        <li id="adminItem" hidden><a href="admin/members.html">Admin: members &amp; invite codes</a></li>
+      </ul>
     </div>
     <div class="card">
       <label for="file">Upload a picture or PDF (max 10 MB, deleted after 1 year)</label>
@@ -41,22 +67,39 @@
     </div>
   </div>
 
+  <button class="secondary" id="logoutBtn" hidden>Log out</button>
+
   <script>
+    const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };
+
+    function setBadge(text, cls) {
+      $("badge").textContent = text;
+      $("badge").className = "badge " + cls;
+    }
+
+    function showLoggedOut() {
+      $("status").hidden = true;
+      setBadge("Not logged in", "off");
+      $("loggedOutCard").hidden = false;
+    }
+
     function show(me) {
       $("status").hidden = true;
-      $("codeCard").hidden = $("lockedCard").hidden = $("appCard").hidden = true;
-      if (me.role === "member" || me.role === "admin") {
-        $("appCard").hidden = false;
-        $("name").textContent = me.staff_name || me.display_name;
-        $("role").textContent = me.role;
-        if (me.picture_url) $("avatar").src = me.picture_url;
-        $("adminCard").hidden = me.role !== "admin";
-        loadFiles();
-      } else if (me.locked) {
-        $("lockedCard").hidden = false;
-      } else {
-        $("codeCard").hidden = false;
-      }
+      setBadge("Logged in", "on");
+      $("profileCard").hidden = false;
+      $("name").textContent = me.staff_name || me.display_name;
+      $("lineName").textContent = "LINE: " + (me.display_name ?? "-");
+      $("role").textContent = ROLE_TEXT[me.role] ?? me.role;
+      $("role").className = "badge " + (me.role === "member" || me.role === "admin" ? "on" : "off");
+      if (me.picture_url) $("avatar").src = me.picture_url; else $("avatar").hidden = true;
+      $("logoutBtn").hidden = liff.isInClient(); // inside LINE, closing the app is "logging out"
+
+      const approved = me.role === "member" || me.role === "admin";
+      $("codeCard").hidden = approved || me.locked;
+      $("lockedCard").hidden = approved || !me.locked;
+      $("appCard").hidden = !approved;
+      $("adminItem").hidden = me.role !== "admin";
+      if (approved) loadFiles();
     }
 
     async function loadFiles() {
@@ -69,12 +112,15 @@
       }));
     }
 
+    $("loginBtn").onclick = login;
+    $("logoutBtn").onclick = () => { liff.logout(); location.reload(); };
+
     $("codeCard").onsubmit = async (e) => {
       e.preventDefault();
       $("codeError").textContent = "";
       try { show(await api("redeem", { code: $("code").value })); }
       catch (err) {
-        if (err.message.startsWith("locked")) show({ locked: true });
+        if (err.message.startsWith("locked")) { $("codeCard").hidden = true; $("lockedCard").hidden = false; }
         else $("codeError").textContent = err.message;
       }
     };
@@ -91,7 +137,8 @@
       } catch (err) { $("uploadMsg").textContent = "Error: " + err.message; }
     };
 
-    start("any").then(show).catch((err) => {
+    start("any").then((me) => (me ? show(me) : showLoggedOut())).catch((err) => {
+      setBadge("Error", "off");
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });

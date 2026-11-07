@@ -8,8 +8,8 @@ const RETENTION_DAYS = 365;
 const MAX_WRONG_CODES = 5;
 const MAX_BYTES = 10 * 1024 * 1024;
 const MIME_EXT: Record<string, string> = {
-  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "application/pdf": "pdf",
-};
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+}; // no HEIC: only Apple devices can display it
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const bucket = db.storage.from("uploads");
@@ -23,6 +23,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
 class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 const must = <T>({ data, error }: { data: T; error: unknown }) => { if (error) throw error; return data; };
+const found = <T>(row: T | null) => { if (!row) throw new HttpError(404, "user not found"); return row; };
 
 async function verifyLine(idToken: string | null) {
   if (!idToken) throw new HttpError(401, "missing LINE ID token");
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
     const form = req.headers.get("content-type")?.startsWith("multipart/") ? await req.formData() : null;
-    const body = form ? Object.fromEntries(form) : await req.json();
+    const body = form ? Object.fromEntries(form) : await req.json().catch(() => ({}));
 
     // Public on purpose: it only deletes what is already past retention, so a stranger calling it changes nothing.
     if (body.action === "cleanup") return json(await cleanup());
@@ -81,13 +82,15 @@ Deno.serve(async (req) => {
         const file = form?.get("file");
         if (!(file instanceof File)) throw new HttpError(400, "no file");
         const ext = MIME_EXT[file.type];
-        if (!ext) throw new HttpError(400, "only JPG, PNG, WEBP, HEIC or PDF");
+        if (!ext) throw new HttpError(400, "only JPG, PNG, WEBP or PDF");
         if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
         const path = `${me.line_user_id}/${crypto.randomUUID()}.${ext}`;
         must(await bucket.upload(path, file, { contentType: file.type }));
-        return json(must(await db.from("files").insert({
+        const row = await db.from("files").insert({
           owner: me.line_user_id, path, name: file.name, mime: file.type, size: file.size,
-        }).select().single()));
+        }).select().single();
+        if (row.error) await bucket.remove([path]); // a file without a row would never be auto-deleted
+        return json(must(row));
       }
 
       case "myFiles": {
@@ -107,7 +110,7 @@ Deno.serve(async (req) => {
 
       case "createInvite": {
         const staff_name = String(body.staff_name ?? "").trim();
-        if (!staff_name) throw new HttpError(400, "staff name is required");
+        if (!staff_name || staff_name.length > 100) throw new HttpError(400, "staff name is required (max 100 characters)");
         if (!["member", "admin"].includes(body.role)) throw new HttpError(400, "role must be member or admin");
         return json(must(await db.from("invites")
           .insert({ code: newCode(), staff_name, role: body.role, created_by: me.line_user_id })
@@ -117,13 +120,13 @@ Deno.serve(async (req) => {
       case "setRole": {
         if (!["member", "admin", "revoked"].includes(body.role)) throw new HttpError(400, "bad role");
         if (body.line_user_id === me.line_user_id) throw new HttpError(400, "you can't change your own role");
-        return json(must(await db.from("profiles").update({ role: body.role, locked: false, failed_codes: 0 })
-          .eq("line_user_id", body.line_user_id).select().single()));
+        return json(found(must(await db.from("profiles").update({ role: body.role, locked: false, failed_codes: 0 })
+          .eq("line_user_id", body.line_user_id).select().maybeSingle())));
       }
 
       case "unlock":
-        return json(must(await db.from("profiles").update({ locked: false, failed_codes: 0 })
-          .eq("line_user_id", body.line_user_id).select().single()));
+        return json(found(must(await db.from("profiles").update({ locked: false, failed_codes: 0 })
+          .eq("line_user_id", body.line_user_id).select().maybeSingle())));
     }
     throw new HttpError(400, "unknown action");
   } catch (e) {
