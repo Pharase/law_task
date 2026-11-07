@@ -1,5 +1,6 @@
 # Push to main that touches supabase/ -> test, apply new migrations, deploy the api function.
-# Needs repo secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD (see README "Deploy").
+# Needs only the repo secret SUPABASE_ACCESS_TOKEN: with no DB password set, the CLI logs in
+# to the database through a temporary role created with the access token.
 name: Deploy Supabase
 
 on:
@@ -15,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PROJECT_REF: edymfgeecbsmepdveqkj
     steps:
       - uses: actions/checkout@v4
