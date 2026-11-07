@@ -4,6 +4,8 @@ Thumbs.db
 .idea/
 node_modules/
 supabase/.temp/
+# exports of the old Google Sheets system: real data, never commit (repo is public)
+old-system/
 .env
 .env.*
 *.log

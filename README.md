@@ -47,6 +47,17 @@ npx supabase secrets set LINE_CHANNEL_ID=2012450429    # the number before "-" i
 npx supabase functions deploy api                      # verify_jwt=false comes from supabase/config.toml
 ```
 
+### Automatic deploys (GitHub Actions)
+
+After the first manual deploy, every push to `main` that changes `supabase/` runs [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml). It runs the tests, applies new migrations and deploys `api`. Set these two repo secrets once:
+
+```sh
+gh secret set SUPABASE_ACCESS_TOKEN   # create at https://supabase.com/dashboard/account/tokens
+gh secret set SUPABASE_DB_PASSWORD    # your database password
+```
+
+You can also run it by hand: **GitHub → Actions → Deploy Supabase → Run workflow**.
+
 **Make yourself the first admin.** Open the LIFF app and log in once. You'll land on the invite-code screen. Then run this in the Supabase **SQL Editor**:
 
 ```sql
