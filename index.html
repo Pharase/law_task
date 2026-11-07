@@ -56,7 +56,8 @@
         $("status").textContent = "Not logged in";
         $("loginCard").hidden = false;
         // In a browser this redirects to LINE Login (email/password or QR code on PC)
-        $("loginBtn").onclick = () => liff.login({ redirectUri: location.href });
+        // No redirectUri: LIFF defaults to the Endpoint URL; a non-matching URL makes LINE Login return 400
+        $("loginBtn").onclick = () => liff.login();
         return;
       }
 
