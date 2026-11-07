@@ -29,4 +29,5 @@ jobs:
       - run: supabase link --project-ref "$PROJECT_REF"
       # --remote: newer CLIs default to a local stack; --yes: CI can't answer the confirm prompt
       - run: supabase db push --remote --yes
+      - run: supabase secrets set LINE_CHANNEL_ID=2012450429 --yes # public: the number before "-" in the LIFF ID
       - run: supabase functions deploy api --yes

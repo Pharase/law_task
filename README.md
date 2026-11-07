@@ -49,11 +49,10 @@ npx supabase functions deploy api                      # verify_jwt=false comes 
 
 ### Automatic deploys (GitHub Actions)
 
-After the first manual deploy, every push to `main` that changes `supabase/` runs [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml). It runs the tests, applies new migrations and deploys `api`. Set these two repo secrets once:
+Every push to `main` that changes `supabase/` runs [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml). It runs the tests, applies new migrations, sets `LINE_CHANNEL_ID` and deploys `api`. It needs one repo secret, and no database password: the CLI logs in with the token.
 
 ```sh
-gh secret set SUPABASE_ACCESS_TOKEN   # create at https://supabase.com/dashboard/account/tokens
-gh secret set SUPABASE_DB_PASSWORD    # your database password
+gh secret set SUPABASE_ACCESS_TOKEN   # paste a token from https://supabase.com/dashboard/account/tokens at the prompt
 ```
 
 You can also run it by hand: **GitHub → Actions → Deploy Supabase → Run workflow**.
