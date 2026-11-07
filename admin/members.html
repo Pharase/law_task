@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Members – admin</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="../js/app.js"></script>
+  <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+  <p><a href="../">← Home</a></p>
+  <h1>Members &amp; invite codes</h1>
+  <p id="status">Loading…</p>
+
+  <form class="card" id="inviteForm" hidden>
+    <label for="staffName">Staff name</label>
+    <input id="staffName" required>
+    <label for="inviteRole">Role</label>
+    <select id="inviteRole"><option value="member">member</option><option value="admin">admin</option></select>
+    <button>Create invite code</button>
+    <div id="inviteResult" role="status" aria-live="polite"></div>
+  </form>
+
+  <div class="card" id="usersCard" hidden>
+    <label>Users</label>
+    <div id="users"></div>
+  </div>
+
+  <script>
+    let myId;
+
+    function button(text, cls, onclick) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "small " + cls; b.textContent = text; b.onclick = onclick;
+      return b;
+    }
+
+    async function act(action, data) {
+      try { await api(action, data); await loadUsers(); }
+      catch (err) { alert(err.message); }
+    }
+
+    async function loadUsers() {
+      const users = await api("listUsers");
+      // pending/locked first so admins see who is waiting
+      users.sort((a, b) => (b.role === "pending") - (a.role === "pending") || b.locked - a.locked);
+      $("users").replaceChildren(...users.map((u) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.style.cssText = "border-top:1px solid #eee;padding:8px 0;flex-wrap:wrap";
+        const img = document.createElement("img");
+        img.alt = ""; if (u.picture_url) img.src = u.picture_url;
+        const info = document.createElement("div");
+        info.style.flex = "1";
+        const name = document.createElement("strong");
+        name.textContent = u.staff_name || u.display_name || u.line_user_id;
+        const meta = document.createElement("div");
+        meta.className = u.locked ? "error" : "muted";
+        meta.textContent = `${u.role}${u.locked ? " · LOCKED" : ""} · LINE: ${u.display_name ?? "-"}`;
+        info.append(name, meta);
+        row.append(img, info);
+        if (u.line_user_id !== myId) {
+          const id = u.line_user_id;
+          if (u.locked) row.append(button("Unlock", "", () => act("unlock", { line_user_id: id })));
+          if (u.role !== "member") row.append(button("Make member", "", () => act("setRole", { line_user_id: id, role: "member" })));
+          if (u.role !== "admin") row.append(button("Make admin", "secondary", () => act("setRole", { line_user_id: id, role: "admin" })));
+          if (u.role !== "revoked") row.append(button("Revoke", "danger", () =>
+            confirm(`Revoke ${name.textContent}?`) && act("setRole", { line_user_id: id, role: "revoked" })));
+        }
+        return row;
+      }));
+    }
+
+    $("inviteForm").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        const inv = await api("createInvite", { staff_name: $("staffName").value, role: $("inviteRole").value });
+        const code = document.createElement("div");
+        code.className = "code"; code.textContent = inv.code;
+        const note = document.createElement("p");
+        note.className = "muted";
+        note.textContent = `For ${inv.staff_name} (${inv.role}). Expires ${new Date(inv.expires_at).toLocaleTimeString()} — send it privately now.`;
+        $("inviteResult").replaceChildren(code, note);
+        $("staffName").value = "";
+      } catch (err) { alert(err.message); }
+    };
+
+    start("admin").then(async (me) => {
+      myId = me.line_user_id;
+      $("status").hidden = true;
+      $("inviteForm").hidden = $("usersCard").hidden = false;
+      await loadUsers();
+    }).catch((err) => {
+      $("status").textContent = "Error: " + err.message;
+      $("status").className = "error";
+    });
+  </script>
+</body>
+</html>

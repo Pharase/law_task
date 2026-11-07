@@ -1,0 +1,5 @@
+project_id = "edymfgeecbsmepdveqkj"
+
+[functions.api]
+# We verify the LINE ID token ourselves, so Supabase must not demand a Supabase JWT.
+verify_jwt = false

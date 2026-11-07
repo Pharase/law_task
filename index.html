@@ -3,79 +3,95 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LIFF Login Test</title>
+  <title>law_task</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; background: #f5f5f5; color: #222; }
-    .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-    img { width: 72px; height: 72px; border-radius: 50%; }
-    button { width: 100%; padding: 12px; border: 0; border-radius: 8px; font-size: 16px; color: #fff; background: #06c755; cursor: pointer; }
-    button.secondary { background: #888; margin-top: 8px; }
-    dt { font-weight: 600; margin-top: 8px; }
-    dd { margin: 0; word-break: break-all; font-family: monospace; }
-    .error { color: #c00; }
-    [hidden] { display: none; }
-  </style>
+  <script src="js/app.js"></script>
+  <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <h1>LIFF Login Test</h1>
+  <h1>law_task</h1>
+  <p id="status">Loading…</p>
 
-  <div class="card">
-    <dl>
-      <dt>Environment</dt><dd id="env">loading…</dd>
-      <dt>Status</dt><dd id="status">initializing…</dd>
-    </dl>
+  <!-- Not approved yet: enter invite code -->
+  <form class="card" id="codeCard" hidden>
+    <label for="code">Enter the 8-character invite code from your admin</label>
+    <input id="code" maxlength="9" autocomplete="one-time-code" autocapitalize="characters" required>
+    <button>Submit code</button>
+    <p class="error" id="codeError" role="alert"></p>
+  </form>
+
+  <div class="card" id="lockedCard" hidden>
+    <p class="error">Too many wrong codes. Please contact an admin for a new code.</p>
   </div>
 
-  <div class="card" id="loginCard" hidden>
-    <button id="loginBtn">Login with LINE</button>
-  </div>
-
-  <div class="card" id="profileCard" hidden>
-    <img id="avatar" alt="Profile picture">
-    <dl>
-      <dt>Name</dt><dd id="name"></dd>
-      <dt>LINE userId (sub)</dt><dd id="userId"></dd>
-      <dt>ID token (send this to backend)</dt><dd id="idToken"></dd>
-    </dl>
-    <button class="secondary" id="logoutBtn" hidden>Logout</button>
+  <!-- Approved -->
+  <div id="appCard" hidden>
+    <div class="card row">
+      <img id="avatar" alt="">
+      <div><strong id="name"></strong><br><span id="role" class="muted"></span></div>
+    </div>
+    <div class="card" id="adminCard" hidden>
+      <a href="admin/members.html">Admin: members &amp; invite codes</a>
+    </div>
+    <div class="card">
+      <label for="file">Upload a picture or PDF (max 10 MB, deleted after 1 year)</label>
+      <input type="file" id="file" accept="image/*,application/pdf">
+      <p id="uploadMsg" role="status"></p>
+      <ul id="files"></ul>
+    </div>
   </div>
 
   <script>
-    const LIFF_ID = "2012450429-k3WOCwtO"; // from LINE Developers Console > LIFF tab
-
-    const $ = (id) => document.getElementById(id);
-
-    async function main() {
-      await liff.init({ liffId: LIFF_ID });
-
-      const inLine = liff.isInClient();
-      $("env").textContent = (inLine ? "Inside LINE app" : "External browser") + " / OS: " + liff.getOS();
-
-      if (!liff.isLoggedIn()) {
-        $("status").textContent = "Not logged in";
-        $("loginCard").hidden = false;
-        // In a browser this redirects to LINE Login (email/password or QR code on PC)
-        // No redirectUri: LIFF defaults to the Endpoint URL; a non-matching URL makes LINE Login return 400
-        $("loginBtn").onclick = () => liff.login();
-        return;
-      }
-
-      const token = liff.getDecodedIDToken(); // display only; the backend must verify the raw token
-      $("status").textContent = "Logged in";
-      $("profileCard").hidden = false;
-      $("name").textContent = token?.name ?? "-";
-      $("userId").textContent = token?.sub ?? "-";
-      $("idToken").textContent = liff.getIDToken() ?? "- (enable openid scope)";
-      if (token?.picture) $("avatar").src = token.picture; else $("avatar").hidden = true;
-
-      if (!inLine) {
-        $("logoutBtn").hidden = false;
-        $("logoutBtn").onclick = () => { liff.logout(); location.reload(); };
+    function show(me) {
+      $("status").hidden = true;
+      $("codeCard").hidden = $("lockedCard").hidden = $("appCard").hidden = true;
+      if (me.role === "member" || me.role === "admin") {
+        $("appCard").hidden = false;
+        $("name").textContent = me.staff_name || me.display_name;
+        $("role").textContent = me.role;
+        if (me.picture_url) $("avatar").src = me.picture_url;
+        $("adminCard").hidden = me.role !== "admin";
+        loadFiles();
+      } else if (me.locked) {
+        $("lockedCard").hidden = false;
+      } else {
+        $("codeCard").hidden = false;
       }
     }
 
-    main().catch((err) => {
+    async function loadFiles() {
+      $("files").replaceChildren(...(await api("myFiles")).map((f) => {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = f.url; a.target = "_blank"; a.textContent = f.name;
+        li.append(a, ` (${Math.round(f.size / 1024)} KB, ${new Date(f.created_at).toLocaleDateString()})`);
+        return li;
+      }));
+    }
+
+    $("codeCard").onsubmit = async (e) => {
+      e.preventDefault();
+      $("codeError").textContent = "";
+      try { show(await api("redeem", { code: $("code").value })); }
+      catch (err) {
+        if (err.message.startsWith("locked")) show({ locked: true });
+        else $("codeError").textContent = err.message;
+      }
+    };
+
+    $("file").onchange = async () => {
+      const file = $("file").files[0];
+      if (!file) return;
+      $("uploadMsg").textContent = "Uploading…";
+      try {
+        const saved = await uploadFile(file);
+        $("uploadMsg").textContent = `Saved ${Math.round(saved.size / 1024)} KB (original ${Math.round(file.size / 1024)} KB)`;
+        $("file").value = "";
+        loadFiles();
+      } catch (err) { $("uploadMsg").textContent = "Error: " + err.message; }
+    };
+
+    start("any").then(show).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });

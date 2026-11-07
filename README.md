@@ -1,19 +1,89 @@
 # law_task
 
-A one-page test of LINE Login through LIFF. It shows the user's name, LINE userId and ID token.
+A LINE LIFF app for the team: LINE login, admin/member roles, invite codes, and uploads that delete themselves after 1 year. Feature pages (tasks, news, documents, performance, finance) will be added as separate `.html` files, each with an admin version in `admin/`.
 
-## Setup
+## How it fits together
 
-1. In the [LINE Developers Console](https://developers.line.biz/console/), open your LINE Login channel, go to the **LIFF** tab and add a LIFF app:
-   - **Endpoint URL**: the HTTPS URL where `index.html` is hosted, e.g. `https://pharase.github.io/law_task/`
-   - **Scopes**: `openid`, `profile`
-2. Copy the LIFF ID into `LIFF_ID` in `index.html`.
-3. Host the page over HTTPS at that exact Endpoint URL (GitHub Pages works). Then open it in a browser, or open `https://liff.line.me/<LIFF_ID>` inside LINE.
+```
+LINE app / browser ── index.html, admin/*.html (GitHub Pages)
+        │  js/app.js sends the LINE ID token with every call
+        ▼
+Supabase Edge Function `api` ── checks the token with LINE, checks the role
+        ▼
+Postgres (profiles, invites, files)  +  Storage bucket `uploads` (private)
+```
+
+Browsers never talk to the database directly. Every table has RLS on with no policies, so only the `api` function (service role) can read or write. The pages are public, so the real access control is the role check in `api`, not the `admin/` folder.
+
+## Roles and onboarding
+
+| role | can |
+|---|---|
+| `pending` | nothing; sees the invite-code screen |
+| `member` | use the member pages, upload, see their own files |
+| `admin` | everything a member can, plus the `admin/` pages |
+| `revoked` | nothing |
+
+1. An admin opens `admin/members.html`, enters a staff name and role, and gets an 8-character code (no `0 O 1 I L`).
+2. The code works **once** and expires after **15 minutes**.
+3. The new person opens the LIFF link, logs in, and enters the code. They're approved immediately.
+4. After **5 wrong codes**, the LINE account is locked. An admin unlocks it (or approves it directly) on `admin/members.html`.
+
+## Uploads
+
+- Pictures and PDFs, 10 MB max.
+- Before upload, the browser shrinks pictures to at most 1600 px on the long side and re-encodes them as JPEG, aiming for 50% of the original size or less.
+- A daily job (03:00 UTC, `pg_cron`) deletes files older than **365 days** (`RETENTION_DAYS` in `supabase/functions/api/index.ts`). Only use uploads for working copies, not legal documents you must keep.
+
+## Deploy (once)
+
+Needs Node.js. Run from the repo root:
+
+```sh
+npx supabase login
+npx supabase link --project-ref edymfgeecbsmepdveqkj
+npx supabase db push                                   # tables, bucket, daily cleanup job
+npx supabase secrets set LINE_CHANNEL_ID=2012450429    # the number before "-" in the LIFF ID
+npx supabase functions deploy api                      # verify_jwt=false comes from supabase/config.toml
+```
+
+**Make yourself the first admin.** Open the LIFF app and log in once. You'll land on the invite-code screen. Then run this in the Supabase **SQL Editor**:
+
+```sql
+update profiles set role = 'admin' where display_name = '<your LINE name>';
+```
+
+After that, add everyone else with invite codes.
+
+## LINE setup
+
+LINE Developers Console → your LINE Login channel → **LIFF**:
+- **Endpoint URL**: `https://pharase.github.io/law_task/`
+- **Scopes**: `openid`, `profile`
+
+LIFF link: https://liff.line.me/2012450429-k3WOCwtO
+
+## Adding a feature page
+
+```html
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="js/app.js"></script>      <!-- ../js/app.js inside admin/ -->
+<link rel="stylesheet" href="css/app.css">
+<script>
+  start("member").then((me) => { /* page code; call api("action", {...}) */ });   // "admin" in admin/
+</script>
+```
+
+Add the page's actions to `supabase/functions/api/index.ts`. Put admin-only ones after the `isAdmin` check.
+
+## Tests
+
+```sh
+node --test supabase/functions/api/codes.test.ts
+```
 
 ## Troubleshooting
 
-- **400 Bad Request on login**: the page URL doesn't match the LIFF **Endpoint URL**. Open it from the registered URL, not `file://` or `localhost`.
-- **Channel status "Developing"**: only the channel's admins and testers can log in. Add your account under **Roles**, or publish the channel.
-- **ID token is empty**: turn on the `openid` scope.
-
-The ID token shown here is for display only. Your backend must verify the raw token with LINE's [verify endpoint](https://developers.line.biz/en/reference/line-login/#verify-id-token) before trusting it.
+- **400 Bad Request on login**: the page URL doesn't match the LIFF Endpoint URL.
+- **"invalid or expired LINE ID token"**: `LINE_CHANNEL_ID` is wrong or not set.
+- **Supabase free tier** pauses a project after 7 days with no activity. While it's paused, the app and the cleanup job stop. Restore it from the dashboard.
