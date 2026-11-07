@@ -6,6 +6,9 @@ node_modules/
 supabase/.temp/
 # exports of the old Google Sheets system: real data, never commit (repo is public)
 old-system/
+# Supabase dashboard exports (real user data)
+*_rows.json
+*_rows.csv
 # root clasp config currently points at the OLD live script; never commit it
 /.clasp.json
 .env
