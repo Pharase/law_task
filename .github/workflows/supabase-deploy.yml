@@ -27,5 +27,5 @@ jobs:
         with:
           version: latest
       - run: supabase link --project-ref "$PROJECT_REF"
-      - run: supabase db push
+      - run: supabase db push --remote # newer CLIs default to a local stack
       - run: supabase functions deploy api --project-ref "$PROJECT_REF"
