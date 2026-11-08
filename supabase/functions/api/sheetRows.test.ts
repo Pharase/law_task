@@ -137,3 +137,13 @@ test("parseReply: HTML, {error} and non-200 throw SheetDown; JSON object is retu
   assert.throws(() => parseReply(500, "{}"), SheetDown);
   assert.deepEqual(parseReply(200, '{"rows":[]}'), { rows: [] });
 });
+
+test("sheetDownHint turns the failure into what to fix (no secrets in it)", async () => {
+  const { sheetDownHint } = await import("./sheetRows.ts");
+  assert.match(sheetDownHint("forbidden"), /GSHEET_SECRET.*API_SECRET/);
+  assert.match(sheetDownHint("reply is not JSON"), /setup/);
+  assert.match(sheetDownHint("status 404"), /GSHEET_URL/);
+  assert.match(sheetDownHint("GSHEET_URL / GSHEET_SECRET not set"), /not set/);
+  assert.match(sheetDownHint("The operation was aborted due to timeout"), /10/);
+  assert.match(sheetDownHint("tab Invoices is missing; run setup"), /tab Invoices is missing/);
+});

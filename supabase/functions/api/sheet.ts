@@ -1,7 +1,7 @@
 // Client for the Apps Script row store (gscript/). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
 import { type BuildingRow, buildingRows } from "./responsibility.ts";
 import { db, HttpError, must } from "./shared.ts";
-import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, type Task, toPeople } from "./sheetRows.ts";
+import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, sheetDownHint, type Task, toPeople } from "./sheetRows.ts";
 
 const DOWN = "Google Sheet not reachable, try again";
 
@@ -19,7 +19,8 @@ export async function sheet(op: string, payload: object = {}, timeoutMs = 10_000
   } catch (e) {
     if (e instanceof SheetDown && e.message === "not found") throw new HttpError(404, "task not found"); // row deleted by hand
     console.error("sheet", op, e);
-    throw new HttpError(503, DOWN);
+    // say why, so an admin can fix it from the message alone (sheetDownHint never includes the secret or URL)
+    throw new HttpError(503, `${DOWN} (${sheetDownHint(e instanceof Error ? e.message : String(e))})`);
   }
 }
 

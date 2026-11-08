@@ -146,3 +146,13 @@ export function parseReply(status: number, text: string): Record<string, unknown
   if (body.error) throw new SheetDown(String(body.error));
   return body;
 }
+
+/** Why the sheet call failed, as something an admin can fix. Never includes the secret or the URL. */
+export function sheetDownHint(reason: string): string {
+  if (reason === "forbidden") return "secret mismatch: Supabase GSHEET_SECRET must equal the script's API_SECRET";
+  if (reason === "reply is not JSON") return "the script answered with a web page: in the Apps Script editor run setup once (grants permission), and check the deployment is Web app · Anyone";
+  if (/^status 40[134]/.test(reason)) return "GSHEET_URL is wrong or the deployment was removed: copy the /exec URL again";
+  if (/not set/.test(reason)) return reason;
+  if (/abort|timeout/i.test(reason)) return "Google took over 10 seconds; try again";
+  return reason.slice(0, 200); // the script's own message, e.g. "tab Invoices is missing; run setup"
+}
