@@ -363,3 +363,7 @@ caption { padding-bottom: 6px; }
 .perf-note p { margin: 0 0 6px; }
 .perf-note ul { margin: 0; padding-left: 18px; }
 .perf-note strong { color: var(--ink); font-weight: 600; }
+/* the table can be 90 rows: scroll inside a fixed height, header stays visible */
+#acTable { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+#acTable table { margin-top: 0; }
+#acTable th { position: sticky; top: 0; z-index: 1; background: #0e1114; }
