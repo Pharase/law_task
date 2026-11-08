@@ -53,7 +53,11 @@
       <div id="groupList"></div>
     </section>
     <section class="card">
-      <h2>เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
+      <div class="row card-head">
+        <h2 class="grow">เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
+        <!-- locked by default so no document changes group (or gets renamed/deleted) by accident -->
+        <button type="button" class="small secondary" id="docEdit" aria-pressed="false">✏️ แก้ไข</button>
+      </div>
       <div id="docList"></div>
     </section>
   </div>
@@ -92,6 +96,15 @@
       if (name) run(async () => { await api("exdocGroupSave", { name }); $("newGroup").value = ""; });
     };
 
+    let editing = false;
+    $("docEdit").onclick = () => {
+      editing = !editing;
+      $("docEdit").textContent = editing ? "✓ เสร็จสิ้น" : "✏️ แก้ไข";
+      $("docEdit").className = "small " + (editing ? "" : "secondary");
+      $("docEdit").setAttribute("aria-pressed", String(editing));
+      loadDocs().catch((e) => alert(e.message));
+    };
+
     async function loadDocs() {
       const { groups, docs } = await api("listExDocs");
       renderGroups(groups, docs);
@@ -118,7 +131,7 @@
         return el("div", { className: "doc-row" },
           el("div", { className: "grow" }, el("a", { href: d.previewUrl, target: "_blank", textContent: d.title }),
             el("div", { className: "muted", textContent: `${fileType(d.name)} · ${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
-          move, sub, rename, del);
+          ...(editing ? [move, sub, rename, del] : []));
       };
       $("docList").replaceChildren(...(docs.length ? groupDocs(groups, docs).map((s) =>
         el("details", { className: "doc-group", open: true },
