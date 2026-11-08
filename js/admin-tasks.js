@@ -145,12 +145,14 @@ const memberLabel = (m) => (m.staff_name || m.display_name || m.line_user_id).tr
 function filterBuildings(keep = $("building").value) {
   const chosen = checked("owner").map((id) => memberLabel(members.find((m) => m.line_user_id === id) ?? { line_user_id: id }));
   const restricted = chosen.filter((n) => buildings.some((b) => b.owner === n));
-  const shown = restricted.length ? buildings.filter((b) => restricted.every((n) => b.owner === n)) : buildings;
-  $("building").replaceChildren(option("", shown.length ? "เลือกนิติบุคคล" : "— ไม่มีนิติบุคคลที่ดูแลร่วมกัน —"), ...shown.map((b) => option(b.name, b.name)));
+  const all = (b) => b.name.trim().startsWith("ทุกนิติ"); // "ทุกนิติ" = every building: always offered (as in responsibility.ts)
+  const shown = restricted.length ? buildings.filter((b) => all(b) || restricted.every((n) => b.owner === n)) : buildings;
+  const own = shown.filter((b) => !all(b)).length;
+  $("building").replaceChildren(option("", own ? "เลือกนิติบุคคล" : "— ไม่มีนิติบุคคลที่ดูแลร่วมกัน —"), ...shown.map((b) => option(b.name, b.name)));
   if (shown.some((b) => b.name === keep)) $("building").value = keep;
   $("buildingHint").textContent = !chosen.length ? "เลือกผู้รับงานก่อน เพื่อแสดงเฉพาะนิติบุคคลที่ดูแล"
     : !restricted.length ? "ผู้รับงานที่เลือกยังไม่มีนิติบุคคลในข้อมูลการมอบหมาย · แสดงทั้งหมด"
-    : shown.length ? `แสดงเฉพาะนิติบุคคลที่ ${restricted.join(", ")} ดูแล (${shown.length})`
+    : own ? `แสดงเฉพาะนิติบุคคลที่ ${restricted.join(", ")} ดูแล (${own}) และ "ทุกนิติ"`
     : "ผู้รับงานที่เลือกไม่มีนิติบุคคลที่ดูแลร่วมกัน · มอบหมายทีละคน";
 }
 

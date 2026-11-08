@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildingRows, outsideResponsibility } from "./responsibility.ts";
+import { buildingRows, isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 
 const rows = [
   { _row: 2, name: " KL2 ", type: "อาคารชุด", owner: "ทีมนุ่น" },
@@ -23,3 +23,10 @@ test("a building another team looks after is refused, naming the owner", () => a
 test("an unassigned building is refused for someone who has buildings", () => assert.equal(outsideResponsibility("The One", ["ทีมนุ่น"], b), "ทีมนุ่น"));
 test("someone with no buildings yet is not restricted (before the table is filled)", () => assert.equal(outsideResponsibility("SD7", ["ทีมใหม่"], b), null));
 test("several owners: the first one it does not belong to is named", () => assert.equal(outsideResponsibility("KL2", ["ทีมนุ่น", "ทีมมิน"], b), "ทีมมิน"));
+
+test("ทุกนิติ means every building: recognised, and allowed for anyone", () => {
+  assert.equal(isAllBuildings("ทุกนิติ"), true);
+  assert.equal(isAllBuildings(" ทุกนิติบุคคล "), true);
+  assert.equal(isAllBuildings("KL2"), false);
+  assert.equal(outsideResponsibility("ทุกนิติ", ["ทีมนุ่น", "ทีมมิน"], b), null);
+});

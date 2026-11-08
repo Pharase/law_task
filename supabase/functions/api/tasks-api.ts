@@ -3,7 +3,7 @@ import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 import { performanceRows, type ScoredTask } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
-import { outsideResponsibility } from "./responsibility.ts";
+import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
@@ -145,7 +145,9 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
 
     case "listResponsibilities": {
       // ข้อมูลการมอบหมาย: every หัวหน้างาน (member) and every building with its owner
-      const [people, buildings] = await Promise.all([loadPeople(), loadBuildingRows()]);
+      // "ทุกนิติ" (= every building) has no owner, so it is left out of the table
+      const [people, rows] = await Promise.all([loadPeople(), loadBuildingRows()]);
+      const buildings = rows.filter((b) => !isAllBuildings(b.name));
       return { people: people.filter((p) => p.role === "member").map((p) => p.name).sort((a, b) => a.localeCompare(b, "th")), buildings };
     }
 
