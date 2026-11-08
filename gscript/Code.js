@@ -5,7 +5,7 @@
 var PROPS = PropertiesService.getScriptProperties();
 var STATES = ["on_process", "submitted", "approved", "cancelled"];
 var BUILDING_TYPES = ["บ้านจัดสรร", "อาคารชุด"];
-var INVOICE_STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"];
+var INVOICE_STATUS = ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"];
 var DATE_COLS = {
   Tasks: ["due_on", "current_due_on", "created_at", "member_notified_at"],
   Sends: ["sent_on", "sent_at", "due_on", "next_due_on", "reviewed_at", "member_notified_at"],

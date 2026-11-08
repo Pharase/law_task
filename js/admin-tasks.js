@@ -407,19 +407,20 @@ function drawActivity(tasks, person, range) {
     if (i !== undefined) a[i]++;
     for (const x of t.sends) { const j = at.get(cut(x.sent_on || "")); if (j !== undefined) s[j]++; }
   }
-  const data = { a, s };
-  const total = (v) => v.reduce((p, c) => p + c, 0);
+  // running totals: each line counts up from 0 at the start of the chosen range (and restarts when the range changes)
+  const running = (v) => { let sum = 0; return v.map((n) => (sum += n)); };
+  const daily = { a, s }, data = { a: running(a), s: running(s) };
   $("acLegend").replaceChildren(...AC_SERIES.map((sr) => el("span", { className: "ac-key" },
-    el("i", { style: `--c:${sr.color}` }), `${sr.label} `, el("strong", { textContent: total(data[sr.key]) }))));
+    el("i", { style: `--c:${sr.color}` }), `${sr.label} สะสม `, el("strong", { textContent: data[sr.key].at(-1) }))));
 
   // geometry
   const box = $("acChart"), W = Math.max(box.clientWidth, 280), H = 240, L = 34, R = 14, T = 14, B = 30;
-  const top = Math.max(4, ...a, ...s), step = Math.ceil(top / 4), max = step * 4;
+  const top = Math.max(4, ...data.a, ...data.s), step = Math.ceil(top / 4), max = step * 4;
   const x = (i) => L + (keys.length === 1 ? 0 : (i * (W - L - R)) / (keys.length - 1));
   const y = (v) => T + (H - T - B) * (1 - v / max);
   const NS = "http://www.w3.org/2000/svg";
   const svg = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
-  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: "ac-svg", role: "img", "aria-label": `${AC_SERIES[0].label} ${total(a)}, ${AC_SERIES[1].label} ${total(s)}` });
+  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: "ac-svg", role: "img", "aria-label": `${AC_SERIES[0].label} สะสม ${data.a.at(-1)}, ${AC_SERIES[1].label} สะสม ${data.s.at(-1)}` });
   for (let v = 0; v <= max; v += step) { // recessive grid + y labels
     root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v ? "ac-grid" : "ac-base" }), svg("text", { x: L - 8, y: y(v) + 4, class: "ac-y" }, v));
   }
@@ -442,9 +443,10 @@ function drawActivity(tasks, person, range) {
     cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
     AC_SERIES.forEach((sr, n) => { dots[n].setAttribute("cx", x(i)); dots[n].setAttribute("cy", y(data[sr.key][i])); dots[n].setAttribute("visibility", "visible"); });
     tip.replaceChildren(el("strong", { textContent: binTitle(keys[i]) }),
-      ...AC_SERIES.map((sr) => el("div", {}, el("i", { style: `--c:${sr.color}` }), `${sr.label.split(" · ")[0]} `, el("b", { textContent: data[sr.key][i] }))));
+      ...AC_SERIES.map((sr) => el("div", {}, el("i", { style: `--c:${sr.color}` }), `${sr.label.split(" · ")[0]} สะสม `, el("b", { textContent: data[sr.key][i] }),
+        el("span", { className: "muted", textContent: ` (+${daily[sr.key][i]})` }))));
     tip.hidden = false;
-    tip.style.left = Math.min(Math.max(x(i) + 12, 0), W - 170) + "px";
+    tip.style.left = Math.min(Math.max(x(i) + 12, 0), W - 220) + "px";
     tip.style.top = "8px";
   };
   const hide = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); };
@@ -455,6 +457,6 @@ function drawActivity(tasks, person, range) {
 
   // the same numbers as a table (accessibility + exact values)
   $("acTable").replaceChildren(el("table", {},
-    el("tr", {}, el("th", { textContent: range === "12m" ? "เดือน" : "วันที่" }), ...AC_SERIES.map((sr) => el("th", { textContent: sr.label }))),
-    ...keys.map((k, i) => el("tr", {}, el("td", { textContent: binTitle(k) }), el("td", { textContent: a[i] }), el("td", { textContent: s[i] }))).reverse()));
+    el("tr", {}, el("th", { textContent: range === "12m" ? "เดือน" : "วันที่" }), ...AC_SERIES.map((sr) => el("th", { textContent: `${sr.label} (+ใหม่ · สะสม)` }))),
+    ...keys.map((k, i) => el("tr", {}, el("td", { textContent: binTitle(k) }), el("td", { textContent: `+${a[i]} · ${data.a[i]}` }), el("td", { textContent: `+${s[i]} · ${data.s[i]}` }))).reverse()));
 }

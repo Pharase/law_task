@@ -336,7 +336,7 @@ caption { padding-bottom: 6px; }
 .ac-end { stroke: #0b0d10; stroke-width: 2; }
 .ac-cross { stroke: rgba(255, 255, 255, .35); stroke-dasharray: 3 3; }
 .ac-dot { stroke: #0b0d10; stroke-width: 2; pointer-events: none; }
-.ac-tip { position: absolute; z-index: 5; min-width: 150px; padding: 8px 10px; border-radius: 12px; font-size: 13px; pointer-events: none; background: #0c0e11; border: 1px solid var(--line-2); box-shadow: 0 10px 24px rgba(0, 0, 0, .6); }
+.ac-tip { position: absolute; z-index: 5; min-width: 200px; white-space: nowrap; padding: 8px 10px; border-radius: 12px; font-size: 13px; pointer-events: none; background: #0c0e11; border: 1px solid var(--line-2); box-shadow: 0 10px 24px rgba(0, 0, 0, .6); }
 .ac-tip strong { display: block; margin-bottom: 4px; }
 .ac-table { margin-top: 8px; font-size: 14px; }
 .ac-table summary { cursor: pointer; color: var(--cyan); }
@@ -404,3 +404,5 @@ caption { padding-bottom: 6px; }
 .btn-dot { position: absolute; top: -7px; right: -7px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
   display: grid; place-items: center; font-size: 11px; font-weight: 600; line-height: 1; color: #fff; background: #ff3b5c;
   box-shadow: 0 0 0 2px #0b0d10, 0 0 10px rgba(255, 59, 92, .6); }
+.inv-warn { margin: 8px 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; color: #ffd27a; background: rgba(255, 199, 90, .08); border: 1px solid rgba(255, 199, 90, .4); }
+.inv-warn ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }

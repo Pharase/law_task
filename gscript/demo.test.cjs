@@ -38,10 +38,10 @@ test("dates are real: nothing sent or created in the future; late sends are afte
   }
 });
 
-test("invoices cover all 5 statuses with matching dates; news has one pinned", () => {
-  assert.deepEqual([...new Set(plan.invoices.map((i) => i.status))].sort(), ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"].sort());
+test("invoices cover all 4 statuses with matching dates; news has one pinned", () => {
+  assert.deepEqual([...new Set(plan.invoices.map((i) => i.status))].sort(), ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"].sort());
   for (const i of plan.invoices) {
-    if (i.status === "เรียบร้อย") assert.ok(i.billed_on && i.transfer_on && i.receipt_on);
+    if (i.status === "เสร็จสิ้น") assert.ok(i.billed_on && i.transfer_on && i.receipt_on);
     assert.equal(i.created_by, "demo");
   }
   assert.equal(plan.news.filter((n) => n.pinned === "1").length, 1);

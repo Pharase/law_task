@@ -44,6 +44,10 @@
         <p id="formMsg" class="error" role="alert"></p>
       </form>
 
+      <div class="inv-warn" id="invWarn" hidden>
+        <strong>ข้อมูลในชีต Invoices ที่ต้องแก้</strong>
+        <ul id="invWarnList"></ul>
+      </div>
       <p class="muted small-note" id="invScope" hidden>แสดงเฉพาะนิติบุคคลที่คุณดูแล (ตามข้อมูลการมอบหมาย) และรายการของ "ทุกนิติ"</p>
       <div class="row filters type-tabs" id="typeTabs" role="tablist" aria-label="ประเภท"></div>
       <input type="search" id="q" placeholder="ค้นหา นิติบุคคล หรือ เรื่อง · Search" aria-label="Search invoices">
@@ -83,13 +87,14 @@
           statusTrack(inv.status),
           el("div", { className: "inv-price" },
             el("strong", { className: "inv-amount", textContent: "฿" + baht(inv.amount) }),
-            isAdmin && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openForm(inv) }))));
+            // rows typed in the sheet without an id (id <= 0) are read-only: fix them in the sheet
+            isAdmin && inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openForm(inv) }))));
       return row;
     }
 
     // Status as a track: 5 points left -> right, filled with an orange -> yellow -> green -> blue gradient up to the
     // current point, ending in an arrow. The status name is always written too, so color is never the only cue.
-    const STEP_COLOR = ["#ff8a3d", "#ffc23d", "#b8e03d", "#3dd6a0", "#4f8cff"]; // sampled along the gradient
+    const STEP_COLOR = ["#ff8a3d", "#ffc23d", "#3ddc84", "#4f8cff"]; // one per status: orange, yellow, green, blue
     function statusTrack(status) {
       const i = Math.max(0, STATUS.indexOf(status)), last = STATUS.length - 1;
       const track = el("div", { className: "inv-track", role: "img", ariaLabel: `สถานะ ${status} (ขั้น ${i + 1}/${last + 1})` },
@@ -104,6 +109,10 @@
 
     function render() {
       renderTabs();
+      // admins: rows in the sheet the app could not read (or shows read-only), with the reason
+      const bad = data.bad || [];
+      $("invWarn").hidden = !bad.length;
+      $("invWarnList").replaceChildren(...bad.map((b) => el("li", { textContent: `แถวที่ ${b.row}: ${b.reason}` })));
       const q = $("q").value.trim().toLowerCase();
       const shown = data.invoices.filter((i) =>
         (tab === "all" || (tab === "none" ? !i.type : i.type === tab)) &&
@@ -111,7 +120,7 @@
       $("invCount").textContent = data.invoices.length;
       $("invList").replaceChildren(...(shown.length ? shown.map(invoiceRow)
         : [el("p", { className: "muted", textContent: data.invoices.length ? "ไม่พบรายการ" : "ยังไม่มีรายการเบิก" })]));
-      const open = shown.filter((i) => i.status !== "เรียบร้อย");
+      const open = shown.filter((i) => i.status !== STATUS[STATUS.length - 1]); // outstanding = not at the last step
       $("invTotal").textContent = shown.length
         ? `รวม ${shown.length} รายการ ฿${baht(shown.reduce((s, i) => s + i.amount, 0))} · ค้าง ${open.length} รายการ ฿${baht(open.reduce((s, i) => s + i.amount, 0))}`
         : "";
@@ -127,7 +136,9 @@
       f.reset();
       $("formMsg").textContent = "";
       $("fBuilding").replaceChildren(el("option", { value: "", textContent: "เลือกนิติบุคคล" }),
-        ...data.buildings.map((b) => el("option", { value: b.name, textContent: b.name + (b.type ? " · " + b.type : "") })));
+        // "ทุกนิติ" means every building: an invoice is always for one building, so it is not offered
+        ...data.buildings.filter((b) => !b.name.trim().startsWith("ทุกนิติ"))
+          .map((b) => el("option", { value: b.name, textContent: b.name + (b.type ? " · " + b.type : "") })));
       $("fStatus").replaceChildren(...STATUS.map((s) => el("option", { value: s, textContent: s })));
       f.elements.id.value = inv?.id ?? ""; // via .elements: a field named "id" would shadow form.id
       if (inv) {

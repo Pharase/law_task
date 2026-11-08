@@ -107,13 +107,13 @@ function demoPlan_(today, members, nowIso) {
     });
   }
 
-  var STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"];
+  var STATUS = ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"];
   var SUBJECTS = ["ค่าส่วนกลาง", "ค่าน้ำประปา", "ค่าทนายความ", "ค่าธรรมเนียมศาล", "ค่าซ่อมบำรุง", "ค่าประกันภัย", "ค่ารักษาความปลอดภัย", "ค่าทำความสะอาด"];
   var invoices = SUBJECTS.map(function (subject, k) {
-    var status = STATUS[k % 5], billed = add(today, -(30 - k * 3));
+    var step = k % 4, status = STATUS[step], billed = add(today, -(30 - k * 3));
     return {
       building: buildings[k % buildings.length].name, subject: "[DEMO] " + subject, amount: String(1500 + k * 2750.5),
-      billed_on: k % 5 >= 2 ? billed : "", transfer_on: k % 5 >= 3 ? add(billed, 7) : "", receipt_on: k % 5 >= 4 ? add(billed, 12) : "",
+      billed_on: step >= 1 ? billed : "", transfer_on: step >= 2 ? add(billed, 7) : "", receipt_on: step >= 3 ? add(billed, 12) : "",
       status: status, note: k === 0 ? "ข้อมูลทดสอบ (demo)" : "", created_by: DEMO, created_at: at9(add(today, -(31 - k * 3))),
     };
   });

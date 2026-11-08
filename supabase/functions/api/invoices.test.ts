@@ -8,8 +8,14 @@ const row = (over: Record<string, string> = {}) => ({
   receipt_on: "", status: "รอโอนเงิน", note: "", created_by: "UA", created_at: "2026-11-08T01:00:00Z", updated_at: "", ...over,
 });
 
-test("statuses are the five steps in order", () =>
-  assert.deepEqual(INVOICE_STATUS, ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"]));
+test("statuses are the four steps in order", () =>
+  assert.deepEqual(INVOICE_STATUS, ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"]));
+
+test("rows with an old status name still show, under the new name", () => {
+  const got = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"]
+    .map((status, i) => parseInvoices([row({ id: String(i + 1), status })], types).invoices[0]?.status);
+  assert.deepEqual(got, ["รอทนายวางบิล", "รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"]);
+});
 
 test("a good row parses: amount with commas, Buddhist date, type from the building", () => {
   const { invoices, bad } = parseInvoices([row()], types);
@@ -26,7 +32,7 @@ test("a building without a type (or not in Buildings) gets an empty type, the ro
 });
 
 for (const [name, over] of [
-  ["missing id", { id: "" }], ["no subject", { subject: " " }], ["bad amount", { amount: "abc" }],
+  ["no subject", { subject: " " }], ["bad amount", { amount: "abc" }],
   ["negative amount", { amount: "-5" }], ["unknown status", { status: "จ่ายแล้ว" }], ["bad date", { receipt_on: "tomorrow" }],
 ] as const) {
   test(`bad invoice row is reported and left out: ${name}`, () => {
@@ -36,19 +42,24 @@ for (const [name, over] of [
   });
 }
 
-test("blank status counts as ตั้งเบิก (a row typed by hand)", () =>
-  assert.equal(parseInvoices([row({ status: "" })], types).invoices[0].status, "ตั้งเบิก"));
+test("blank status counts as the first step (a row typed by hand)", () =>
+  assert.equal(parseInvoices([row({ status: "" })], types).invoices[0].status, "รอทนายวางบิล"));
 
-const buildings = ["B1", "B2"];
-const input = { building: "B1", subject: " ค่าน้ำ ", amount: "2,000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอวางบิล", note: "" };
+const buildings = ["B1", "B2", "ทุกนิติ"];
+const input = { building: "B1", subject: " ค่าน้ำ ", amount: "2,000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "" };
 
 test("invoiceCells: trims, cleans the amount, keeps ISO dates, blanks stay blank", () =>
   assert.deepEqual(invoiceCells(input, buildings), {
-    building: "B1", subject: "ค่าน้ำ", amount: "2000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอวางบิล", note: "",
+    building: "B1", subject: "ค่าน้ำ", amount: "2000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "",
   }));
 
-test("invoiceCells: status defaults to ตั้งเบิก", () =>
-  assert.equal(invoiceCells({ ...input, status: undefined }, buildings).status, "ตั้งเบิก"));
+test("invoiceCells: status defaults to the first step; an old name is saved as the new one", () => {
+  assert.equal(invoiceCells({ ...input, status: undefined }, buildings).status, "รอทนายวางบิล");
+  assert.equal(invoiceCells({ ...input, status: "เรียบร้อย" }, buildings).status, "เสร็จสิ้น");
+});
+
+test("invoiceCells: ทุกนิติ is not a building for an invoice", () =>
+  assert.throws(() => invoiceCells({ ...input, building: "ทุกนิติ" }, buildings), /ทุกนิติ/));
 
 for (const [name, over, msg] of [
   ["unknown building", { building: "Nowhere" }, /building/],
@@ -69,4 +80,19 @@ test("visibleInvoices: admins see all; a member only invoices of buildings they 
   assert.deepEqual(ids(visibleInvoices(list, owners, { role: "admin", name: "Admin" })), [1, 2, 3, 4]);
   assert.deepEqual(ids(visibleInvoices(list, owners, { role: "member", name: "ทีมนุ่น" })), [1, 3]);
   assert.deepEqual(ids(visibleInvoices(list, owners, { role: "member", name: "ทีมใหม่" })), [3]);
+});
+
+test("hand-typed rows: dd/mm/yyyy dates (พ.ศ. or ค.ศ.) and amounts with ฿ / บาท are accepted", () => {
+  const { invoices, bad } = parseInvoices([row({ billed_on: "1/11/2569", transfer_on: "05/11/2026", amount: "฿ 1,500.50 บาท" })], types);
+  assert.deepEqual(bad, []);
+  assert.equal(invoices[0].billed_on, "2026-11-01");
+  assert.equal(invoices[0].transfer_on, "2026-11-05");
+  assert.equal(invoices[0].amount, 1500.5);
+});
+
+test("a row typed without an id still shows (read-only: id <= 0) and is listed for the admin", () => {
+  const { invoices, bad } = parseInvoices([row({ id: "", _row: 7 } as never)], types);
+  assert.equal(invoices.length, 1);
+  assert.equal(invoices[0].id, -7);
+  assert.deepEqual(bad.map((b) => b.row), [7]);
 });
