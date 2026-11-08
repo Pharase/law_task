@@ -9,6 +9,12 @@ button.small { width: auto; padding: 6px 10px; font-size: 14px; margin: 2px; }
 button.danger { background: #c33; }
 button.secondary { background: #888; }
 a { color: #06c755; }
+/* Sticky top menu; scrolls sideways on phones instead of wrapping */
+.navbar { position: sticky; top: 0; z-index: 10; display: flex; gap: 4px; overflow-x: auto; margin: -16px -16px 16px; padding: 8px 16px; background: #06c755; }
+.navbar a { color: #fff; text-decoration: none; padding: 8px 12px; border-radius: 6px; white-space: nowrap; font-size: 14px; }
+.navbar a:hover { background: rgba(255, 255, 255, .15); }
+.navbar a[aria-current] { background: rgba(255, 255, 255, .3); font-weight: 600; }
+.navbar .soon { color: rgba(255, 255, 255, .7); }
 .muted { color: #777; }
 .error { color: #c00; }
 .code { font: 600 28px/1.2 monospace; letter-spacing: 4px; }

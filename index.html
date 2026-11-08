@@ -68,16 +68,6 @@
       <div id="doneList"></div>
     </section>
     <div class="card">
-      <h2>Menu</h2>
-      <ul class="menu">
-        <li><a href="Button%20C/">Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย</a></li>
-        <li><a href="Button%20D/">Reports · รายงานประจำสัปดาห์</a> <span class="soon">Coming soon</span></li>
-        <li><a href="Button%20E/">Property Right · อายัดและแจ้งบุริมสิทธิ</a> <span class="soon">Coming soon</span></li>
-        <li><a href="Button%20F/">Invoice · ใบแจ้งหนี้ค้างเบิก</a> <span class="soon">Coming soon</span></li>
-        <li id="adminItem" hidden><a href="admin/tasks.html">Admin: tasks · มอบหมาย/ตรวจงาน</a> · <a href="admin/exdoc.html">Ex Doc</a> · <a href="admin/members.html">members &amp; invite codes</a></li>
-      </ul>
-    </div>
-    <div class="card">
       <label for="file">Upload a picture or PDF (max 10 MB, kept at least 1 year; deleted only after an admin backup)</label>
       <input type="file" id="file" accept="image/*,application/pdf">
       <p id="uploadMsg" role="status"></p>
@@ -115,7 +105,6 @@
       $("codeCard").hidden = approved || me.locked;
       $("lockedCard").hidden = approved || !me.locked;
       $("appCard").hidden = !approved;
-      $("adminItem").hidden = me.role !== "admin";
       if (approved) renderWork(me).catch((err) => { $("activeList").textContent = "Error: " + err.message; });
     }
 

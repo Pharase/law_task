@@ -5,6 +5,38 @@ const API_URL = "https://edymfgeecbsmepdveqkj.supabase.co/functions/v1/api";
 const HOME = new URL("../", document.currentScript.src).href;
 
 const $ = (id) => document.getElementById(id);
+
+// Top navbar on every page: same order as the LINE rich menu (Button A = Work home). Admin links only for admins.
+const NAV = [
+  ["", "งาน · Work"],
+  ["Button%20C/", "Ex Doc."],
+  ["Button%20D/", "Reports", true],
+  ["Button%20E/", "Property Right", true],
+  ["Button%20F/", "Invoice", true],
+];
+const ADMIN_NAV = [["admin/tasks.html", "Admin · Tasks"], ["admin/exdoc.html", "Admin · Ex Doc"], ["admin/members.html", "Admin · Members"]];
+let navAdmin = false;
+function renderNav() {
+  if (!document.body) return;
+  let nav = $("navbar");
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.id = "navbar";
+    nav.className = "navbar";
+    nav.setAttribute("aria-label", "Main menu");
+    document.body.prepend(nav);
+  }
+  const here = location.href.split(/[?#]/)[0].replace(/index\.html$/, "");
+  nav.replaceChildren(...[...NAV, ...(navAdmin ? ADMIN_NAV : [])].map(([path, label, soon]) => {
+    const a = document.createElement("a");
+    a.href = HOME + path;
+    a.textContent = label;
+    if (a.href === here) a.setAttribute("aria-current", "page");
+    if (soon) a.append(Object.assign(document.createElement("small"), { className: "soon", textContent: " soon" }));
+    return a;
+  }));
+}
+document.addEventListener("DOMContentLoaded", renderNav);
 const login = () => liff.login({ redirectUri: location.origin + location.pathname });
 
 async function api(action, data = {}) {
@@ -46,6 +78,8 @@ async function start(need = "member") {
     return new Promise(() => {});
   }
   const me = await api("me");
+  navAdmin = me.role === "admin";
+  renderNav();
   const ok = need === "any" || (need === "admin" ? me.role === "admin" : me.role === "member" || me.role === "admin");
   if (!ok) {
     location.replace(HOME); // the server enforces roles anyway; this just avoids a dead page
