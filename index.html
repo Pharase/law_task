@@ -66,8 +66,12 @@
     </div>
     <!-- Admins only: which หัวหน้างาน looks after which building (drag a building to another person) -->
     <section class="card" id="respCard" hidden>
-      <h2>ข้อมูลการมอบหมาย · Responsibilities</h2>
-      <p class="muted small-note">ลากชื่อนิติบุคคลไปวางที่หัวหน้างานคนใหม่ · บนมือถือ: แตะนิติบุคคล แล้วแตะแถวหัวหน้างาน</p>
+      <div class="row card-head">
+        <h2 class="grow">ข้อมูลการมอบหมาย · Responsibilities</h2>
+        <!-- locked by default so nothing moves by accident -->
+        <button type="button" class="small secondary" id="respEdit" aria-pressed="false">✎ เปิดโหมดแก้ไข</button>
+      </div>
+      <p class="muted small-note" id="respHelp">ดูอย่างเดียว · กด "เปิดโหมดแก้ไข" ก่อนย้ายนิติบุคคล</p>
       <p class="resp-picked" id="respPicked" role="status" hidden></p>
       <div id="respList"><p class="loading" role="status"></p></div>
     </section>

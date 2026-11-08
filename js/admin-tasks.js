@@ -223,6 +223,7 @@ async function initResponsibilities(onChange) {
   const { people, buildings: rows } = await api("listResponsibilities");
   const NONE = ""; // drop target for "no one looks after it"
   let picked = null; // chip chosen by tap, waiting for a target row
+  let editing = false; // edit mode: off until the admin turns it on, so nothing moves by accident
 
   const zones = new Map(); // owner name -> chip container
   const row = (owner, label) => {
@@ -232,21 +233,21 @@ async function initResponsibilities(onChange) {
     r.dataset.owner = owner;
     zones.set(owner, chips);
     // drop target: drag over / drop, or tap the row while a chip is picked
-    r.addEventListener("dragover", (e) => { e.preventDefault(); r.classList.add("over"); });
+    r.addEventListener("dragover", (e) => { if (!editing) return; e.preventDefault(); r.classList.add("over"); });
     r.addEventListener("dragleave", () => r.classList.remove("over"));
-    r.addEventListener("drop", (e) => { e.preventDefault(); r.classList.remove("over"); move(e.dataTransfer.getData("text/plain"), owner); });
-    r.addEventListener("click", (e) => { if (picked && !e.target.closest(".resp-chip")) move(picked, owner); });
+    r.addEventListener("drop", (e) => { e.preventDefault(); r.classList.remove("over"); if (editing) move(e.dataTransfer.getData("text/plain"), owner); });
+    r.addEventListener("click", (e) => { if (editing && picked && !e.target.closest(".resp-chip")) move(picked, owner); });
     return r;
   };
   const known = new Set(people);
   const list = [row(NONE, "ยังไม่มีผู้ดูแล · Unassigned"), ...people.map((p) => row(p, p))];
 
   const chipFor = (b) => {
-    const c = el("button", { type: "button", className: "resp-chip", textContent: b.name, draggable: true, title: b.type || "" });
+    const c = el("button", { type: "button", className: "resp-chip", textContent: b.name, draggable: false, title: b.type || "" });
     c.dataset.building = b.name;
-    c.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", b.name); e.dataTransfer.effectAllowed = "move"; c.classList.add("dragging"); });
+    c.addEventListener("dragstart", (e) => { if (!editing) return e.preventDefault(); e.dataTransfer.setData("text/plain", b.name); e.dataTransfer.effectAllowed = "move"; c.classList.add("dragging"); });
     c.addEventListener("dragend", () => c.classList.remove("dragging"));
-    c.addEventListener("click", () => pick(picked === b.name ? null : b.name));
+    c.addEventListener("click", () => { if (editing) pick(picked === b.name ? null : b.name); });
     return c;
   };
   for (const b of rows) zones.get(known.has(b.owner) ? b.owner : NONE).append(chipFor(b)); // an unknown name counts as unassigned
@@ -285,6 +286,22 @@ async function initResponsibilities(onChange) {
     chip.classList.remove("saving");
   }
 
+  function setEditing(on) {
+    editing = on;
+    pick(null);
+    $("respList").querySelectorAll(".resp-chip").forEach((c) => { c.draggable = on; c.tabIndex = on ? 0 : -1; });
+    $("respList").classList.toggle("editing", on);
+    $("respCard").classList.toggle("resp-editing", on);
+    $("respEdit").textContent = on ? "✓ เสร็จสิ้น" : "✎ เปิดโหมดแก้ไข";
+    $("respEdit").className = "small " + (on ? "" : "secondary");
+    $("respEdit").setAttribute("aria-pressed", String(on));
+    $("respHelp").textContent = on
+      ? "โหมดแก้ไข: ลากนิติบุคคลไปวางที่หัวหน้างานคนใหม่ · บนมือถือ: แตะนิติบุคคล แล้วแตะแถวหัวหน้างาน"
+      : "ดูอย่างเดียว · กด \"เปิดโหมดแก้ไข\" ก่อนย้ายนิติบุคคล";
+  }
+  $("respEdit").onclick = () => setEditing(!editing);
+
   count();
   $("respList").replaceChildren(...list);
+  setEditing(false); // every time the card opens it starts locked
 }

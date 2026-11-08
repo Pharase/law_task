@@ -305,3 +305,9 @@ caption { padding-bottom: 6px; }
   .resp-row { flex-direction: column; gap: 4px; }
   .resp-row .resp-name { flex: none; }
 }
+/* responsibilities: locked (view only) until edit mode is on */
+#respList:not(.editing) .resp-chip { cursor: default; }
+#respList:not(.editing) .resp-chip:hover { border-color: var(--line-2); background: rgba(255, 255, 255, .05); }
+#respList:not(.editing) .resp-name { cursor: default; }
+.resp-editing { border-color: rgba(107, 124, 255, .55); box-shadow: 0 0 0 1px rgba(107, 124, 255, .35), 0 20px 50px rgba(0, 0, 0, .6); }
+#respList.editing .resp-chip { border-style: dashed; }
