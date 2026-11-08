@@ -77,6 +77,12 @@ for (const [name, owner_name] of [["nobody", "Zed"], ["two people", "Twin"], ["a
   });
 }
 
+test("a copied row (duplicate id) is flagged; the first row stays", () => {
+  const { tasks, bad } = parseTasks([row(), row({ _row: 3 } as never)], buildings, people);
+  assert.deepEqual(tasks.map((t) => t.sheetRow), [2]);
+  assert.deepEqual(bad.map((b) => b.row), [3]);
+});
+
 test("a revoked person's task stays valid", () => {
   const { tasks, bad } = parse({ owner_id: "U4", owner_name: "Gone" });
   assert.deepEqual(bad, []);

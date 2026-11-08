@@ -1,7 +1,9 @@
-// Task actions (spec "Button A"). Rules live in review.ts / scoring.ts; this file only talks to the database.
+// Task actions (spec "Button A"). Data lives in the Google Sheet (sheet.ts); rules live in review.ts / scoring.ts / sheetRows.ts.
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 import { performanceRows, type ScoredTask } from "./scoring.ts";
+import { batch, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
+import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
@@ -10,30 +12,27 @@ const dueDate = (s: unknown) => { try { return checkDueDate(s, today()); } catch
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
-/** Tasks matching `filter`, with building, owner name, sends and (signed) files — 3 queries, not one per task. */
-async function loadTasks(filter: (q: Row) => Row): Promise<Row[]> {
-  const base = db.from("tasks")
-    .select("*, buildings(name), owner_profile:profiles!tasks_owner_fkey(staff_name, display_name)")
-    .order("current_due_on", { ascending: true });
-  const tasks: Row[] = must(await filter(base) as { data: Row[] | null; error: unknown });
-  if (!tasks.length) return [];
-  const ids = tasks.map((t) => t.id);
-  const sends: Row[] = must(await db.from("task_sends").select().in("task_id", ids).order("sent_at"));
-  const files: Row[] = must(await db.from("files").select("id, task_id, send_id, name, mime, size, path, deleted_at").in("task_id", ids));
+/** Tasks matching `pred`, with their sends and (signed) files. One sheet read + one files query. */
+async function loadTasks(pred: (t: Task) => boolean, data?: SheetData): Promise<Row[]> {
+  const { tasks, sends } = data ?? await loadSheet();
+  const picked = tasks.filter(pred).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
+  if (!picked.length) return [];
+  const files: Row[] = must(await db.from("files").select("id, task_id, send_id, name, mime, size, path, deleted_at")
+    .in("task_id", picked.map((t) => t.id)));
   const live = files.filter((f) => !f.deleted_at);
   const urls = live.length ? must(await bucket.createSignedUrls(live.map((f) => f.path), 3600)) : [];
   const urlOf = new Map(live.map((f, i) => [f.id, urls[i]?.signedUrl]));
-  return tasks.map(({ buildings, owner_profile, ...t }) => ({
+  return picked.map(({ sheetRow: _r, ...t }) => ({
     ...t,
-    building: buildings?.name ?? "",
-    owner_name: owner_profile?.staff_name || owner_profile?.display_name || t.owner,
-    sends: sends.filter((s) => s.task_id === t.id),
+    sends: sends.filter((s) => s.task_id === t.id).sort((a, b) => a.id - b.id),
     files: files.filter((f) => f.task_id === t.id)
       .map(({ path: _p, ...f }) => (f.deleted_at ? f : { ...f, url: urlOf.get(f.id) })),
   }));
 }
 
-const one = async (id: number) => found((await loadTasks((q) => q.eq("id", id)))[0] ?? null, "task");
+// shortcut: re-reads the whole sheet after a write (~1-2 s); fine for ~10 users, build the reply from the write if it gets slow.
+const one = async (id: number) => found((await loadTasks((t) => t.id === id))[0] ?? null, "task");
+const taskIn = (data: SheetData, id: number) => found(data.tasks.find((t) => t.id === id) ?? null, "task");
 
 const taskId = (body: Row) => {
   const id = Number(body.task_id);
@@ -54,11 +53,17 @@ function checkTitle(title: unknown): string {
   return t;
 }
 
+function checkBuilding(name: unknown, buildings: string[]): string {
+  const b = String(name ?? "").trim();
+  if (!buildings.includes(b)) throw new HttpError(404, "building not found");
+  return b;
+}
+
 /** Actions for approved members (and admins). Returns undefined for actions it doesn't own. */
 export async function memberTaskActions(action: string, body: Row, me: Me): Promise<unknown> {
   switch (action) {
     case "listBuildings":
-      return must(await db.from("buildings").select("id, name").order("name"));
+      return (await loadBuildings()).map((name) => ({ name }));
 
     case "performance": {
       const kind = body.kind === "quarter" ? "quarter" : body.kind === "month" ? "month" : null;
@@ -67,45 +72,38 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         throw new HttpError(400, "kind must be month (n 1-12) or quarter (n 1-4), with a year");
       }
       const { from, to } = periodRange(kind, year, n);
-      // Approved tasks whose ORIGINAL due date is in the period; admins never own tasks, but filter to be sure.
-      const tasks: Row[] = must(await db.from("tasks")
-        .select("id, owner, tags, owner_profile:profiles!tasks_owner_fkey(role, staff_name, display_name)")
-        .eq("state", "approved").gte("due_on", from).lte("due_on", to))
-        .filter((t: Row) => t.owner_profile?.role === "member");
-      const sends: Row[] = tasks.length
-        ? must(await db.from("task_sends").select("task_id, sent_on, due_on, outcome").in("task_id", tasks.map((t) => t.id)).order("sent_at"))
-        : [];
+      const data = await loadSheet();
+      const role = new Map(data.people.map((p) => [p.line_user_id, p]));
+      // Approved tasks whose ORIGINAL due date is in the period. Revoked people still count; admins never own tasks.
+      const tasks = data.tasks.filter((t) => t.state === "approved" && t.due_on >= from && t.due_on <= to &&
+        role.has(t.owner) && role.get(t.owner)!.role !== "admin");
       const scored: ScoredTask[] = tasks.map((t) => ({
-        owner: t.owner,
-        tags: t.tags,
-        sends: sends.filter((s) => s.task_id === t.id).map((s) => ({ sentOn: s.sent_on, dueOn: s.due_on, outcome: s.outcome })),
+        owner: t.owner, tags: t.tags, sends: scoredSends(t, data.sends.filter((s) => s.task_id === t.id)),
       }));
-      const names = Object.fromEntries(tasks.map((t) => [t.owner, t.owner_profile?.staff_name || t.owner_profile?.display_name || t.owner]));
+      const names = Object.fromEntries(tasks.map((t) => [t.owner, role.get(t.owner)!.name]));
       const rows = performanceRows(scored, names); // scaled against everyone, then trimmed for members
       return { from, to, rows: me.role === "admin" ? rows : rows.filter((r) => r.line_user_id === me.line_user_id) };
     }
 
     case "myTasks":
-      return loadTasks((q) => q.eq("owner", me.line_user_id).neq("state", "cancelled"));
+      return loadTasks((t) => t.owner === me.line_user_id && t.state !== "cancelled");
 
     case "sendTask": {
       const id = taskId(body);
-      const task = found(must(await db.from("tasks").select("id, owner, state, current_due_on").eq("id", id).maybeSingle()), "task");
+      const task = taskIn(await loadSheet(), id);
       if (!canSend(task, me.line_user_id)) throw new HttpError(403, "you can only send your own task while it is On Process");
-      // Guarded flip: a double tap finds the task already submitted and stops here.
-      const flipped = must(await db.from("tasks").update({ state: "submitted" })
-        .eq("id", id).eq("state", "on_process").select("id").maybeSingle());
-      if (!flipped) throw new HttpError(409, "already sent");
-      const send = await db.from("task_sends")
-        .insert({ task_id: id, sent_on: today(), due_on: task.current_due_on }).select().single();
-      if (send.error) {
-        await db.from("tasks").update({ state: "on_process" }).eq("id", id); // undo: no pending send to review
-        throw send.error;
-      }
+      // One locked batch: the flip and the send row land together; a double tap finds state != on_process and gets 409.
+      const r = await batch([
+        { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
+        { op: "append", tab: "Sends", rows: [{
+          task_id: String(id), sent_on: today(), sent_at: new Date().toISOString(), due_on: task.current_due_on, outcome: "pending",
+        }] },
+      ]);
+      if (!r) throw new HttpError(409, "already sent");
       const fileIds = validFileIds(body.file_ids); // non-uuids dropped: a bad id must not 500 after the send is saved
       if (fileIds.length) {
         // Only the sender's own, still-unattached files move; anything else is silently ignored.
-        must(await db.from("files").update({ task_id: id, send_id: send.data.id })
+        must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })
           .in("id", fileIds).eq("owner", me.line_user_id).is("task_id", null));
       }
       return one(id);
@@ -117,41 +115,54 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
 /** Admin-only actions. Returns undefined for actions it doesn't own. */
 export async function adminTaskActions(action: string, body: Row, me: Me): Promise<unknown> {
   switch (action) {
-    case "listMembers":
+    case "listMembers": {
+      // Every admin page open refreshes the sheet's Members tab; a sheet hiccup must not break the page.
+      // Awaited: the function may stop as soon as it replies, which would drop a background write.
+      await loadPeople().then(syncMembers).catch((e) => console.error("syncMembers", e));
       return must(await db.from("profiles").select("line_user_id, staff_name, display_name")
         .eq("role", "member").order("staff_name"));
+    }
+
+    case "sheetWarnings":
+      return (await loadSheet()).bad;
 
     case "addBuilding": {
       const name = String(body.name ?? "").trim();
       if (!name || name.length > 200) throw new HttpError(400, "building name is required (max 200 characters)");
-      return must(await db.from("buildings").upsert({ name }, { onConflict: "name" }).select("id, name").single());
+      if (!(await loadBuildings()).includes(name)) await sheet("append", { tab: "Buildings", rows: [{ name }] });
+      return { name };
     }
 
     case "createTask": {
       const title = checkTitle(body.title);
       const tags = checkTags(body.tags);
       const due_on = dueDate(body.due_on);
-      const building_id = Number(body.building_id);
-      found(must(await db.from("buildings").select("id").eq("id", building_id).maybeSingle()), "building");
+      const data = await loadSheet();
+      const building = checkBuilding(body.building, data.buildings);
       const owners: string[] = Array.isArray(body.owners) ? [...new Set(body.owners.map(String))] : [];
       if (!owners.length) throw new HttpError(400, "pick at least one member");
-      const members = must(await db.from("profiles").select("line_user_id").in("line_user_id", owners).eq("role", "member"));
-      if (members.length !== owners.length) throw new HttpError(400, "tasks can only be assigned to members (not admins)");
+      const picked = owners.map((id) => data.people.find((p) => p.line_user_id === id));
+      if (picked.some((p) => !p || p.role !== "member")) throw new HttpError(400, "tasks can only be assigned to members (not admins)");
+      for (const p of picked) {
+        // owner_name is how the sheet names the owner, so it must be unique.
+        if (data.people.filter((q) => q.name === p!.name).length > 1) throw new HttpError(400, `two people are named "${p!.name}"; give one a different staff name first`);
+      }
       const details = String(body.details ?? "").trim() || null;
-      const rows = must(await db.from("tasks").insert(owners.map((owner) => ({
-        building_id, title, details, tags, owner, due_on, current_due_on: due_on, created_by: me.line_user_id,
-      }))).select("id"));
-      return loadTasks((q) => q.in("id", rows.map((r: Row) => r.id)));
+      const created_at = new Date().toISOString();
+      const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: picked.map((p) => taskCells({
+        building, title, details, tags, owner: p!.line_user_id, owner_name: p!.name, state: "on_process", due_on,
+        current_due_on: "", fix_round: 0, created_by: me.line_user_id, created_at, member_notified_at: null,
+      })) }]))!;
+      const ids = new Set(rows.map((r: Row) => Number(r.id)));
+      return loadTasks((t) => ids.has(t.id));
     }
 
     case "listTasks":
-      return loadTasks((q) => {
-        if (body.owner) q = q.eq("owner", String(body.owner));
-        if (body.building_id) q = q.eq("building_id", Number(body.building_id));
-        if (body.state) q = q.eq("state", String(body.state));
-        if (body.overdue) q = q.eq("state", "on_process").lt("current_due_on", today());
-        return q;
-      });
+      return loadTasks((t) =>
+        (!body.owner || t.owner === String(body.owner)) &&
+        (!body.building || t.building === String(body.building)) &&
+        (!body.state || t.state === String(body.state)) &&
+        (!body.overdue || (t.state === "on_process" && t.current_due_on < today())));
 
     case "reviewTask": {
       const id = taskId(body);
@@ -161,46 +172,56 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
       } catch (e) {
         throw new HttpError(400, (e as Error).message);
       }
-      const task = found(must(await db.from("tasks").select("id, fix_round").eq("id", id).maybeSingle()), "task");
+      const data = await loadSheet();
+      const task = taskIn(data, id);
+      if (task.state !== "submitted") throw new HttpError(409, "already reviewed by another admin");
+      const pending = data.sends.filter((s) => s.task_id === id && s.outcome === "pending").at(-1);
       const fx = reviewEffect(input.decision, input.nextDueOn);
-      // Guarded: only one admin's review can win; the other gets 409.
-      const updated = must(await db.from("tasks").update({
-        state: fx.taskState,
-        fix_round: task.fix_round + fx.fixRoundDelta,
-        ...(fx.newDueOn ? { current_due_on: fx.newDueOn } : {}),
-      }).eq("id", id).eq("state", "submitted").select("id").maybeSingle());
-      if (!updated) throw new HttpError(409, "already reviewed by another admin");
-      must(await db.from("task_sends").update({
-        outcome: fx.sendOutcome, fix_note: input.note, next_due_on: input.nextDueOn,
-        reviewed_by: me.line_user_id, reviewed_at: new Date().toISOString(),
-      }).eq("task_id", id).eq("outcome", "pending"));
+      // Task and send change in one locked batch: only one admin's review can win, the other gets 409.
+      const steps: Step[] = [{
+        op: "update", tab: "Tasks", id, expect: { state: "submitted" },
+        patch: { state: fx.taskState, fix_round: String(task.fix_round + fx.fixRoundDelta), ...(fx.newDueOn ? { current_due_on: fx.newDueOn } : {}) },
+      }];
+      if (pending) {
+        steps.push({
+          op: "update", tab: "Sends", id: pending.id, expect: { outcome: "pending" },
+          patch: { outcome: fx.sendOutcome, fix_note: input.note ?? "", next_due_on: input.nextDueOn ?? "",
+            reviewed_by: me.line_user_id, reviewed_at: new Date().toISOString() },
+        });
+      }
+      if (!await batch(steps)) throw new HttpError(409, "already reviewed by another admin");
       return one(id);
     }
 
     case "editTask": {
       const id = taskId(body);
-      const sends = must(await db.from("task_sends").select("id").eq("task_id", id).limit(1));
-      if (sends.length) throw new HttpError(409, "a task can only be edited before its first send");
-      const patch: Row = {};
+      const data = await loadSheet();
+      const task = taskIn(data, id);
+      if (data.sends.some((s) => s.task_id === id)) throw new HttpError(409, "a task can only be edited before its first send");
+      const patch: Partial<Task> = {};
       if (body.title !== undefined) patch.title = checkTitle(body.title);
       if (body.details !== undefined) patch.details = String(body.details ?? "").trim() || null;
       if (body.tags !== undefined) patch.tags = checkTags(body.tags);
-      if (body.building_id !== undefined) {
-        patch.building_id = found(must(await db.from("buildings").select("id").eq("id", Number(body.building_id)).maybeSingle()), "building").id;
-      }
-      if (body.due_on !== undefined) {
-        patch.due_on = patch.current_due_on = dueDate(body.due_on);
-      }
+      if (body.building !== undefined) patch.building = checkBuilding(body.building, data.buildings);
+      if (body.due_on !== undefined) patch.due_on = dueDate(body.due_on); // current_due_on stays blank = follows due_on
       if (!Object.keys(patch).length) return one(id);
-      found(must(await db.from("tasks").update(patch).eq("id", id).eq("state", "on_process").select("id").maybeSingle()), "task");
+      if (task.state !== "on_process" ||
+        !await batch([{ op: "update", tab: "Tasks", id, patch: taskCells(patch), expect: { state: "on_process" } }])) {
+        throw new HttpError(404, "task not found");
+      }
       return one(id);
     }
 
     case "cancelTask": {
       const id = taskId(body);
-      found(must(await db.from("tasks").update({ state: "cancelled" })
-        .eq("id", id).in("state", ["on_process", "submitted"]).select("id").maybeSingle()), "open task");
-      await db.from("task_sends").update({ outcome: "void" }).eq("task_id", id).eq("outcome", "pending");
+      const data = await loadSheet();
+      const task = taskIn(data, id);
+      if (task.state !== "on_process" && task.state !== "submitted") throw new HttpError(404, "open task not found");
+      const steps: Step[] = [{ op: "update", tab: "Tasks", id, patch: { state: "cancelled" }, expect: { state: task.state } }];
+      for (const s of data.sends.filter((s) => s.task_id === id && s.outcome === "pending")) {
+        steps.push({ op: "update", tab: "Sends", id: s.id, patch: { outcome: "void" }, expect: { outcome: "pending" } });
+      }
+      if (!await batch(steps)) throw new HttpError(409, "the task just changed; reload and try again");
       return one(id);
     }
   }

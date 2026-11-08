@@ -38,10 +38,13 @@ export function normDate(v: string): string | null {
 /** Valid tasks, bad rows (for admins), and hand reassignments to write back (owner_name changed in the sheet). */
 export function parseTasks(rows: Row[], buildings: Set<string>, people: Person[]) {
   const tasks: Task[] = [], bad: Bad[] = [], reassigned: { id: number; owner: string; owner_name: string }[] = [];
+  const seen = new Set<number>();
   for (const r of rows) {
     const fail = (reason: string) => bad.push({ row: r._row, tab: "Tasks", reason });
     const id = posInt(cell(r, "id"));
     if (!id) { fail("id is missing or not a number"); continue; }
+    if (seen.has(id)) { fail(`id ${id} is used twice (copied row?)`); continue; }
+    seen.add(id);
     const title = cell(r, "title");
     if (!title) { fail("title is empty"); continue; }
     const building = cell(r, "building");
