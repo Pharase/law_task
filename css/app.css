@@ -245,3 +245,26 @@ caption { padding-bottom: 6px; }
 @media (prefers-reduced-motion: reduce) {
   .circuit .signal, .circuit .pads circle { animation-duration: 4s; }
 }
+
+/* ---- Date box: dd/mm/yyyy (Buddhist year) text + mini calendar (js/app.js) ---- */
+.dp { position: relative; display: block; margin-bottom: 10px; }
+.dp .dp-text { margin: 0; padding-right: 46px; }
+.dp-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.dp .dp-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; padding: 0; margin: 0; display: grid; place-items: center; border-radius: 10px; color: var(--cyan); background: rgba(17, 69, 84, .35); border: 1px solid rgba(2, 215, 244, .35); box-shadow: none; }
+.dp .dp-btn:hover { background: rgba(17, 69, 84, .6); box-shadow: 0 0 12px rgba(2, 215, 244, .3); }
+.dp-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: 280px; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 12px; border-radius: 18px; border: 1px solid var(--line-2); background: #0c0e11; box-shadow: 0 18px 40px rgba(0, 0, 0, .7), 0 0 0 1px rgba(2, 215, 244, .08); }
+.dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dp-head strong { font-size: 15px; font-weight: 600; }
+.dp-pop button { width: auto; margin: 0; box-shadow: none; }
+.dp-pop .dp-nav { width: 32px; height: 32px; padding: 0; font-size: 18px; line-height: 1; color: var(--ink); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+.dp-dow { font-size: 12px; color: var(--ink-3); padding: 4px 0; }
+.dp-pop .dp-day { height: 34px; padding: 0; font-size: 14px; font-weight: 400; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 10px; }
+.dp-pop .dp-day:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
+.dp-pop .dp-day.today { border-color: rgba(2, 215, 244, .6); color: var(--cyan); }
+.dp-pop .dp-day.selected { background: var(--blue); color: #fff; border-color: transparent; box-shadow: 0 0 12px rgba(79, 99, 240, .5); }
+.dp-pop .dp-day:disabled { opacity: .25; cursor: default; }
+.dp-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.dp-pop .dp-link { padding: 6px 10px; font-size: 13px; color: var(--cyan); background: transparent; border: 0; }
+.dp-pop .dp-link:disabled { opacity: .35; }
+.card.dp-open { z-index: 25; }

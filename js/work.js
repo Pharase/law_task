@@ -1,7 +1,8 @@
 // Member Work dashboard (spec "Member view"). Needs js/app.js (api, uploadFile, $).
 const OUTCOME_TEXT = { pending: "รอตรวจ", approved: "อนุมัติ", void: "กดผิด", fix: "มีปรับแก้" };
 const bkkToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
-const thDate = (s) => (s ? new Date(s + "T00:00:00+07:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-");
+// dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
+const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
 
 // Build elements with textContent only, never innerHTML (titles and notes are user input).
 function el(tag, props = {}, ...kids) {

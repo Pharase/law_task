@@ -212,3 +212,137 @@ async function uploadFile(file) {
   form.append("file", await shrinkImage(file));
   return api("upload", form);
 }
+
+// ---- Dates: every <input type="date"> becomes a dd/mm/yyyy (Buddhist year) text box with a mini calendar ----
+// The original input stays (hidden) and keeps the ISO value, so code reading .value / .min / .required is unchanged.
+const TH_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const TH_WEEK = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"]; // Monday first
+const pad2 = (n) => String(n).padStart(2, "0");
+const isoOf = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+const todayIso = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+
+/** "2026-11-08" -> "08/11/2569" ("" when not a date). */
+function dateText(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  return m ? `${m[3]}/${m[2]}/${Number(m[1]) + 543}` : "";
+}
+
+/** "8/11/2569" or "08/11/2026" -> "2026-11-08"; null when it isn't a real date. Years above 2400 are Buddhist. */
+function parseDateText(t) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(t).trim());
+  if (!m) return null;
+  const y = Number(m[3]) > 2400 ? Number(m[3]) - 543 : Number(m[3]);
+  const d = new Date(Date.UTC(y, Number(m[2]) - 1, Number(m[1])));
+  return d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[1]) ? d.toISOString().slice(0, 10) : null;
+}
+
+let openPop = null;
+// The open calendar pops out below its card; lift that card so the next card cannot cover it.
+function closeCalendar() { openPop?.closest(".card")?.classList.remove("dp-open"); openPop?.remove(); openPop = null; }
+document.addEventListener("pointerdown", (e) => { if (openPop && !e.target.closest(".dp")) closeCalendar(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCalendar(); });
+
+function enhanceDate(orig) {
+  if (orig.dataset.dp) return;
+  orig.dataset.dp = "1";
+  const valueProp = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  const raw = () => valueProp.get.call(orig);
+  const wrap = Object.assign(document.createElement("span"), { className: "dp" });
+  const text = Object.assign(document.createElement("input"), { type: "text", inputMode: "numeric", autocomplete: "off", placeholder: "วว/ดด/ปปปป", className: "dp-text" });
+  text.required = orig.required;
+  orig.removeAttribute("required");
+  // labels pointing at the hidden input now point at the visible box
+  if (orig.id) {
+    text.id = orig.id + "Text";
+    document.querySelectorAll(`label[for="${orig.id}"]`).forEach((l) => { l.htmlFor = text.id; });
+  }
+  text.setAttribute("aria-label", orig.getAttribute("aria-label") || "วันที่ (วว/ดด/ปปปป)");
+  const btn = Object.assign(document.createElement("button"), { type: "button", className: "dp-btn", title: "เลือกวันที่" });
+  btn.setAttribute("aria-label", "เลือกวันที่ · Pick a date");
+  // constant markup, no user data
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
+  orig.classList.add("dp-native");
+  orig.tabIndex = -1;
+  orig.setAttribute("aria-hidden", "true");
+  orig.after(wrap);
+  wrap.append(orig, text, btn);
+
+  const check = () => {
+    const t = text.value.trim(), iso = t && parseDateText(t);
+    text.setCustomValidity(!t ? "" : !iso ? "ใช้รูปแบบ วว/ดด/ปปปป เช่น 08/11/2569"
+      : orig.min && iso < orig.min ? "วันที่ต้องไม่ก่อน " + dateText(orig.min)
+      : orig.max && iso > orig.max ? "วันที่ต้องไม่หลัง " + dateText(orig.max) : "");
+  };
+  const set = (iso) => {
+    valueProp.set.call(orig, iso);
+    orig.dispatchEvent(new Event("input", { bubbles: true }));
+    orig.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  // code that sets .value / .required on the original keeps working
+  Object.defineProperty(orig, "value", { get: raw, set(v) { valueProp.set.call(orig, v); text.value = dateText(raw()); check(); } });
+  Object.defineProperty(orig, "required", { get: () => text.required, set(v) { text.required = !!v; } });
+  text.value = dateText(raw());
+  text.addEventListener("input", () => { check(); set(parseDateText(text.value) || ""); }); // half-typed or impossible = no value
+  text.addEventListener("blur", () => { if (parseDateText(text.value)) text.value = dateText(raw()); });
+  orig.form?.addEventListener("reset", () => setTimeout(() => { text.value = dateText(raw()); check(); }));
+  btn.onclick = () => (openPop && wrap.contains(openPop) ? closeCalendar()
+    : showCalendar(wrap, orig, (iso) => { text.value = dateText(iso); check(); set(iso); text.focus(); }));
+}
+
+function showCalendar(wrap, orig, pick) {
+  closeCalendar();
+  const start = orig.value || todayIso();
+  let y = Number(start.slice(0, 4)), m = Number(start.slice(5, 7)) - 1;
+  const pop = Object.assign(document.createElement("div"), { className: "dp-pop" });
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", "ปฏิทิน · Calendar");
+  const allowed = (iso) => !(orig.min && iso < orig.min) && !(orig.max && iso > orig.max);
+  const b = (text, cls, onclick, label) => {
+    const x = Object.assign(document.createElement("button"), { type: "button", className: cls, textContent: text });
+    if (label) x.setAttribute("aria-label", label);
+    x.onclick = onclick;
+    return x;
+  };
+  const render = () => {
+    const first = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7; // Monday = 0
+    const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const head = Object.assign(document.createElement("div"), { className: "dp-head" });
+    head.append(
+      b("‹", "dp-nav", () => { if (m === 0) { m = 11; y--; } else m--; render(); }, "เดือนก่อน"),
+      Object.assign(document.createElement("strong"), { textContent: `${TH_MONTHS[m]} ${y + 543}` }),
+      b("›", "dp-nav", () => { if (m === 11) { m = 0; y++; } else m++; render(); }, "เดือนถัดไป"));
+    const grid = Object.assign(document.createElement("div"), { className: "dp-grid" });
+    grid.append(...TH_WEEK.map((d) => Object.assign(document.createElement("span"), { className: "dp-dow", textContent: d })));
+    for (let i = 0; i < first; i++) grid.append(document.createElement("span"));
+    for (let d = 1; d <= days; d++) {
+      const iso = isoOf(y, m, d);
+      const cell = b(String(d), "dp-day" + (iso === todayIso() ? " today" : "") + (iso === orig.value ? " selected" : ""),
+        () => { pick(iso); closeCalendar(); }, dateText(iso));
+      cell.disabled = !allowed(iso);
+      grid.append(cell);
+    }
+    const foot = Object.assign(document.createElement("div"), { className: "dp-foot" });
+    const today = b("วันนี้", "dp-link", () => { pick(todayIso()); closeCalendar(); });
+    today.disabled = !allowed(todayIso());
+    foot.append(today, b("ล้าง", "dp-link", () => { pick(""); closeCalendar(); }));
+    pop.replaceChildren(head, grid, foot);
+  };
+  render();
+  wrap.append(pop);
+  wrap.closest(".card")?.classList.add("dp-open");
+  openPop = pop;
+}
+
+function enhanceDates(root = document) {
+  root.querySelectorAll?.('input[type="date"]').forEach(enhanceDate);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  enhanceDates();
+  // date boxes created later (review / edit forms) are enhanced as soon as they appear
+  new MutationObserver((list) => {
+    for (const r of list) for (const n of r.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches('input[type="date"]')) enhanceDate(n); else enhanceDates(n);
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+});
