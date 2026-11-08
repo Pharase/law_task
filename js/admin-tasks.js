@@ -319,3 +319,92 @@ async function initResponsibilities(onChange) {
   $("respList").replaceChildren(...list);
   setEditing(false); // every time the card opens it starts locked
 }
+
+// ---- Reports (admins): tasks assigned vs sends over time, one line each, for everyone or one person ----
+// Colors checked with the dataviz validator on the dark card surface (#0b0d10): blue = assigned, orange = sent.
+const AC_SERIES = [{ key: "a", label: "มอบหมาย · Assigned", color: "#3987e5" }, { key: "s", label: "ส่งงาน · Sent", color: "#d95926" }];
+const bkkDay = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)) : "");
+const TH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+/** Bin keys oldest -> newest: days "YYYY-MM-DD" (30 / 90) or months "YYYY-MM" (12m), ending today (Bangkok). */
+function activityBins(range) {
+  const [y, m, d] = bkkToday().split("-").map(Number);
+  if (range === "12m") return Array.from({ length: 12 }, (_, i) => new Date(Date.UTC(y, m - 12 + i, 1)).toISOString().slice(0, 7));
+  const n = Number(range);
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - 1, d - (n - 1) + i)).toISOString().slice(0, 10));
+}
+const binLabel = (k) => (k.length === 7 ? `${TH_SHORT[Number(k.slice(5)) - 1]} ${String(Number(k.slice(0, 4)) + 543).slice(2)}` : `${k.slice(8)}/${k.slice(5, 7)}`);
+const binTitle = (k) => (k.length === 7 ? `${TH_MONTHS[Number(k.slice(5)) - 1]} ${Number(k.slice(0, 4)) + 543}` : dateText(k));
+
+async function initActivityChart() {
+  const tasks = await api("listTasks", {});
+  // people who own tasks (incl. revoked), so their history still shows
+  const owners = [...new Map(tasks.map((t) => [t.owner, t.owner_name])).entries()].sort((a, b) => a[1].localeCompare(b[1], "th"));
+  $("acPerson").replaceChildren(option("", "ทั้งหมด · Everyone"), ...owners.map(([id, name]) => option(id, name)));
+  const draw = () => drawActivity(tasks, $("acPerson").value, $("acRange").value);
+  $("acPerson").onchange = $("acRange").onchange = draw;
+  let lastWidth = 0;
+  new ResizeObserver(() => { const w = $("acChart").clientWidth; if (w && w !== lastWidth) { lastWidth = w; draw(); } }).observe($("acChart"));
+  draw();
+}
+
+function drawActivity(tasks, person, range) {
+  const keys = activityBins(range), at = new Map(keys.map((k, i) => [k, i])), cut = (d) => (range === "12m" ? d.slice(0, 7) : d);
+  const a = keys.map(() => 0), s = keys.map(() => 0);
+  for (const t of tasks) {
+    if (person && t.owner !== person) continue;
+    const i = at.get(cut(bkkDay(t.created_at)));
+    if (i !== undefined) a[i]++;
+    for (const x of t.sends) { const j = at.get(cut(x.sent_on || "")); if (j !== undefined) s[j]++; }
+  }
+  const data = { a, s };
+  const total = (v) => v.reduce((p, c) => p + c, 0);
+  $("acLegend").replaceChildren(...AC_SERIES.map((sr) => el("span", { className: "ac-key" },
+    el("i", { style: `--c:${sr.color}` }), `${sr.label} `, el("strong", { textContent: total(data[sr.key]) }))));
+
+  // geometry
+  const box = $("acChart"), W = Math.max(box.clientWidth, 280), H = 240, L = 34, R = 14, T = 14, B = 30;
+  const top = Math.max(4, ...a, ...s), step = Math.ceil(top / 4), max = step * 4;
+  const x = (i) => L + (keys.length === 1 ? 0 : (i * (W - L - R)) / (keys.length - 1));
+  const y = (v) => T + (H - T - B) * (1 - v / max);
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+  const root = svg("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: "ac-svg", role: "img", "aria-label": `${AC_SERIES[0].label} ${total(a)}, ${AC_SERIES[1].label} ${total(s)}` });
+  for (let v = 0; v <= max; v += step) { // recessive grid + y labels
+    root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v ? "ac-grid" : "ac-base" }), svg("text", { x: L - 8, y: y(v) + 4, class: "ac-y" }, v));
+  }
+  const every = Math.ceil(keys.length / 6); // ~6 x labels, always the last one
+  keys.forEach((k, i) => { if ((keys.length - 1 - i) % every === 0) root.append(svg("text", { x: x(i), y: H - 8, class: "ac-x" }, binLabel(k))); });
+  for (const sr of AC_SERIES) {
+    root.append(svg("polyline", { points: data[sr.key].map((v, i) => `${x(i)},${y(v)}`).join(" "), class: "ac-line", stroke: sr.color }));
+    const li = keys.length - 1; // end dot carries the series color
+    root.append(svg("circle", { cx: x(li), cy: y(data[sr.key][li]), r: 4, fill: sr.color, class: "ac-end" }));
+  }
+  // hover / tap: crosshair + dots + tooltip on the nearest point
+  const cross = svg("line", { y1: T, y2: H - B, class: "ac-cross", visibility: "hidden" });
+  const dots = AC_SERIES.map((sr) => svg("circle", { r: 5, fill: sr.color, class: "ac-dot", visibility: "hidden" }));
+  const hit = svg("rect", { x: L, y: 0, width: W - L - R, height: H - B, fill: "transparent", class: "ac-hit" });
+  root.append(cross, ...dots, hit);
+  const tip = el("div", { className: "ac-tip", hidden: true });
+  const show = (ev) => {
+    const r = root.getBoundingClientRect(), px = ev.clientX - r.left;
+    const i = Math.max(0, Math.min(keys.length - 1, Math.round(((px - L) / (W - L - R)) * (keys.length - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    AC_SERIES.forEach((sr, n) => { dots[n].setAttribute("cx", x(i)); dots[n].setAttribute("cy", y(data[sr.key][i])); dots[n].setAttribute("visibility", "visible"); });
+    tip.replaceChildren(el("strong", { textContent: binTitle(keys[i]) }),
+      ...AC_SERIES.map((sr) => el("div", {}, el("i", { style: `--c:${sr.color}` }), `${sr.label.split(" · ")[0]} `, el("b", { textContent: data[sr.key][i] }))));
+    tip.hidden = false;
+    tip.style.left = Math.min(Math.max(x(i) + 12, 0), W - 170) + "px";
+    tip.style.top = "8px";
+  };
+  const hide = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); };
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerdown", show);
+  hit.addEventListener("pointerleave", hide);
+  box.replaceChildren(root, tip);
+
+  // the same numbers as a table (accessibility + exact values)
+  $("acTable").replaceChildren(el("table", {},
+    el("tr", {}, el("th", { textContent: range === "12m" ? "เดือน" : "วันที่" }), ...AC_SERIES.map((sr) => el("th", { textContent: sr.label }))),
+    ...keys.map((k, i) => el("tr", {}, el("td", { textContent: binTitle(k) }), el("td", { textContent: a[i] }), el("td", { textContent: s[i] }))).reverse()));
+}

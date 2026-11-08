@@ -195,3 +195,53 @@ function groupDocs(groups, docs, keepEmpty = false) {
   }));
   return sections.filter((s) => s.docs.length || (keepEmpty && s.id !== null));
 }
+
+// ---- Home: ข่าวสาร · News (everyone reads; admins add, pin, delete) ----
+const NEWS_SHOWN = 4; // rows before "ดูทั้งหมด"
+async function initNews(me) {
+  const admin = me.role === "admin";
+  let items = [], showAll = false;
+  const render = () => {
+    const rows = showAll ? items : items.slice(0, NEWS_SHOWN);
+    $("newsList").replaceChildren(...(rows.length ? rows.map((n) => {
+      const actions = admin && el("div", { className: "news-actions" },
+        el("button", { type: "button", className: "small secondary", textContent: n.pinned ? "เลิกปักหมุด" : "📌 ปักหมุด", onclick: () => act("pinNews", { id: n.id, pinned: !n.pinned }) }),
+        el("button", { type: "button", className: "small danger", textContent: "ลบ", onclick: () => confirm(`ลบข่าว "${n.title}"?`) && act("deleteNews", { id: n.id }) }));
+      return el("article", { className: "news-item" + (n.pinned ? " pinned" : "") },
+        el("div", { className: "news-head" },
+          n.pinned && el("span", { className: "news-pin", textContent: "📌", title: "ปักหมุด · Pinned" }),
+          el("strong", { className: "grow", textContent: n.title }),
+          el("span", { className: "muted news-date", textContent: thDate(n.created_at.slice(0, 10)) })),
+        n.body && el("p", { className: "pre news-body", textContent: n.body }),
+        actions);
+    }) : [el("p", { className: "muted", textContent: "ยังไม่มีข่าว" })]));
+    const more = items.length > NEWS_SHOWN;
+    $("newsMore").hidden = !more;
+    $("newsMore").textContent = showAll ? "แสดงน้อยลง ▴" : `ดูทั้งหมด (${items.length}) ▾`;
+  };
+  async function act(action, data) {
+    try { items = await api(action, data); render(); } catch (err) { alert(err.message); }
+  }
+  $("newsMore").onclick = () => { showAll = !showAll; render(); };
+  if (admin) {
+    $("newsAddBtn").hidden = false;
+    $("newsAddBtn").onclick = () => { $("newsForm").hidden = !$("newsForm").hidden; $("newsTitle").focus(); };
+    $("newsCancel").onclick = () => { $("newsForm").hidden = true; };
+    $("newsForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = e.submitter;
+      btn.disabled = true;
+      try {
+        const v = f.elements; // via .elements: fields named "title" would shadow form.title
+        items = await api("addNews", { title: v.title.value, body: v.body.value, pinned: v.pinned.checked });
+        f.reset();
+        f.hidden = true;
+        $("newsMsg").textContent = "";
+        render();
+      } catch (err) { $("newsMsg").textContent = err.message; }
+      btn.disabled = false;
+    };
+  }
+  items = await api("listNews");
+  render();
+}

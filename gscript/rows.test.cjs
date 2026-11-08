@@ -80,3 +80,6 @@ test("update can match a row by another column (Buildings have no id): key = nam
 
 test("update by key with no match -> not found", () =>
   assert.deepEqual(planBatch([{ op: "update", tab: "Buildings", key: "name", id: "Nope", patch: { owner: "x" } }], tables(), counter()), { error: "not found" }));
+
+test("News tab columns (deleted_at = soft delete, pinned = 1 or blank)", () =>
+  assert.deepEqual(HEADERS.News, ["id", "title", "body", "pinned", "created_by", "created_at", "deleted_at"]));

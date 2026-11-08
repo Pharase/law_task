@@ -99,6 +99,8 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 3. Run **`checkReports`** once: Google asks for Drive permission, and the log lists the files the app will show.
 4. **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
 
+**News (Home):** the same **`setup`** run also adds the **News** tab. Admins post, pin (📌, kept on top) and delete news on Home; deleting only fills `deleted_at`, the row stays in the sheet.
+
 **ข้อมูลการมอบหมาย (which หัวหน้างาน looks after which building):** run **`setup`** again once to add the **owner** column to **Buildings**. Admins then drag buildings between people on Home → ข้อมูลการมอบหมาย (on phones: tap a building, then tap the person), or pick names in the sheet. The assign form shows only the chosen person’s buildings, and the server refuses a building outside their responsibility. People with no buildings yet are not restricted.
 
 After changing the script later: `clasp push`, then **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).

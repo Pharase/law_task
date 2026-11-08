@@ -10,6 +10,7 @@ var DATE_COLS = {
   Tasks: ["due_on", "current_due_on", "created_at", "member_notified_at"],
   Sends: ["sent_on", "sent_at", "due_on", "next_due_on", "reviewed_at", "member_notified_at"],
   Invoices: ["billed_on", "transfer_on", "receipt_on", "created_at", "updated_at"],
+  News: ["created_at", "deleted_at"],
 };
 var APP_COLS = ["id", "owner_id", "state", "current_due_on", "fix_round", "created_by", "created_at", "member_notified_at"];
 

@@ -13,6 +13,19 @@
 <body>
   <p id="status" class="loading" role="status"></p>
   <div id="page" hidden>
+    <!-- Admins only: tasks assigned vs sent over time -->
+    <section class="card" id="activityCard" hidden>
+      <h2>การมอบหมายและการส่งงาน · Assigned vs sent</h2>
+      <div class="row filters">
+        <select id="acPerson" aria-label="หัวหน้างาน · Person"></select>
+        <select id="acRange" aria-label="ช่วงเวลา · Range">
+          <option value="30">30 วันล่าสุด</option><option value="90">90 วันล่าสุด</option><option value="12m">12 เดือนล่าสุด</option>
+        </select>
+      </div>
+      <div class="ac-legend" id="acLegend"></div>
+      <div class="ac-chart" id="acChart"><p class="loading" role="status"></p></div>
+      <details class="ac-table"><summary>ดูเป็นตาราง · Table</summary><div class="table-wrap" id="acTable"></div></details>
+    </section>
     <section class="card">
       <h2>รายงานประจำเดือน · Monthly reports</h2>
       <p class="muted small-note">ดูหรือดาวน์โหลดได้ในแอป · เปิดแล้วได้ฉบับล่าสุดเสมอ</p>
@@ -55,8 +68,12 @@
           view, down);
       }) : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]));
     }
-    start("member").then(() => {
+    start("member").then((me) => {
       initReports();
+      if (me.role === "admin") {
+        $("activityCard").hidden = false;
+        initActivityChart().catch((err) => { $("acChart").textContent = "Error: " + err.message; });
+      }
       loadMonthly().catch((err) => { $("reportList").textContent = "Error: " + err.message; });
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;

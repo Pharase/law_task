@@ -75,6 +75,27 @@
       <p class="resp-picked" id="respPicked" role="status" hidden></p>
       <div id="respList"><p class="loading" role="status"></p></div>
     </section>
+    <!-- News for everyone; admins add, pin and delete -->
+    <section class="card" id="newsCard">
+      <div class="row card-head">
+        <h2 class="grow">ข่าวสาร · News</h2>
+        <button type="button" class="small" id="newsAddBtn" hidden>+ เพิ่มข่าว</button>
+      </div>
+      <form id="newsForm" class="news-form" hidden>
+        <label for="newsTitle">หัวข้อ · Title</label>
+        <input id="newsTitle" name="title" maxlength="150" required>
+        <label for="newsBody">รายละเอียด · Details</label>
+        <textarea id="newsBody" name="body" rows="3" maxlength="3000"></textarea>
+        <label class="inline"><input type="checkbox" name="pinned"> ปักหมุดไว้บนสุด · Pin to top</label>
+        <div class="row tools">
+          <button class="small">ประกาศ · Post</button>
+          <button type="button" class="small secondary" id="newsCancel">ยกเลิก</button>
+        </div>
+        <p class="error" id="newsMsg" role="alert"></p>
+      </form>
+      <div id="newsList"><p class="loading" role="status"></p></div>
+      <div class="news-more"><button type="button" class="small secondary" id="newsMore" hidden></button></div>
+    </section>
     <section class="card">
       <h2 id="dashTitle">ภาพรวมงาน</h2>
       <div class="dash" id="dashChart"><p class="loading" role="status"></p></div>
@@ -103,6 +124,7 @@
       if (!approved) return;
       const home = () => renderHome(me).catch((err) => { $("dashChart").textContent = "Error: " + err.message; });
       home();
+      initNews(me).catch((err) => { $("newsList").textContent = "Error: " + err.message; });
       if (me.role === "admin") {
         $("adminTools").hidden = false;
         $("assignBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; };
