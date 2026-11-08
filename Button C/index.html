@@ -6,6 +6,7 @@
   <title>Ex Doc. – law_task</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
@@ -14,12 +15,30 @@
   <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย</p>
   <p id="status" class="muted" role="status">Loading…</p>
   <div class="card" id="page" hidden>
-    <p>Coming soon.</p>
+    <input type="search" id="q" placeholder="ค้นหาชื่อเอกสาร · Search" aria-label="Search documents">
+    <div id="docList"></div>
   </div>
   <script>
-    start("member").then(() => {
+    let docs = [];
+    const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
+
+    function render() {
+      const q = $("q").value.trim().toLowerCase();
+      const shown = docs.filter((d) => d.title.toLowerCase().includes(q));
+      $("docList").replaceChildren(...(shown.length ? shown.map((d) => el("div", { className: "doc-row" },
+        el("div", { className: "grow" }, el("strong", { textContent: d.title }),
+          el("div", { className: "muted", textContent: `${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
+        el("a", { className: "btn small", href: d.previewUrl, target: "_blank", textContent: "ดู (Preview)" }),
+        el("a", { className: "btn small secondary", href: d.downloadUrl, textContent: "ดาวน์โหลด" }),
+      )) : [el("p", { className: "muted", textContent: docs.length ? "ไม่พบเอกสาร" : "ยังไม่มีเอกสาร" })]));
+    }
+
+    $("q").oninput = render;
+    start("member").then(async () => {
+      docs = await api("listExDocs"); // already sorted A–Z (Thai-aware) by the server
       $("status").hidden = true;
       $("page").hidden = false;
+      render();
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";

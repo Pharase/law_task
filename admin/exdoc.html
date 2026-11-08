@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ex Doc – admin</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
+  <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+  <p><a href="../">← Home</a> · <a href="tasks.html">Tasks</a> · <a href="members.html">Members</a></p>
+  <h1>Ex Doc. (admin)</h1>
+  <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย: สมาชิกดูและดาวน์โหลดได้อย่างเดียว · ไม่ถูกลบอัตโนมัติ</p>
+  <p id="status" class="muted" role="status">Loading…</p>
+
+  <div id="page" hidden>
+    <form class="card" id="uploadForm">
+      <h2>อัปโหลด PDF</h2>
+      <label for="pdf">ไฟล์ PDF (ไม่เกิน 20 MB)</label>
+      <input type="file" id="pdf" accept="application/pdf,.pdf" required>
+      <label for="docTitle">ชื่อเอกสาร · Title</label>
+      <input id="docTitle" maxlength="200" required>
+      <button>อัปโหลด</button>
+      <p id="uploadMsg" role="status"></p>
+    </form>
+    <section class="card">
+      <h2>เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
+      <div id="docList"></div>
+    </section>
+  </div>
+
+  <script>
+    const MAX = 20 * 1024 * 1024;
+    const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
+
+    async function loadDocs() {
+      const docs = await api("listExDocs");
+      $("docCount").textContent = docs.length;
+      $("docList").replaceChildren(...(docs.length ? docs.map((d) => {
+        const rename = el("button", { type: "button", className: "small secondary", textContent: "เปลี่ยนชื่อ" });
+        rename.onclick = async () => {
+          const title = prompt("ชื่อเอกสารใหม่", d.title);
+          if (!title || title === d.title) return;
+          try { await api("exdocRename", { id: d.id, title }); loadDocs(); } catch (e) { alert(e.message); }
+        };
+        const del = el("button", { type: "button", className: "small danger", textContent: "ลบ" });
+        del.onclick = async () => {
+          if (!confirm(`ลบ "${d.title}"? ลบแล้วกู้คืนไม่ได้`)) return;
+          try { await api("exdocDelete", { id: d.id }); loadDocs(); } catch (e) { alert(e.message); }
+        };
+        return el("div", { className: "doc-row" },
+          el("div", { className: "grow" }, el("a", { href: d.previewUrl, target: "_blank", textContent: d.title }),
+            el("div", { className: "muted", textContent: `${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
+          rename, del);
+      }) : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
+    }
+
+    $("pdf").onchange = () => {
+      const f = $("pdf").files[0];
+      if (f && !$("docTitle").value) $("docTitle").value = f.name.replace(/\.pdf$/i, "");
+    };
+
+    $("uploadForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = $("pdf").files[0];
+      if (f.type !== "application/pdf" && !/\.pdf$/i.test(f.name)) return void ($("uploadMsg").textContent = "PDF เท่านั้น");
+      if (f.size > MAX) return void ($("uploadMsg").textContent = "ไฟล์ใหญ่เกิน 20 MB");
+      const btn = e.submitter; btn.disabled = true;
+      try {
+        $("uploadMsg").textContent = "กำลังอัปโหลด…";
+        const { path, signedUrl } = await api("exdocUploadUrl", { name: f.name, size: f.size });
+        const body = new FormData(); // same request shape as supabase-js uploadToSignedUrl
+        body.append("cacheControl", "3600");
+        body.append("", new File([f], f.name, { type: "application/pdf" }));
+        const put = await fetch(signedUrl, { method: "PUT", body });
+        if (!put.ok) throw new Error("upload failed (" + put.status + ")");
+        await api("exdocSave", { path, title: $("docTitle").value, name: f.name, size: f.size });
+        $("uploadMsg").textContent = "อัปโหลดแล้ว";
+        $("uploadForm").reset();
+        loadDocs();
+      } catch (err) { $("uploadMsg").textContent = "Error: " + err.message; }
+      btn.disabled = false;
+    };
+
+    start("admin").then(() => {
+      $("status").hidden = true;
+      $("page").hidden = false;
+      return loadDocs();
+    }).catch((err) => {
+      $("status").textContent = "Error: " + err.message;
+      $("status").className = "error";
+    });
+  </script>
+</body>
+</html>

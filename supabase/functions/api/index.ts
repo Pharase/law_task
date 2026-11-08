@@ -3,6 +3,11 @@
 import { newCode, normalizeCode } from "./codes.ts";
 import { bucket, db, found, HttpError, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
+import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
+
+// Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
+const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions];
+const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions];
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const RETENTION_DAYS = 365;
@@ -98,14 +103,18 @@ Deno.serve(async (req) => {
     }
 
     if (approved) {
-      const r = await memberTaskActions(body.action, body, me);
-      if (r !== undefined) return json(r);
+      for (const handle of MEMBER_HANDLERS) {
+        const r = await handle(body.action, body, me);
+        if (r !== undefined) return json(r);
+      }
     }
 
     // Everything below is admin-only.
     if (!isAdmin) throw new HttpError(403, "admins only");
-    const r = await adminTaskActions(body.action, body, me);
-    if (r !== undefined) return json(r);
+    for (const handle of ADMIN_HANDLERS) {
+      const r = await handle(body.action, body, me);
+      if (r !== undefined) return json(r);
+    }
     switch (body.action) {
       case "listUsers":
         return json(must(await db.from("profiles").select().order("created_at", { ascending: false })));
