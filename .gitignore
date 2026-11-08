@@ -19,4 +19,5 @@ old-system/
 *.jpeg
 *.JPG
 *.JPEG
-*.PNG
+*.PNG# personal Claude Code settings
+.claude/settings.local.json
