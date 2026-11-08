@@ -1,7 +1,8 @@
 // The only door into the database. Every request carries the LINE ID token in
 // `x-line-id-token`; we verify it with LINE, then act with the service role.
-import { createClient } from "npm:@supabase/supabase-js@2";
 import { newCode, normalizeCode } from "./codes.ts";
+import { bucket, db, found, HttpError, must } from "./shared.ts";
+import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const RETENTION_DAYS = 365;
@@ -11,9 +12,6 @@ const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
 }; // no HEIC: only Apple devices can display it
 
-const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const bucket = db.storage.from("uploads");
-
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "content-type, x-line-id-token",
@@ -21,9 +19,6 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
-class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
-const must = <T>({ data, error }: { data: T; error: unknown }) => { if (error) throw error; return data; };
-const found = <T>(row: T | null) => { if (!row) throw new HttpError(404, "user not found"); return row; };
 
 async function verifyLine(idToken: string | null) {
   if (!idToken) throw new HttpError(401, "missing LINE ID token");
@@ -97,13 +92,20 @@ Deno.serve(async (req) => {
         if (!approved) throw new HttpError(403, "not approved");
         const files = must(await db.from("files").select().eq("owner", me.line_user_id).order("created_at", { ascending: false }));
         if (!files.length) return json([]);
-        const urls = must(await bucket.createSignedUrls(files.map((f) => f.path), 3600));
-        return json(files.map((f, i) => ({ ...f, url: urls[i].signedUrl })));
+        const urls = must(await bucket.createSignedUrls(files.map((f: { path: string }) => f.path), 3600));
+        return json(files.map((f: object, i: number) => ({ ...f, url: urls[i].signedUrl })));
       }
+    }
+
+    if (approved) {
+      const r = await memberTaskActions(body.action, body, me);
+      if (r !== undefined) return json(r);
     }
 
     // Everything below is admin-only.
     if (!isAdmin) throw new HttpError(403, "admins only");
+    const r = await adminTaskActions(body.action, body, me);
+    if (r !== undefined) return json(r);
     switch (body.action) {
       case "listUsers":
         return json(must(await db.from("profiles").select().order("created_at", { ascending: false })));
@@ -142,8 +144,8 @@ async function cleanup() {
   for (;;) {
     const old = must(await db.from("files").select("id, path").lt("created_at", cutoff).limit(100));
     if (!old.length) break;
-    must(await bucket.remove(old.map((f) => f.path))); // storage first: a leftover row is retried tomorrow, a leftover file never would be
-    must(await db.from("files").delete().in("id", old.map((f) => f.id)));
+    must(await bucket.remove(old.map((f: { path: string }) => f.path))); // storage first: a leftover row is retried tomorrow, a leftover file never would be
+    must(await db.from("files").delete().in("id", old.map((f: { id: string }) => f.id)));
     deleted += old.length;
   }
   must(await db.from("invites").delete().is("used_at", null).lt("expires_at", new Date().toISOString()));
