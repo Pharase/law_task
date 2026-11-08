@@ -5,6 +5,7 @@ import { bucket, db, found, HttpError, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
+import { digest } from "./notify-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions];
@@ -43,6 +44,8 @@ Deno.serve(async (req) => {
 
     // Public on purpose: it only deletes files that are due AND backed up, so a stranger calling it changes nothing.
     if (body.action === "cleanup") return json(await cleanup());
+    // Public on purpose: runs at most once per Bangkok weekday after 09:00, otherwise does nothing.
+    if (body.action === "digest") return json(await digest());
 
     const line = await verifyLine(req.headers.get("x-line-id-token"));
     const me = must(await db.from("profiles").upsert({
