@@ -1,6 +1,7 @@
 // Task actions (spec "Button A"). Rules live in review.ts / scoring.ts; this file only talks to the database.
-import { bangkokDate } from "./dates.ts";
+import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, reviewEffect, TAGS, validateReview } from "./review.ts";
+import { performanceRows, type ScoredTask } from "./scoring.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,6 +59,31 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
   switch (action) {
     case "listBuildings":
       return must(await db.from("buildings").select("id, name").order("name"));
+
+    case "performance": {
+      const kind = body.kind === "quarter" ? "quarter" : body.kind === "month" ? "month" : null;
+      const year = Number(body.year), n = Number(body.n);
+      if (!kind || !Number.isInteger(year) || !Number.isInteger(n) || n < 1 || n > (kind === "month" ? 12 : 4)) {
+        throw new HttpError(400, "kind must be month (n 1-12) or quarter (n 1-4), with a year");
+      }
+      const { from, to } = periodRange(kind, year, n);
+      // Approved tasks whose ORIGINAL due date is in the period; admins never own tasks, but filter to be sure.
+      const tasks: Row[] = must(await db.from("tasks")
+        .select("id, owner, tags, owner_profile:profiles!tasks_owner_fkey(role, staff_name, display_name)")
+        .eq("state", "approved").gte("due_on", from).lte("due_on", to))
+        .filter((t: Row) => t.owner_profile?.role === "member");
+      const sends: Row[] = tasks.length
+        ? must(await db.from("task_sends").select("task_id, sent_on, due_on, outcome").in("task_id", tasks.map((t) => t.id)).order("sent_at"))
+        : [];
+      const scored: ScoredTask[] = tasks.map((t) => ({
+        owner: t.owner,
+        tags: t.tags,
+        sends: sends.filter((s) => s.task_id === t.id).map((s) => ({ sentOn: s.sent_on, dueOn: s.due_on, outcome: s.outcome })),
+      }));
+      const names = Object.fromEntries(tasks.map((t) => [t.owner, t.owner_profile?.staff_name || t.owner_profile?.display_name || t.owner]));
+      const rows = performanceRows(scored, names); // scaled against everyone, then trimmed for members
+      return { from, to, rows: me.role === "admin" ? rows : rows.filter((r) => r.line_user_id === me.line_user_id) };
+    }
 
     case "myTasks":
       return loadTasks((q) => q.eq("owner", me.line_user_id).neq("state", "cancelled"));

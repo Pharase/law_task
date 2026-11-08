@@ -1,7 +1,7 @@
 // Worked examples from the spec ("Performance"), dates in Jan 2026.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { memberScores, scale, taskScore, type Send } from "./scoring.ts";
+import { memberScores, performanceRows, scale, taskScore, type Send } from "./scoring.ts";
 
 const s = (sentOn: string, dueOn: string, outcome: Send["outcome"]): Send => ({ sentOn, dueOn, outcome });
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} != ${b}`);
@@ -43,6 +43,21 @@ test("memberScores averages task scores / 10 and per tag", () => {
   near(m.U1.overall, 0.9333);
   assert.equal(m.U1.byTag["การประสานงาน"], 1);
   assert.equal(m.U1.tasks, 2);
+});
+
+test("performanceRows scales overall and each tag across members", () => {
+  const rows = performanceRows([
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
+    { owner: "U2", tags: ["การประสานงาน"], sends: [s("2026-01-14", "2026-01-10", "approved")] },
+  ], { U1: "Ann", U2: "Bee" });
+  const u1 = rows.find((r) => r.line_user_id === "U1")!;
+  const u2 = rows.find((r) => r.line_user_id === "U2")!;
+  assert.equal(u1.name, "Ann");
+  assert.equal(u1.overall5, 5);
+  assert.equal(u2.overall5, 1);
+  assert.deepEqual(u1.byTag["การประสานงาน"], { raw: 1, scaled: 5 });
+  assert.equal(u2.byTag["การประสานงาน"].scaled, 1);
+  assert.equal(u1.tasks, 1);
 });
 
 test("memberScores skips tasks that aren't approved", () => {

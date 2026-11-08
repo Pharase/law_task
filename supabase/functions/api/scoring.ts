@@ -45,6 +45,30 @@ export function memberScores(tasks: ScoredTask[]) {
   return out;
 }
 
+export type PerformanceRow = {
+  line_user_id: string; name: string; tasks: number; overall: number; overall5: number;
+  byTag: Record<string, { raw: number; scaled: number }>;
+};
+
+/** One row per member with approved tasks; overall and each tag scaled 1–5 across those members. */
+export function performanceRows(tasks: ScoredTask[], names: Record<string, string>): PerformanceRow[] {
+  const m = memberScores(tasks);
+  const overall5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.overall])));
+  const tags = new Set(Object.values(m).flatMap((v) => Object.keys(v.byTag)));
+  const tag5: Record<string, Record<string, number>> = {};
+  for (const tag of tags) {
+    tag5[tag] = scale(Object.fromEntries(Object.entries(m).filter(([, v]) => tag in v.byTag).map(([k, v]) => [k, v.byTag[tag]])));
+  }
+  return Object.entries(m).map(([id, v]) => ({
+    line_user_id: id,
+    name: names[id] ?? id,
+    tasks: v.tasks,
+    overall: v.overall,
+    overall5: overall5[id],
+    byTag: Object.fromEntries(Object.entries(v.byTag).map(([tag, raw]) => [tag, { raw, scaled: tag5[tag][id] }])),
+  }));
+}
+
 /** 1 + 4·(x − min)/(max − min) across everyone given; 5 for all when min = max (incl. one member). */
 export function scale(values: Record<string, number>): Record<string, number> {
   const xs = Object.values(values);
