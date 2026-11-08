@@ -218,3 +218,34 @@ caption { padding-bottom: 6px; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .card, .navbar { background: #0b0d10; }
 }
+
+/* ---- Loading: a "digital flow" data stream instead of text (the word stays for screen readers) ---- */
+.loading { position: relative; height: 48px; max-width: 240px; margin: 28px auto; color: transparent; font-size: 0; user-select: none; overflow: hidden; border-radius: 999px; } /* the pulse stays inside the track */
+.dash .loading { flex: 1 1 200px; margin: 40px auto; }
+/* the track: data dashes flowing left to right */
+.loading::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; border-radius: 999px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, rgba(2, 215, 244, .6) 6px 9px, transparent 9px 16px),
+    linear-gradient(90deg, rgba(17, 69, 84, .7), rgba(13, 65, 188, .55));
+  background-size: 16px 100%, 100% 100%;
+  box-shadow: 0 0 14px rgba(2, 215, 244, .3), inset 0 0 0 1px rgba(2, 215, 244, .25);
+  animation: loading-flow .55s linear infinite;
+}
+/* the packet: a bright pulse racing along the track */
+.loading::after {
+  content: ""; position: absolute; top: 50%; left: 0; width: 56px; height: 10px; margin-top: -5px; border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--cyan) 35%, #fff 50%, var(--blue-hi) 65%, transparent);
+  box-shadow: 0 0 16px var(--cyan), 0 0 32px rgba(79, 99, 240, .7);
+  animation: loading-packet 1.3s cubic-bezier(.65, 0, .35, 1) infinite;
+}
+@keyframes loading-flow { to { background-position: 16px 0, 0 0; } }
+@keyframes loading-packet {
+  0% { transform: translateX(-56px); opacity: 0; }
+  15%, 85% { opacity: 1; }
+  100% { transform: translateX(240px); opacity: 0; } /* = .loading max-width */
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading::before { animation: none; }
+  .loading::after { animation-duration: 3s; }
+}
