@@ -15,6 +15,21 @@ a { color: #06c755; }
 .navbar a:hover { background: rgba(255, 255, 255, .15); }
 .navbar a[aria-current] { background: rgba(255, 255, 255, .3); font-weight: 600; }
 .navbar .soon { color: rgba(255, 255, 255, .7); }
+/* Home dashboard: status donut + legend (the legend doubles as the table view) */
+.dash { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
+.donut { width: 160px; height: 160px; flex: none; }
+.donut circle { fill: none; stroke-width: 16; }
+.donut-track { stroke: #eee; }
+.donut-seg { transition: opacity .15s; cursor: pointer; }
+.donut-seg.dim { opacity: .25; }
+.donut-num { font-size: 26px; font-weight: 700; text-anchor: middle; fill: #222; }
+.donut-sub { font-size: 9px; text-anchor: middle; fill: #666; }
+.legend { list-style: none; padding: 0; margin: 0; flex: 1 1 220px; }
+.legend li { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-top: 1px solid #eee; border-radius: 4px; }
+.legend li:first-child { border-top: 0; }
+.legend li[tabindex="0"]:hover, .legend li:focus { background: #f3f3f3; outline: none; }
+.legend .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.legend .pct { width: 3em; text-align: right; }
 .muted { color: #777; }
 .error { color: #c00; }
 .code { font: 600 28px/1.2 monospace; letter-spacing: 4px; }
