@@ -1,5 +1,5 @@
-// Admin tasks page (spec "Admin view"). Needs js/app.js and js/work.js (el, thDate, bkkToday, OUTCOME_TEXT).
-const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "การประสานงาน", "ติดตามความคืบหน้าคดี"];
+// Task screens: assign form (Home, admins), tracking page (admin/tasks.html), performance table (Reports).
+// Needs js/app.js and js/work.js (el, thDate, bkkToday, OUTCOME_TEXT, TAG_LIST).
 const STATE_TEXT = { on_process: "On Process", submitted: "รอตรวจ", approved: "อนุมัติ", cancelled: "ยกเลิก" };
 let buildings = [], members = [];
 
@@ -132,22 +132,20 @@ function loadAll() {
 
 async function loadBuildings(selectName) {
   buildings = await api("listBuildings");
-  $("building").replaceChildren(option("", "เลือกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
-  $("fBuilding").replaceChildren(option("", "ทุกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
+  const opts = (first) => [option("", first), ...buildings.map((b) => option(b.name, b.name))];
+  if ($("building")) $("building").replaceChildren(...opts("เลือกนิติบุคคล"));
+  if ($("fBuilding")) $("fBuilding").replaceChildren(...opts("ทุกนิติบุคคล"));
   if (selectName) $("building").value = selectName;
 }
 
-async function initAdminTasks() {
-  $("status").hidden = true;
-  $("page").hidden = false;
-  const today = bkkToday();
-  $("dueOn").min = today;
+/** Home (admins): the assign form, shown by the "มอบหมายงาน" button. onCreated refreshes the dashboard. */
+async function initAssignForm(onCreated) {
+  $("dueOn").min = bkkToday();
   $("tags").replaceChildren(...TAG_LIST.map((t) => check("tag", t, t)));
   members = await api("listMembers");
   $("owners").replaceChildren(...(members.length
     ? members.map((m) => check("owner", m.line_user_id, m.staff_name || m.display_name || m.line_user_id))
     : [el("p", { className: "muted", textContent: "ยังไม่มีสมาชิก (members)" })]));
-  $("fOwner").append(...members.map((m) => option(m.line_user_id, m.staff_name || m.display_name)));
   await loadBuildings();
 
   $("addBuildingBtn").onclick = async () => {
@@ -168,16 +166,30 @@ async function initAdminTasks() {
       });
       $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน`;
       $("createForm").reset();
-      loadAll();
+      onCreated();
     } catch (err) { $("createMsg").textContent = "Error: " + err.message; }
   };
+}
 
+/** admin/tasks.html: sheet warnings, review queue (อนุมัติ / ไม่อนุมัติ) and all tasks with filters. */
+async function initTracking() {
+  $("status").hidden = true;
+  $("page").hidden = false;
+  members = await api("listMembers");
+  $("fOwner").append(...members.map((m) => option(m.line_user_id, m.staff_name || m.display_name)));
+  await loadBuildings();
   for (const id of ["fOwner", "fBuilding", "fState", "fOverdue"]) $(id).onchange = () => loadList();
-  const [y, m] = today.split("-").map(Number);
+  loadAll();
+}
+
+/** Reports page: performance by month or quarter (members get only their own row from the server). */
+function initReports() {
+  $("status").hidden = true;
+  $("page").hidden = false;
+  const [y, m] = bkkToday().split("-").map(Number);
   $("pYear").value = y;
   $("pN").value = m;
   $("pKind").onchange = () => { $("pN").max = $("pKind").value === "month" ? 12 : 4; $("pN").value = $("pKind").value === "month" ? m : Math.ceil(m / 3); };
   $("pGo").onclick = () => loadPerformance().catch((e) => alert(e.message));
-  loadAll();
-  loadPerformance().catch(() => {});
+  loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
 }

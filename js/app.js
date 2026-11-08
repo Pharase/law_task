@@ -9,9 +9,9 @@ const $ = (id) => document.getElementById(id);
 // Top navbar on every page: one button per feature, same order as the LINE rich menu.
 // [member page, label, coming soon, admin page]: admins get the admin page of the same feature.
 const NAV = [
-  ["", "Home", false, "admin/tasks.html"],
+  ["", "Home"], // everyone starts on the Home dashboard; admins reach tracking from there
   ["Button%20C/", "Example Document", false, "admin/exdoc.html"],
-  ["Button%20D/", "Reports", true],
+  ["Button%20D/", "Reports"],
   ["Button%20E/", "Property Right", true],
   ["Button%20F/", "Invoice", true],
 ];

@@ -7,6 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/app.js"></script>
   <script src="js/work.js"></script>
+  <script src="js/admin-tasks.js"></script>
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -49,27 +50,41 @@
 
   <!-- Logged in and approved -->
   <div id="appCard" hidden>
+    <!-- Admins only: assign a task here; review happens on the tracking page -->
+    <div class="card" id="adminTools" hidden>
+      <div class="row tools">
+        <button type="button" class="small" id="assignBtn">มอบหมายงาน · Assign task</button>
+        <a class="btn" href="admin/tasks.html">ติดตามงาน · Tracking (อนุมัติ)</a>
+        <a class="btn secondary-link" href="admin/members.html">สมาชิก · Members</a>
+      </div>
+      <form id="createForm" hidden>
+        <h2>มอบหมายงาน · Assign</h2>
+        <label for="building">นิติบุคคล · Building</label>
+        <select id="building" required></select>
+        <div class="row">
+          <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
+          <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
+        </div>
+        <label for="title">หัวข้องาน · Title</label>
+        <input id="title" maxlength="200" required>
+        <label for="details">รายละเอียด · Details</label>
+        <textarea id="details" rows="3"></textarea>
+        <fieldset><legend>หมวดหมู่ · Tags</legend><div id="tags"></div></fieldset>
+        <fieldset><legend>ผู้รับงาน · Members</legend><div id="owners"></div></fieldset>
+        <label for="dueOn">กำหนดส่ง · Due date</label>
+        <input type="date" id="dueOn" required>
+        <button>มอบหมายงาน</button>
+        <p id="createMsg" role="status"></p>
+      </form>
+    </div>
     <section class="card">
-      <h2>ภาพรวมงานของฉัน · My tasks</h2>
+      <h2 id="dashTitle">ภาพรวมงาน</h2>
       <div class="dash" id="dashChart"><p class="muted">Loading…</p></div>
     </section>
-    <div class="card" id="perfCard" hidden>
-      <h2>ผลงานของฉัน · My performance</h2>
-      <p>เดือนนี้: <strong id="perfMonth">…</strong> · ไตรมาสนี้: <strong id="perfQuarter">…</strong></p>
-    </div>
-    <div class="work-grid">
-      <section class="card">
-        <h2>งานที่ต้องทำ · Active <span id="activeCount" class="badge"></span></h2>
-        <div id="activeList"><p class="muted">Loading…</p></div>
-      </section>
-      <section class="card">
-        <h2>รอตรวจ · Waiting for review <span id="waitingCount" class="badge"></span></h2>
-        <div id="waitingList"></div>
-      </section>
-    </div>
     <section class="card">
-      <h2>เสร็จแล้ว · Done</h2>
-      <div id="doneList"></div>
+      <h2 id="dashListTitle">งาน</h2>
+      <p class="muted small-note">แตะที่กราฟหรือรายการด้านบนเพื่อดูงานในแต่ละสถานะ</p>
+      <div id="dashList"></div>
     </section>
     <div class="card">
       <label for="file">Upload a picture or PDF (max 10 MB, kept at least 1 year; deleted only after an admin backup)</label>
@@ -109,7 +124,14 @@
       $("codeCard").hidden = approved || me.locked;
       $("lockedCard").hidden = approved || !me.locked;
       $("appCard").hidden = !approved;
-      if (approved) renderWork(me).catch((err) => { $("activeList").textContent = "Error: " + err.message; });
+      if (!approved) return;
+      const home = () => renderHome(me).catch((err) => { $("dashChart").textContent = "Error: " + err.message; });
+      home();
+      if (me.role === "admin") {
+        $("adminTools").hidden = false;
+        $("assignBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; };
+        initAssignForm(home).catch((err) => { $("createMsg").textContent = "Error: " + err.message; });
+      }
     }
 
     $("loginBtn").onclick = login;

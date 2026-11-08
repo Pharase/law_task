@@ -6,20 +6,28 @@
   <title>Reports – law_task</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
+  <script src="../js/admin-tasks.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
-  <h1>Reports</h1>
-  <p class="muted">รายงานประจำสัปดาห์</p>
+  <h1>รายงาน · Reports</h1>
   <p id="status" class="muted" role="status">Loading…</p>
-  <div class="card" id="page" hidden>
-    <p>Coming soon.</p>
+  <div id="page" hidden>
+    <section class="card">
+      <h2>ผลงาน · Performance</h2>
+      <p class="muted">Members see their own scores; admins see the whole team.</p>
+      <div class="row filters">
+        <select id="pKind" aria-label="Period"><option value="month">เดือน</option><option value="quarter">ไตรมาส</option></select>
+        <input type="number" id="pYear" aria-label="Year" min="2020" max="2100">
+        <input type="number" id="pN" aria-label="Month or quarter" min="1" max="12">
+        <button type="button" class="small" id="pGo">ดู</button>
+      </div>
+      <div class="table-wrap"><table id="perfTable"></table></div>
+    </section>
   </div>
   <script>
-    start("member").then(() => {
-      $("status").hidden = true;
-      $("page").hidden = false;
-    }).catch((err) => {
+    start("member").then(initReports).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });

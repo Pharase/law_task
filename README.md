@@ -112,13 +112,13 @@ LIFF link: https://liff.line.me/2012450429-k3WOCwtO
 
 ## Rich menu buttons
 
-Rich menu layout: a 3×2 grid where A+B is one wide tile. The same buttons form the top navbar on every page. Admins tapping Work (A) or Ex Doc. (C) get the admin page of that feature (`admin/tasks.html`, `admin/exdoc.html`); Members & invite codes is linked from `admin/tasks.html`. Folder names contain a space, written `%20` in links. Keep the trailing `/`.
+Rich menu layout: a 3×2 grid where A+B is one wide tile. The same buttons form the top navbar on every page. **Home (A+B)** is a dashboard for everyone: a donut of the tasks assigned this month by status (รอดำเนินการ, รอแก้ไข, รอตรวจสอบ, เสร็จสิ้น ส่งตรงเวลา / ส่งล่าช้า) plus งานคงค้างอื่นๆ (unfinished tasks from earlier months); tap a status to list its tasks. Members see their own tasks, admins the whole team, plus **มอบหมายงาน** (assign form), **ติดตามงาน** (`admin/tasks.html`: review queue and all tasks) and **สมาชิก**. **Reports (D)** holds the performance scores. Admins tapping Ex Doc. (C) get `admin/exdoc.html`.
 
 | Button | Feature | Rich menu link |
 |---|---|---|
 | A (A+B) | Work · งานรอดำเนินการ (home page) | `https://liff.line.me/2012450429-k3WOCwtO` or `…/Button%20A/` |
 | C | Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย | `https://liff.line.me/2012450429-k3WOCwtO/Button%20C/` |
-| D | Reports · รายงานประจำสัปดาห์ (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
+| D | Reports · performance scores | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
 | E | Property Right · อายัดและแจ้งบุริมสิทธิ (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20E/` |
 | F | Invoice · ใบแจ้งหนี้ค้างเบิก (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
 
