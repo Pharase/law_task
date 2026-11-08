@@ -36,7 +36,13 @@ function renderNav() {
     document.body.prepend(nav);
   }
   const here = pageUrl();
-  nav.replaceChildren(...NAV.map(([path, label, soon, adminPath]) => {
+  // Logo (Lady Justice) leads the bar and goes Home; it also becomes the tab icon.
+  const brand = Object.assign(document.createElement("a"), { className: "brand", href: HOME });
+  brand.append(Object.assign(document.createElement("img"), { src: HOME + "img/logo.svg", alt: "law_task · Home" }));
+  if (!document.querySelector("link[rel=icon]")) {
+    document.head.append(Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml", href: HOME + "img/logo.svg" }));
+  }
+  nav.replaceChildren(brand, ...NAV.map(([path, label, soon, adminPath]) => {
     const a = document.createElement("a");
     a.href = HOME + (navAdmin && adminPath ? adminPath : path);
     a.textContent = label;

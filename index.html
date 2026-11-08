@@ -11,10 +11,6 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <header class="row header">
-    <h1>law_task</h1>
-    <span id="badge" class="badge">Loading…</span>
-  </header>
   <p id="status" class="muted" role="status">Loading…</p>
 
   <!-- Logged out (external browser only; inside LINE you are always logged in) -->
@@ -103,20 +99,14 @@
   <script>
     const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };
 
-    function setBadge(text, cls) {
-      $("badge").textContent = text;
-      $("badge").className = "badge " + cls;
-    }
 
     function showLoggedOut() {
       $("status").hidden = true;
-      setBadge("Not logged in", "off");
       $("loggedOutCard").hidden = false;
     }
 
     function show(me) {
       $("status").hidden = true;
-      setBadge("Logged in", "on");
       $("profileCard").hidden = false;
       $("name").textContent = me.staff_name || me.display_name;
       $("lineName").textContent = "LINE: " + (me.display_name ?? "-");
@@ -170,7 +160,6 @@
     };
 
     start("any").then((me) => (me ? show(me) : showLoggedOut())).catch((err) => {
-      setBadge("Error", "off");
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });
