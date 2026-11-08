@@ -38,3 +38,20 @@ test("admin digest lists waiting and backup count", () => {
   assert.match(text, /สมชาย/);
   assert.match(text, /4/);
 });
+
+test("instant notice only in working hours 08:30-17:30 Bangkok (UTC+7)", async () => {
+  const { isWorkingHours } = await import("./digest.ts");
+  assert.equal(isWorkingHours(new Date("2026-11-09T01:29:00Z")), false); // 08:29
+  assert.equal(isWorkingHours(new Date("2026-11-09T01:30:00Z")), true);  // 08:30
+  assert.equal(isWorkingHours(new Date("2026-11-09T10:29:00Z")), true);  // 17:29
+  assert.equal(isWorkingHours(new Date("2026-11-09T10:30:00Z")), false); // 17:30
+  assert.equal(isWorkingHours(new Date("2026-11-09T15:00:00Z")), false); // 22:00
+});
+
+test("newTaskNotice lists the new tasks like the daily summary", async () => {
+  const { newTaskNotice } = await import("./digest.ts");
+  const text = newTaskNotice([{ title: "ตรวจสัญญา", building: "KL2", due: "2026-11-20" }, { title: "ร่างหนังสือ", building: "KL3", due: "2026-11-21" }]);
+  assert.match(text, /^📌 งานใหม่ 2 งาน/);
+  assert.match(text, /• ตรวจสัญญา \(KL2\) กำหนด/);
+  assert.match(text, /• ร่างหนังสือ \(KL3\)/);
+});

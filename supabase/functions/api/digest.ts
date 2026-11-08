@@ -48,3 +48,16 @@ export function shouldRunDigest(now: Date, lastRunDate: string | null): boolean 
   if (Number(p.hour) < 9) return false;
   return lastRunDate !== bangkokDate(now);
 }
+
+/** Instant "new task" notices go out only between 08:30 and 17:30 Bangkok time; otherwise the morning summary covers them. */
+export function isWorkingHours(now: Date): boolean {
+  const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(now).split(":").map(Number);
+  const minutes = h * 60 + m;
+  return minutes >= 8 * 60 + 30 && minutes < 17 * 60 + 30;
+}
+
+/** The instant notice to one person: their new tasks, in the same style as the daily summary. */
+export function newTaskNotice(tasks: T[]): string {
+  return section(`📌 งานใหม่ ${tasks.length} งาน`, tasks.map(line))!;
+}

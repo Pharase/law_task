@@ -1,6 +1,6 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
-import { adminDigest, memberDigest, shouldRunDigest, type T } from "./digest.ts";
+import { adminDigest, isWorkingHours, memberDigest, newTaskNotice, shouldRunDigest, type T } from "./digest.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
 import { db, must } from "./shared.ts";
@@ -103,4 +103,23 @@ export async function digest() {
     if (marks.length) await batch(marks).catch((e) => console.error("digest marks", e)); // unmarked = repeated tomorrow
   }
   return { sent, quotaSkipped, recipients: outbox.length };
+}
+
+/**
+ * Instant LINE notice right after an admin assigns tasks: one message per person, only 08:30–17:30 Bangkok.
+ * Returns the ids of the tasks whose owner got the message (the caller marks them notified, so the morning
+ * summary does not repeat them). Outside working hours, without a token, or when LINE refuses (e.g. monthly
+ * quota used up), nothing is marked and the next daily summary lists them as new as before.
+ */
+export async function notifyNewTasks(groups: { to: string; tasks: (T & { id: number })[] }[]): Promise<number[]> {
+  const token = Deno.env.get("LINE_MESSAGING_TOKEN");
+  if (!token || !groups.length || !isWorkingHours(new Date())) return [];
+  const today = bangkokDate(new Date());
+  const done: number[] = [];
+  for (const g of groups) {
+    const error = await push(g.to, newTaskNotice(g.tasks), LIFF_URL, token).catch((e) => String(e));
+    await db.from("notify_log").insert({ run_date: today, line_user_id: g.to, ok: !error, error: error ? "instant: " + error : null });
+    if (!error) done.push(...g.tasks.map((t) => t.id));
+  }
+  return done;
 }

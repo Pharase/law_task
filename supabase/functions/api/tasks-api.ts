@@ -4,6 +4,7 @@ import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds
 import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
+import { notifyNewTasks } from "./notify-api.ts";
 import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
@@ -190,6 +191,18 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         current_due_on: "", fix_round: 0, created_by: me.line_user_id, created_at, member_notified_at: null,
       }))) }]))!; // all rows in one locked batch: all or nothing
       const ids = new Set(rows.map((r: Row) => Number(r.id)));
+      // instant LINE notice (08:30–17:30 only): one message per person; a LINE problem never undoes the assignment
+      try {
+        const byOwner = new Map<string, { id: number; title: string; building: string; due: string }[]>();
+        for (const r of rows as Row[]) {
+          byOwner.set(r.owner_id, [...(byOwner.get(r.owner_id) ?? []), { id: Number(r.id), title: r.title, building: r.building, due: r.due_on }]);
+        }
+        const sent = await notifyNewTasks([...byOwner].map(([to, tasks]) => ({ to, tasks })));
+        if (sent.length) {
+          const at = new Date().toISOString();
+          await batch(sent.map((id) => ({ op: "update" as const, tab: "Tasks", id, patch: { member_notified_at: at } })));
+        }
+      } catch (e) { console.error("instant notice", e); }
       return loadTasks((t) => ids.has(t.id));
     }
 

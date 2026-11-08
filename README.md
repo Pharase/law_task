@@ -5,6 +5,7 @@ A LINE LIFF app for the legal team. It replaces the old Google Sheets task syste
 - **Work (Button A / home page):** admins assign tasks; members send work in with attachments; admins approve or send it back (กดผิด / มีปรับแก้). Monthly and quarterly performance is calculated from this.
 - **Ex Doc. (Button C):** a library of example legal PDFs. Admins upload; members preview or download.
 - **Daily LINE summary:** one message per person per weekday at 09:00, sent only when there's news.
+- **Instant notice on assign:** between 08:30 and 17:30 (Bangkok) each person who gets new tasks receives one LINE message listing them; outside those hours, or if LINE refuses (e.g. quota used up), the next daily summary lists them instead.
 - **Uploads:** kept at least 1 year, and deleted only after an admin has downloaded a backup.
 
 Design: [docs/superpowers/specs/2026-11-08-task-tracking-exdoc-design.md](docs/superpowers/specs/2026-11-08-task-tracking-exdoc-design.md)
