@@ -1,5 +1,5 @@
 // Review rules (spec "States"): approve, กดผิด (void send, no scoring effect), มีปรับแก้ (scored fix round).
-export const TAGS = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "การประสานงาน", "ติดตามความคืบหน้าคดี"] as const;
+export const TAGS = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "ติดตามความคืบหน้าคดี", "การประสานงาน"] as const;
 
 export type Decision = "approved" | "กดผิด" | "มีปรับแก้";
 const DECISIONS: Decision[] = ["approved", "กดผิด", "มีปรับแก้"];

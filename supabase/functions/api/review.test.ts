@@ -56,5 +56,5 @@ test("checkDueDate rejects missing and past dates", () => {
   assert.equal(checkDueDate("2026-03-10", today), "2026-03-10");
 });
 
-test("TAGS are the four fixed tags", () =>
-  assert.deepEqual([...TAGS], ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "การประสานงาน", "ติดตามความคืบหน้าคดี"]));
+test("TAGS are the four fixed tags, in the order shown in หมวดหมู่ · Tags and the performance table", () =>
+  assert.deepEqual([...TAGS], ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "ติดตามความคืบหน้าคดี", "การประสานงาน"]));

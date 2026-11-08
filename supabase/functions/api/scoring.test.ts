@@ -74,7 +74,7 @@ test("performance rows: admins see everyone, anyone else only their own row", as
   assert.deepEqual(visibleRows(rows, { line_user_id: "U1", role: "revoked" }).map((r) => r.line_user_id), ["U1"]);
 });
 
-test("on-time and accuracy are averaged per member (each / 10) and scaled 1-5 like the overall", () => {
+test("คะแนนตรงเวลา is averaged per member (each / 10) and scaled 1-5 like the overall", () => {
   const rows = performanceRows([
     // U1: sent on time, approved first try -> onTime 10, accuracy 10
     { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
@@ -83,9 +83,18 @@ test("on-time and accuracy are averaged per member (each / 10) and scaled 1-5 li
   ], { U1: "A", U2: "B" });
   const u1 = rows.find((r) => r.line_user_id === "U1")!, u2 = rows.find((r) => r.line_user_id === "U2")!;
   assert.equal(u1.onTime, 1);
-  assert.equal(u1.accuracy, 1);
   assert.equal(u2.onTime, 0.8);    // last send 6 days after the latest due date -> 10 - 2
-  assert.equal(u2.accuracy, 0.85); // mean(9, 8) / 10
   assert.equal(u1.onTime5, 5);
   assert.equal(u2.onTime5, 1);
+});
+
+test("overall = mean of คะแนนตรงเวลา and each tag score the member has work in", () => {
+  const m = memberScores([
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] }, // 10
+    { owner: "U1", tags: ["ความถูกต้อง", "การประสานงาน"], sends: [s("2026-01-14", "2026-01-10", "approved")] }, // 4 days late: 8.667
+  ]);
+  near(m.U1.onTime, 0.9333);
+  near(m.U1.byTag["การประสานงาน"], 0.9333);
+  near(m.U1.byTag["ความถูกต้อง"], 0.8667);
+  near(m.U1.overall, 0.9111); // (0.9333 + 0.9333 + 0.8667) / 3
 });

@@ -84,7 +84,7 @@ function taskItem(task, today, onChange, opts = {}) {
 // Donut = tasks ASSIGNED this month (Bangkok), by status. Older unfinished tasks sit in "งานคงค้างอื่นๆ"; older finished ones leave Home.
 // Colors checked with the dataviz palette validator (dark glass surface #221d19, ring order incl. the wrap-around pair);
 // all pass 3:1 on the dark surface; the legend still names and counts every status.
-const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "การประสานงาน", "ติดตามความคืบหน้าคดี"];
+const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "ติดตามความคืบหน้าคดี", "การประสานงาน"];
 const HOME_STATUS = [
   { key: "todo", label: "รอดำเนินการ", color: "#3987e5" },
   { key: "fix", label: "รอแก้ไข", color: "#d55181" },

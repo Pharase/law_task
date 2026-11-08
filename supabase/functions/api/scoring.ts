@@ -24,34 +24,32 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
   return { onTime, accuracy, task: (onTime + accuracy) / 2 };
 }
 
-/** Per owner: average task score / 10 (0–1), overall and per tag. Unapproved tasks are skipped. */
+/**
+ * Per owner (0–1, i.e. score / 10): คะแนนตรงเวลา, one score per tag (หมวดหมู่), and คะแนนรวม = the mean of
+ * คะแนนตรงเวลา and the tag scores the member has work in. Unapproved tasks are skipped.
+ */
 export function memberScores(tasks: ScoredTask[]) {
-  const acc: Record<string, { all: number[]; onTime: number[]; accuracy: number[]; tags: Record<string, number[]> }> = {};
+  const acc: Record<string, { n: number; onTime: number[]; tags: Record<string, number[]> }> = {};
   for (const t of tasks) {
     const sc = taskScore(t.sends);
     if (!sc) continue;
-    const m = (acc[t.owner] ??= { all: [], onTime: [], accuracy: [], tags: {} });
-    m.all.push(sc.task / 10);
+    const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
+    m.n++;
     m.onTime.push(sc.onTime / 10);
-    m.accuracy.push(sc.accuracy / 10);
-    for (const tag of t.tags) (m.tags[tag] ??= []).push(sc.task / 10);
+    for (const tag of t.tags) (m.tags[tag] ??= []).push(sc.task / 10); // tag score = the task score (on time + every round)
   }
-  const out: Record<string, { overall: number; onTime: number; accuracy: number; byTag: Record<string, number>; tasks: number }> = {};
+  const out: Record<string, { overall: number; onTime: number; byTag: Record<string, number>; tasks: number }> = {};
   for (const [owner, m] of Object.entries(acc)) {
-    out[owner] = {
-      overall: mean(m.all),
-      onTime: mean(m.onTime),     // ความตรงเวลา: the approved send against the latest due date
-      accuracy: mean(m.accuracy), // ความแม่นยำ: every kept send against its own round due date
-      byTag: Object.fromEntries(Object.entries(m.tags).map(([k, v]) => [k, mean(v)])),
-      tasks: m.all.length,
-    };
+    const onTime = mean(m.onTime); // คะแนนตรงเวลา: the approved send against the latest due date
+    const byTag = Object.fromEntries(Object.entries(m.tags).map(([k, v]) => [k, mean(v)]));
+    out[owner] = { overall: mean([onTime, ...Object.values(byTag)]), onTime, byTag, tasks: m.n };
   }
   return out;
 }
 
 export type PerformanceRow = {
   line_user_id: string; name: string; tasks: number; overall: number; overall5: number;
-  onTime: number; onTime5: number; accuracy: number; accuracy5: number;
+  onTime: number; onTime5: number;
   byTag: Record<string, { raw: number; scaled: number }>;
 };
 
@@ -60,7 +58,6 @@ export function performanceRows(tasks: ScoredTask[], names: Record<string, strin
   const m = memberScores(tasks);
   const overall5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.overall])));
   const onTime5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.onTime])));
-  const accuracy5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.accuracy])));
   const tags = new Set(Object.values(m).flatMap((v) => Object.keys(v.byTag)));
   const tag5: Record<string, Record<string, number>> = {};
   for (const tag of tags) {
@@ -74,8 +71,6 @@ export function performanceRows(tasks: ScoredTask[], names: Record<string, strin
     overall5: overall5[id],
     onTime: v.onTime,
     onTime5: onTime5[id],
-    accuracy: v.accuracy,
-    accuracy5: accuracy5[id],
     byTag: Object.fromEntries(Object.entries(v.byTag).map(([tag, raw]) => [tag, { raw, scaled: tag5[tag][id] }])),
   }));
 }
