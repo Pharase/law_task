@@ -21,8 +21,8 @@
         <button type="button" class="small secondary" id="newInviteBtn">+ รหัสเชิญ (คนใหม่)</button>
       </div>
       <form id="newInvite" class="person-actions" hidden>
-        <p class="muted">สำหรับพนักงานที่ยังไม่เคยเปิดแอป · For staff who haven't opened the app yet</p>
-        <input name="staff" placeholder="ชื่อพนักงาน · Staff name" maxlength="100" required aria-label="Staff name">
+        <p class="muted">สำหรับหัวหน้างานที่ยังไม่เคยเปิดแอป · For staff who haven't opened the app yet</p>
+        <input name="staff" placeholder="ชื่อหัวหน้างาน · Staff name" maxlength="100" required aria-label="Staff name">
         <select name="role" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select>
         <button class="small">สร้างรหัสเชิญ</button>
         <div class="invite-result" role="status" aria-live="polite"></div>
@@ -66,7 +66,7 @@
     }
 
     function pendingRow(u) {
-      const staff = el("input", { value: u.staff_name || u.display_name || "", maxLength: 100, placeholder: "ชื่อพนักงาน · Staff name", ariaLabel: "Staff name" });
+      const staff = el("input", { value: u.staff_name || u.display_name || "", maxLength: 100, placeholder: "ชื่อหัวหน้างาน · Staff name", ariaLabel: "Staff name" });
       const role = roleSelect("member", ["member", "admin"]);
       const result = el("div", { className: "invite-result", role: "status" });
       const approve = el("button", { type: "button", className: "small", textContent: "อนุมัติ · Approve" });
