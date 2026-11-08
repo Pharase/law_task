@@ -110,12 +110,17 @@ async function loadList() {
 async function loadPerformance() {
   const res = await api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
   const pct = (x) => (x * 100).toFixed(1) + "%"; // raw score: average task score / 10
-  const head = el("tr", {}, ...["ชื่อ", "งาน", "คะแนน (1–5)", "ดิบ (raw)", ...TAG_LIST.map((t) => t + " (1–5 · raw)")].map((h) => el("th", { textContent: h })));
-  const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r) => el("tr", {},
-    el("td", { textContent: r.name }), el("td", { textContent: r.tasks }), el("td", { textContent: r.overall5.toFixed(2) }), el("td", { textContent: pct(r.overall) }),
-    ...TAG_LIST.map((tag) => el("td", { textContent: r.byTag[tag] ? `${r.byTag[tag].scaled.toFixed(2)} · ${pct(r.byTag[tag].raw)}` : "-" }))));
+  // one cell = the 1–5 score (big) over the raw % (small); how both are made is explained under the table
+  const score = (scaled, raw) => el("td", { className: "perf-score" },
+    el("strong", { textContent: scaled.toFixed(2) }), el("span", { className: "muted", textContent: pct(raw) }));
+  const rank = navAdmin; // members only get their own row, so a rank would always read 1
+  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน", "คะแนนรวม", ...TAG_LIST].map((h) => el("th", { textContent: h })));
+  const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r, i) => el("tr", {},
+    rank && el("td", { className: "muted", textContent: i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.tasks }),
+    score(r.overall5, r.overall),
+    ...TAG_LIST.map((tag) => (r.byTag[tag] ? score(r.byTag[tag].scaled, r.byTag[tag].raw) : el("td", { className: "muted", textContent: "-" })))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 4 + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 4 : 3) + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
 }
 
 async function loadWarnings() {
@@ -246,7 +251,7 @@ function initReports() {
   const [y, m] = bkkToday().split("-").map(Number);
   // dropdowns: years shown in พ.ศ. (value stays ค.ศ. for the server), Thai month names, quarters with their months
   const SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  $("pYear").replaceChildren(...Array.from({ length: y - 2024 + 1 }, (_, i) => y - i) // this year back to 2024 (2567)
+  $("pYear").replaceChildren(...Array.from({ length: y - 2020 + 1 }, (_, i) => y - i) // this year (selected) back to 2020 (2563)
     .map((yy) => option(yy, String(yy + 543))));
   const fillN = (n) => {
     const month = $("pKind").value === "month";
