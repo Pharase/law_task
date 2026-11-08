@@ -81,15 +81,15 @@ function taskItem(task, today, onChange, opts = {}) {
 
 // ---- Home dashboard (members: own tasks; admins: whole team) ----
 // Donut = tasks ASSIGNED this month (Bangkok), by status. Older unfinished tasks sit in "งานคงค้างอื่นๆ"; older finished ones leave Home.
-// Colors checked with the dataviz palette validator (light, white surface, ring order incl. the wrap-around pair);
-// amber and aqua are below 3:1 on white, so the legend always names and counts every status.
+// Colors checked with the dataviz palette validator (dark glass surface #221d19, ring order incl. the wrap-around pair);
+// all pass 3:1 on the dark surface; the legend still names and counts every status.
 const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "การประสานงาน", "ติดตามความคืบหน้าคดี"];
 const HOME_STATUS = [
-  { key: "todo", label: "รอดำเนินการ", color: "#2a78d6" },
-  { key: "fix", label: "รอแก้ไข", color: "#e34948" },
-  { key: "review", label: "รอตรวจสอบ", color: "#eda100" },
-  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา", color: "#1baf7a" },
-  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า", color: "#eb6834" },
+  { key: "todo", label: "รอดำเนินการ", color: "#3987e5" },
+  { key: "fix", label: "รอแก้ไข", color: "#d55181" },
+  { key: "review", label: "รอตรวจสอบ", color: "#c98500" },
+  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา", color: "#199e70" },
+  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า", color: "#d95926" },
 ];
 const bkkMonth = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)).slice(0, 7) : "");
 
