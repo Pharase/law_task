@@ -76,7 +76,7 @@ a { color: var(--cyan); }
 }
 .navbar::-webkit-scrollbar { display: none; }
 .navbar .brand { flex: none; display: flex; align-items: center; padding: 2px 8px 2px 4px; margin-right: 4px; border-radius: 999px; }
-.navbar .brand img { width: 34px; height: 34px; display: block; filter: drop-shadow(0 0 8px rgba(2, 215, 244, .45)); }
+.navbar .brand img { height: 38px; width: auto; display: block; filter: drop-shadow(0 0 8px rgba(226, 184, 102, .4)); } /* gold CI mark, 4:5 */
 .navbar a:not(.brand) { position: relative; color: var(--ink); opacity: .78; text-decoration: none; padding: 8px 12px; border-radius: 999px; white-space: nowrap; font-size: 14px; font-weight: 500; transition: opacity .2s, color .2s; }
 .navbar a:not(.brand):hover { opacity: 1; }
 .navbar a[aria-current] { color: var(--blue-hi); opacity: 1; }
