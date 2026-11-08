@@ -42,7 +42,8 @@ function renderNav() {
   if (!document.querySelector("link[rel=icon]")) {
     document.head.append(Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml", href: HOME + "img/logo.svg" }));
   }
-  nav.replaceChildren(brand, ...NAV.map(([path, label, soon, adminPath]) => {
+  const links = Object.assign(document.createElement("div"), { className: "nav-links" });
+  links.append(...NAV.map(([path, label, soon, adminPath]) => {
     const a = document.createElement("a");
     a.href = HOME + (navAdmin && adminPath ? adminPath : path);
     a.textContent = label;
@@ -50,8 +51,59 @@ function renderNav() {
     if (soon) a.append(Object.assign(document.createElement("small"), { className: "soon", textContent: " soon" }));
     return a;
   }));
+  nav.replaceChildren(brand, links, ...(navMe ? [navUser(navMe)] : []));
 }
 document.addEventListener("DOMContentLoaded", renderNav);
+
+// ---- Right side of the navbar: (admins) members link with waiting count, who you are, Log out ----
+const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };
+let navMe = null, pendingCount = null; // pendingCount: the admin's listUsers call, made once per page
+
+/** Show this person in the navbar (called by start(); Home calls it again after an invite code is redeemed). */
+function setNavUser(me) {
+  navMe = me;
+  navAdmin = me.role === "admin";
+  renderNav();
+}
+
+function navUser(me) {
+  const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  const box = el("div", { className: "nav-user" });
+  if (me.role === "admin") {
+    // 🔗 = Members & invite codes; the red dot counts people who logged in and wait for an invite code.
+    const dot = el("span", { className: "nav-dot", hidden: true });
+    const link = el("a", { className: "nav-icon", href: HOME + "admin/members.html", title: "สมาชิกและรหัสเชิญ · Members & invite codes", ariaLabel: "Members & invite codes" },
+      el("span", { ariaHidden: "true", textContent: "🔗" }), dot);
+    pendingCount ??= api("listUsers").then((users) => ({
+      pending: users.filter((u) => u.role === "pending").length,
+      connected: users.filter((u) => u.role === "member" || u.role === "admin").length,
+    }));
+    pendingCount.then(({ pending, connected }) => {
+      dot.hidden = !pending;
+      dot.textContent = pending > 99 ? "99+" : pending;
+      link.title = `ผู้ใช้ที่เชื่อมต่อ ${connected} · รออนุมัติ ${pending} — Members & invite codes`;
+      link.ariaLabel = `Members & invite codes: ${connected} connected, ${pending} waiting for approval`;
+    }).catch(() => {});
+    box.append(link);
+  }
+  const avatar = me.picture_url
+    ? el("img", { className: "nav-avatar", src: me.picture_url, alt: "" })
+    : el("span", { className: "nav-avatar nav-initial", textContent: (me.staff_name || me.display_name || "?").trim().charAt(0) });
+  const who = el("div", { className: "nav-who" },
+    el("strong", { textContent: me.staff_name || me.display_name || "-" }),
+    el("span", { className: "badge " + (me.role === "member" || me.role === "admin" ? "on" : "off"), textContent: ROLE_TEXT[me.role] ?? me.role }));
+  const out = el("button", { type: "button", className: "small secondary nav-logout", title: "Log out", ariaLabel: "Log out" },
+    el("span", { className: "nav-logout-text", textContent: "Log out" }));
+  // power icon drawn as SVG: the ⏻ character is missing from most fonts (constant markup, no user data)
+  out.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>');
+  out.onclick = () => {
+    liff.logout();
+    if (liff.isInClient()) liff.closeWindow(); // inside LINE there is no login page to go back to
+    else location.replace(HOME);
+  };
+  box.append(el("div", { className: "nav-me", title: "LINE: " + (me.display_name ?? "-") }, avatar, who), out);
+  return box;
+}
 const login = () => liff.login({ redirectUri: location.origin + location.pathname });
 
 async function api(action, data = {}) {
@@ -95,7 +147,7 @@ async function start(need = "member") {
   const me = await api("me");
   navAdmin = me.role === "admin";
   if (navAdmin && adminRedirect()) return new Promise(() => {}); // page is navigating away
-  renderNav();
+  setNavUser(me);
   const ok = need === "any" || (need === "admin" ? me.role === "admin" : me.role === "member" || me.role === "admin");
   if (!ok) {
     location.replace(HOME); // the server enforces roles anyway; this just avoids a dead page

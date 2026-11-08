@@ -20,16 +20,6 @@
     <button id="loginBtn">Log in with LINE</button>
   </div>
 
-  <!-- Logged in: who you are -->
-  <div class="card row" id="profileCard" hidden>
-    <img id="avatar" alt="">
-    <div class="grow">
-      <strong id="name"></strong>
-      <div class="muted" id="lineName"></div>
-      <span id="role" class="badge"></span>
-    </div>
-  </div>
-
   <!-- Logged in, not approved yet -->
   <form class="card" id="codeCard" hidden>
     <h2>Waiting for approval</h2>
@@ -52,12 +42,6 @@
         <button type="button" class="small" id="assignBtn">มอบหมายงาน · Assign task</button>
         <a class="btn" href="admin/tasks.html">ติดตามงาน · Tracking (อนุมัติ)</a>
       </div>
-      <a class="stat-tile" href="admin/members.html" id="usersTile">
-        <span class="stat-num" id="usersCount">…</span>
-        <span>ผู้ใช้ที่เชื่อมต่อ · Users connected</span>
-        <span class="muted" id="usersPending"></span>
-        <span class="stat-go">สมาชิกและรหัสเชิญ · Members &amp; invite codes ›</span>
-      </a>
       <form id="createForm" hidden>
         <h2>มอบหมายงาน · Assign</h2>
         <label for="building">นิติบุคคล · Building</label>
@@ -94,12 +78,7 @@
     </div>
   </div>
 
-  <button class="secondary" id="logoutBtn" hidden>Log out</button>
-
   <script>
-    const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };
-
-
     function showLoggedOut() {
       $("status").hidden = true;
       $("loggedOutCard").hidden = false;
@@ -107,13 +86,7 @@
 
     function show(me) {
       $("status").hidden = true;
-      $("profileCard").hidden = false;
-      $("name").textContent = me.staff_name || me.display_name;
-      $("lineName").textContent = "LINE: " + (me.display_name ?? "-");
-      $("role").textContent = ROLE_TEXT[me.role] ?? me.role;
-      $("role").className = "badge " + (me.role === "member" || me.role === "admin" ? "on" : "off");
-      if (me.picture_url) $("avatar").src = me.picture_url; else $("avatar").hidden = true;
-      $("logoutBtn").hidden = liff.isInClient(); // inside LINE, closing the app is "logging out"
+      setNavUser(me); // avatar, name, role and Log out live in the navbar
 
       const approved = me.role === "member" || me.role === "admin";
       $("codeCard").hidden = approved || me.locked;
@@ -125,18 +98,11 @@
       if (me.role === "admin") {
         $("adminTools").hidden = false;
         $("assignBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; };
-        api("listUsers").then((users) => {
-          // connected = approved LINE accounts (members + admins); pending = logged in, waiting for an invite code
-          $("usersCount").textContent = users.filter((u) => u.role === "member" || u.role === "admin").length;
-          const pending = users.filter((u) => u.role === "pending").length;
-          $("usersPending").textContent = pending ? "รออนุมัติ " + pending + " คน · waiting for a code" : "ไม่มีผู้รออนุมัติ";
-        }).catch(() => { $("usersCount").textContent = "-"; });
         initAssignForm(home).catch((err) => { $("createMsg").textContent = "Error: " + err.message; });
       }
     }
 
     $("loginBtn").onclick = login;
-    $("logoutBtn").onclick = () => { liff.logout(); location.reload(); };
 
     $("codeCard").onsubmit = async (e) => {
       e.preventDefault();
