@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tasks – admin</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
+  <script src="../js/admin-tasks.js"></script>
+  <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+  <p><a href="../">← Home</a> · <a href="members.html">Members</a></p>
+  <h1>งาน · Tasks (admin)</h1>
+  <p id="status" class="muted" role="status">Loading…</p>
+
+  <div id="page" hidden>
+    <div class="work-grid">
+      <form class="card" id="createForm">
+        <h2>มอบหมายงาน · Assign</h2>
+        <label for="building">นิติบุคคล · Building</label>
+        <select id="building" required></select>
+        <div class="row">
+          <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
+          <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
+        </div>
+        <label for="title">หัวข้องาน · Title</label>
+        <input id="title" maxlength="200" required>
+        <label for="details">รายละเอียด · Details</label>
+        <textarea id="details" rows="3"></textarea>
+        <fieldset><legend>หมวดหมู่ · Tags</legend><div id="tags"></div></fieldset>
+        <fieldset><legend>ผู้รับงาน · Members</legend><div id="owners"></div></fieldset>
+        <label for="dueOn">กำหนดส่ง · Due date</label>
+        <input type="date" id="dueOn" required>
+        <button>มอบหมายงาน</button>
+        <p id="createMsg" role="status"></p>
+      </form>
+
+      <section class="card">
+        <h2>รอตรวจ · Waiting for review <span id="reviewCount" class="badge"></span></h2>
+        <div id="reviewList"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>งานทั้งหมด · All tasks</h2>
+      <div class="row filters">
+        <select id="fOwner" aria-label="Member"><option value="">ทุกคน</option></select>
+        <select id="fBuilding" aria-label="Building"><option value="">ทุกนิติบุคคล</option></select>
+        <select id="fState" aria-label="State">
+          <option value="">ทุกสถานะ</option><option value="on_process">On Process</option>
+          <option value="submitted">รอตรวจ</option><option value="approved">อนุมัติ</option><option value="cancelled">ยกเลิก</option>
+        </select>
+        <label class="inline"><input type="checkbox" id="fOverdue"> เลยกำหนด</label>
+      </div>
+      <div id="allList"></div>
+    </section>
+
+    <section class="card">
+      <h2>ผลงาน · Performance</h2>
+      <div class="row filters">
+        <select id="pKind" aria-label="Period"><option value="month">เดือน</option><option value="quarter">ไตรมาส</option></select>
+        <input type="number" id="pYear" aria-label="Year" min="2020" max="2100">
+        <input type="number" id="pN" aria-label="Month or quarter" min="1" max="12">
+        <button type="button" class="small" id="pGo">ดู</button>
+      </div>
+      <div class="table-wrap"><table id="perfTable"></table></div>
+    </section>
+  </div>
+
+  <script>
+    start("admin").then(initAdminTasks).catch((err) => {
+      $("status").textContent = "Error: " + err.message;
+      $("status").className = "error";
+    });
+  </script>
+</body>
+</html>
