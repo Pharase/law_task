@@ -6,16 +6,25 @@ const HOME = new URL("../", document.currentScript.src).href;
 
 const $ = (id) => document.getElementById(id);
 
-// Top navbar on every page: same order as the LINE rich menu (Button A = Work home). Admin links only for admins.
+// Top navbar on every page: one button per feature, same order as the LINE rich menu.
+// [member page, label, coming soon, admin page]: admins get the admin page of the same feature.
 const NAV = [
-  ["", "งาน · Work"],
-  ["Button%20C/", "Ex Doc."],
+  ["", "งาน · Work", false, "admin/tasks.html"],
+  ["Button%20C/", "Ex Doc.", false, "admin/exdoc.html"],
   ["Button%20D/", "Reports", true],
   ["Button%20E/", "Property Right", true],
   ["Button%20F/", "Invoice", true],
 ];
-const ADMIN_NAV = [["admin/tasks.html", "Admin · Tasks"], ["admin/exdoc.html", "Admin · Ex Doc"], ["admin/members.html", "Admin · Members"]];
 let navAdmin = false;
+const pageUrl = () => location.href.split(/[?#]/)[0].replace(/index\.html$/, "");
+
+/** An admin who opens a member page (e.g. from the rich menu) is sent to that feature's admin page. */
+function adminRedirect() {
+  const item = NAV.find(([path, , , adminPath]) => adminPath && new URL(path, HOME).href === pageUrl());
+  if (!item) return false;
+  location.replace(new URL(item[3], HOME).href);
+  return true;
+}
 function renderNav() {
   if (!document.body) return;
   let nav = $("navbar");
@@ -26,10 +35,10 @@ function renderNav() {
     nav.setAttribute("aria-label", "Main menu");
     document.body.prepend(nav);
   }
-  const here = location.href.split(/[?#]/)[0].replace(/index\.html$/, "");
-  nav.replaceChildren(...[...NAV, ...(navAdmin ? ADMIN_NAV : [])].map(([path, label, soon]) => {
+  const here = pageUrl();
+  nav.replaceChildren(...NAV.map(([path, label, soon, adminPath]) => {
     const a = document.createElement("a");
-    a.href = HOME + path;
+    a.href = HOME + (navAdmin && adminPath ? adminPath : path);
     a.textContent = label;
     if (a.href === here) a.setAttribute("aria-current", "page");
     if (soon) a.append(Object.assign(document.createElement("small"), { className: "soon", textContent: " soon" }));
@@ -79,6 +88,7 @@ async function start(need = "member") {
   }
   const me = await api("me");
   navAdmin = me.role === "admin";
+  if (navAdmin && adminRedirect()) return new Promise(() => {}); // page is navigating away
   renderNav();
   const ok = need === "any" || (need === "admin" ? me.role === "admin" : me.role === "member" || me.role === "admin");
   if (!ok) {

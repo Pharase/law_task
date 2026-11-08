@@ -112,7 +112,7 @@ LIFF link: https://liff.line.me/2012450429-k3WOCwtO
 
 ## Rich menu buttons
 
-Rich menu layout: a 3×2 grid where A+B is one wide tile. Folder names contain a space, written `%20` in links. Keep the trailing `/`.
+Rich menu layout: a 3×2 grid where A+B is one wide tile. The same buttons form the top navbar on every page. Admins tapping Work (A) or Ex Doc. (C) get the admin page of that feature (`admin/tasks.html`, `admin/exdoc.html`); Members & invite codes is linked from `admin/tasks.html`. Folder names contain a space, written `%20` in links. Keep the trailing `/`.
 
 | Button | Feature | Rich menu link |
 |---|---|---|
