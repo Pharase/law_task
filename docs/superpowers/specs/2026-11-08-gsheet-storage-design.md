@@ -1,6 +1,6 @@
 # Google Sheets as the task store: design (change to the approved Button A/C design)
 
-Status: ready for approval · 2026-11-08
+Status: approved · 2026-11-08
 Builds on: `2026-11-08-task-tracking-exdoc-design.md` (approved). Everything there stands **except where it says where data lives**.
 
 ## Intent
