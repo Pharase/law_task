@@ -41,7 +41,7 @@ async function downloadBackup(files, status) {
     status.textContent = `กำลังรวมไฟล์ ${done}/${files.length}…`;
   }
   await flush();
-  status.textContent = `สำรองข้อมูลแล้ว ${files.length} ไฟล์ (${part - 1} ZIP)`;
+  status.textContent = `สำรองข้อมูลแล้ว ${files.length} ไฟล์ (${part - 1} ZIP) · ตรวจสอบว่าไฟล์ ZIP ถูกบันทึกแล้ว: ต้นฉบับจะถูกลบหลัง 7 วัน`;
 }
 
 async function initBackupBanner() {
@@ -55,6 +55,16 @@ async function initBackupBanner() {
   if (res.files.length) {
     const status = Object.assign(document.createElement("p"), { role: "status" });
     const btn = Object.assign(document.createElement("button"), { type: "button", className: "small", textContent: "ดาวน์โหลดสำรอง (Download backup)" });
+    if (window.liff?.isInClient?.()) {
+      // LINE's in-app browser often drops blob downloads, which would record a backup that was never saved.
+      btn.textContent = "เปิดในเบราว์เซอร์เพื่อดาวน์โหลดสำรอง (Open in browser to back up)";
+      btn.onclick = () => liff.openWindow({ url: location.href, external: true });
+      box.append(Object.assign(document.createElement("strong"), { textContent: `มี ${res.files.length} ไฟล์อายุเกิน 1 ปีรอสำรองข้อมูล (files waiting for backup)` }),
+        Object.assign(document.createElement("p"), { className: "muted", textContent: "ดาวน์โหลดสำรองได้จากเบราว์เซอร์ (Chrome/Safari) หรือคอมพิวเตอร์เท่านั้น" }), btn);
+      box.className = "card backup-banner";
+      document.querySelector("h1").after(box);
+      return;
+    }
     btn.onclick = async () => {
       btn.disabled = true;
       try { await downloadBackup(res.files, status); btn.remove(); }

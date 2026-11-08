@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canSend, reviewEffect, TAGS, validateReview } from "./review.ts";
+import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 
 const today = "2026-03-10";
 
@@ -42,6 +42,18 @@ test("canSend only own on_process task", () => {
   assert.equal(canSend({ owner: "U1", state: "on_process" }, "U1"), true);
   assert.equal(canSend({ owner: "U2", state: "on_process" }, "U1"), false);
   assert.equal(canSend({ owner: "U1", state: "submitted" }, "U1"), false);
+});
+
+test("validFileIds keeps only uuids (bad ids are ignored, not a 500)", () =>
+  assert.deepEqual(validFileIds(["9b2f0c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "undefined", 42, "x' or 1=1"]),
+    ["9b2f0c1e-1a2b-4c3d-8e9f-0a1b2c3d4e5f"]));
+
+test("validFileIds tolerates a non-array", () => assert.deepEqual(validFileIds(undefined), []));
+
+test("checkDueDate rejects missing and past dates", () => {
+  assert.throws(() => checkDueDate("", today), /required/);
+  assert.throws(() => checkDueDate("2026-03-09", today), /past/);
+  assert.equal(checkDueDate("2026-03-10", today), "2026-03-10");
 });
 
 test("TAGS are the four fixed tags", () =>

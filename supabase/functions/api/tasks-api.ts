@@ -1,11 +1,11 @@
 // Task actions (spec "Button A"). Rules live in review.ts / scoring.ts; this file only talks to the database.
 import { bangkokDate, periodRange } from "./dates.ts";
-import { canSend, reviewEffect, TAGS, validateReview } from "./review.ts";
+import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 import { performanceRows, type ScoredTask } from "./scoring.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const today = () => bangkokDate(new Date());
+const dueDate = (s: unknown) => { try { return checkDueDate(s, today()); } catch (e) { throw new HttpError(400, (e as Error).message); } };
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -102,7 +102,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         await db.from("tasks").update({ state: "on_process" }).eq("id", id); // undo: no pending send to review
         throw send.error;
       }
-      const fileIds = Array.isArray(body.file_ids) ? body.file_ids.map(String) : [];
+      const fileIds = validFileIds(body.file_ids); // non-uuids dropped: a bad id must not 500 after the send is saved
       if (fileIds.length) {
         // Only the sender's own, still-unattached files move; anything else is silently ignored.
         must(await db.from("files").update({ task_id: id, send_id: send.data.id })
@@ -130,9 +130,7 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
     case "createTask": {
       const title = checkTitle(body.title);
       const tags = checkTags(body.tags);
-      const due_on = String(body.due_on ?? "");
-      if (!DATE.test(due_on)) throw new HttpError(400, "due date is required");
-      if (due_on < today()) throw new HttpError(400, "due date can't be in the past");
+      const due_on = dueDate(body.due_on);
       const building_id = Number(body.building_id);
       found(must(await db.from("buildings").select("id").eq("id", building_id).maybeSingle()), "building");
       const owners: string[] = Array.isArray(body.owners) ? [...new Set(body.owners.map(String))] : [];
@@ -191,8 +189,7 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         patch.building_id = found(must(await db.from("buildings").select("id").eq("id", Number(body.building_id)).maybeSingle()), "building").id;
       }
       if (body.due_on !== undefined) {
-        if (!DATE.test(String(body.due_on))) throw new HttpError(400, "due date is required");
-        patch.due_on = patch.current_due_on = String(body.due_on);
+        patch.due_on = patch.current_due_on = dueDate(body.due_on);
       }
       if (!Object.keys(patch).length) return one(id);
       found(must(await db.from("tasks").update(patch).eq("id", id).eq("state", "on_process").select("id").maybeSingle()), "task");

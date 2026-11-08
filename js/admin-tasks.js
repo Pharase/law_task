@@ -109,12 +109,13 @@ async function loadList() {
 
 async function loadPerformance() {
   const res = await api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
-  const head = el("tr", {}, ...["ชื่อ", "งาน", "คะแนน (1–5)", ...TAG_LIST].map((h) => el("th", { textContent: h })));
+  const pct = (x) => (x * 100).toFixed(1) + "%"; // raw score: average task score / 10
+  const head = el("tr", {}, ...["ชื่อ", "งาน", "คะแนน (1–5)", "ดิบ (raw)", ...TAG_LIST.map((t) => t + " (1–5 · raw)")].map((h) => el("th", { textContent: h })));
   const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r) => el("tr", {},
-    el("td", { textContent: r.name }), el("td", { textContent: r.tasks }), el("td", { textContent: r.overall5.toFixed(2) }),
-    ...TAG_LIST.map((tag) => el("td", { textContent: r.byTag[tag] ? r.byTag[tag].scaled.toFixed(2) : "-" }))));
+    el("td", { textContent: r.name }), el("td", { textContent: r.tasks }), el("td", { textContent: r.overall5.toFixed(2) }), el("td", { textContent: pct(r.overall) }),
+    ...TAG_LIST.map((tag) => el("td", { textContent: r.byTag[tag] ? `${r.byTag[tag].scaled.toFixed(2)} · ${pct(r.byTag[tag].raw)}` : "-" }))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 3 + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 4 + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
 }
 
 function loadAll() {

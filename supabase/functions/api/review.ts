@@ -31,5 +31,19 @@ export function reviewEffect(decision: Decision, nextDueOn: string | null): {
   return { taskState: "on_process", sendOutcome: "fix", newDueOn: nextDueOn, fixRoundDelta: 1 };
 }
 
-export const canSend = (task: { owner: string; state: string }, me: string): boolean =>
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Attachment ids from the client: anything that isn't a uuid is dropped (a bad id must not fail a send). */
+export const validFileIds = (ids: unknown): string[] =>
+  Array.isArray(ids) ? ids.map(String).filter((s) => UUID.test(s)) : [];
+
+/** A task due date: required YYYY-MM-DD, not before today (Bangkok). */
+export function checkDueDate(s: unknown, today: string): string {
+  const d = String(s ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("due date is required");
+  if (d < today) throw new Error("due date can't be in the past");
+  return d;
+}
+
+export const canSend =(task: { owner: string; state: string }, me: string): boolean =>
   task.owner === me && task.state === "on_process";

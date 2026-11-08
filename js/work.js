@@ -85,7 +85,7 @@ async function renderPerformance(today) {
   const [y, m] = today.split("-").map(Number);
   const show = (id, res) => {
     const row = res.rows[0];
-    $(id).textContent = row ? `${row.overall5.toFixed(2)} / 5 (${row.tasks} งาน)` : "-";
+    $(id).textContent = row ? `${row.overall5.toFixed(2)} / 5 · ${(row.overall * 100).toFixed(1)}% (${row.tasks} งาน)` : "-";
   };
   const [month, quarter] = await Promise.all([
     api("performance", { kind: "month", year: y, n: m }),

@@ -14,6 +14,12 @@ test("old but not backed up -> keep", () =>
 test("old and backed up -> delete", () =>
   assert.equal(isDeletable(f("2026-01-01T00:00:00Z", "2027-05-01T00:00:00Z"), now), true));
 
+test("backed up less than 7 days ago -> keep (recovery window if the ZIP never saved)", () =>
+  assert.equal(isDeletable(f("2026-01-01T00:00:00Z", "2027-05-28T00:00:00Z"), now), false));
+
+test("backed up more than 7 days ago -> delete", () =>
+  assert.equal(isDeletable(f("2026-01-01T00:00:00Z", "2027-05-24T00:00:00Z"), now), true));
+
 test("already deleted -> no", () =>
   assert.equal(isDeletable(f("2026-01-01T00:00:00Z", "2027-05-01T00:00:00Z", "2027-05-02T00:00:00Z"), now), false));
 

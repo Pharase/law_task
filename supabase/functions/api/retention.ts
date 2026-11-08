@@ -7,4 +7,10 @@ export const cutoff = (now: Date) => new Date(now.getTime() - RETENTION_DAYS * 8
 
 export const isDue = (f: F, now: Date): boolean => !f.deleted_at && new Date(f.created_at) < cutoff(now);
 
-export const isDeletable = (f: F, now: Date): boolean => isDue(f, now) && !!f.backed_up_at;
+// Grace period after a recorded backup: if the ZIP never actually saved (e.g. LINE's in-app browser
+// ignored the download), the originals survive long enough to back up again.
+export const BACKUP_GRACE_DAYS = 7;
+export const graceCutoff = (now: Date) => new Date(now.getTime() - BACKUP_GRACE_DAYS * 864e5);
+
+export const isDeletable = (f: F, now: Date): boolean =>
+  isDue(f, now) && !!f.backed_up_at && new Date(f.backed_up_at) < graceCutoff(now);

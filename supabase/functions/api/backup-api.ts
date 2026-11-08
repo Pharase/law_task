@@ -1,7 +1,7 @@
 // Backup-before-delete (spec "Retention"). Admins download due files as a ZIP in the browser, then mark them backed up;
 // the daily cleanup deletes only due + backed-up files and keeps the row (deleted_at) for task timelines.
 import { bangkokDate } from "./dates.ts";
-import { cutoff, isDeletable } from "./retention.ts";
+import { cutoff, graceCutoff, isDeletable } from "./retention.ts";
 import { bucket, db, type Me, must } from "./shared.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -42,13 +42,13 @@ export async function adminBackupActions(action: string, body: Row, me: Me): Pro
   return undefined;
 }
 
-/** Public, idempotent: deletes only files that are due AND backed up. */
+/** Public, idempotent: deletes only files that are due AND were backed up more than BACKUP_GRACE_DAYS ago. */
 export async function cleanup() {
   const now = new Date();
   let deleted = 0;
   for (;;) {
     const batch: Row[] = must(await db.from("files").select("id, path, created_at, backed_up_at, deleted_at")
-      .is("deleted_at", null).not("backed_up_at", "is", null).lt("created_at", cutoff(now).toISOString()).limit(100));
+      .is("deleted_at", null).lt("backed_up_at", graceCutoff(now).toISOString()).lt("created_at", cutoff(now).toISOString()).limit(100));
     const doomed = batch.filter((f) => isDeletable(f as Parameters<typeof isDeletable>[0], now)); // same rule as the query, checked again in code
     if (!doomed.length) break;
     must(await bucket.remove(doomed.map((f) => f.path))); // storage first: a leftover row is retried tomorrow
