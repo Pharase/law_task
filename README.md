@@ -73,6 +73,22 @@ LINE Developers Console → your LINE Login channel → **LIFF**:
 
 LIFF link: https://liff.line.me/2012450429-k3WOCwtO
 
+## Rich menu buttons
+
+Each button has its own folder (`Button A` … `Button F`) with an `index.html`. In links, the space is written `%20`. Each page requires an approved member and shows "Coming soon" until its feature is built.
+
+Rich menu layout: a 3×2 grid where A+B is one wide tile.
+
+| Button | Feature | Folder | Rich menu link |
+|---|---|---|---|
+| A (A+B) | Work · งานรอดำเนินการ | [Button A/](Button%20A/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20A/` |
+| C | Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย | [Button C/](Button%20C/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20C/` |
+| D | Reports · รายงานประจำสัปดาห์ | [Button D/](Button%20D/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
+| E | Property Right · อายัดและแจ้งบุริมสิทธิ | [Button E/](Button%20E/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20E/` |
+| F | Invoice · ใบแจ้งหนี้ค้างเบิก | [Button F/](Button%20F/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
+
+Keep the trailing `/`. Without it, the page's `../js/app.js` path breaks.
+
 ## Adding a feature page
 
 ```html
