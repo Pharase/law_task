@@ -6,7 +6,7 @@ var HEADERS = {
     "fix_round", "created_by", "created_at", "member_notified_at"],
   Sends: ["id", "task_id", "sent_on", "sent_at", "due_on", "outcome", "fix_note", "next_due_on", "reviewed_by",
     "reviewed_at", "member_notified_at"],
-  Buildings: ["name", "type"], // type: บ้านจัดสรร or อาคารชุด, set once per building
+  Buildings: ["name", "type", "owner"], // type: บ้านจัดสรร or อาคารชุด; owner: the หัวหน้างาน (staff name) who looks after it
   Invoices: ["id", "building", "subject", "amount", "billed_on", "transfer_on", "receipt_on", "status", "note",
     "created_by", "created_at", "updated_at"],
   Members: ["line_user_id", "name", "role"],
@@ -61,7 +61,8 @@ function planBatch(steps, tables, nextId) {
       });
       results.push(added);
     } else if (step.op === "update") {
-      var found = tab.rows.filter(function (r) { return r.id === String(step.id); })[0];
+      var key = step.key || "id"; // tabs without ids (Buildings) match on another column
+      var found = tab.rows.filter(function (r) { return normCell(r[key]).trim() === String(step.id).trim(); })[0];
       if (!found) return { error: "not found" };
       var expect = step.expect || {};
       // Trimmed like the app reads cells, so a stray space typed by hand can't cause a permanent conflict.

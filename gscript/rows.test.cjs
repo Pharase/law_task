@@ -48,7 +48,7 @@ test("append assigns consecutive ids from the counter and new rows below the las
 
 test("append on a tab without an id column assigns no id", () => {
   const r = planBatch([{ op: "append", tab: "Buildings", rows: [{ name: "B2" }] }], tables(), counter());
-  assert.deepEqual(r.results[0], [{ name: "B2", type: "", _row: 3 }]);
+  assert.deepEqual(r.results[0], [{ name: "B2", type: "", owner: "", _row: 3 }]);
 });
 
 test("expect ignores stray spaces typed into the sheet (the app reads cells trimmed)", () => {
@@ -71,3 +71,12 @@ test("Invoices tab has the invoice columns, ids come from the counter", () => {
   assert.equal(r.results[0][0].id, "1");
   assert.equal(r.results[0][0].status, "");
 });
+
+test("update can match a row by another column (Buildings have no id): key = name", () => {
+  const r = planBatch([{ op: "update", tab: "Buildings", key: "name", id: "B1", patch: { owner: "ทีมบี" } }], tables(), counter());
+  assert.equal(r.results[0].owner, "ทีมบี");
+  assert.deepEqual(r.writes[0].cols, ["owner"]);
+});
+
+test("update by key with no match -> not found", () =>
+  assert.deepEqual(planBatch([{ op: "update", tab: "Buildings", key: "name", id: "Nope", patch: { owner: "x" } }], tables(), counter()), { error: "not found" }));

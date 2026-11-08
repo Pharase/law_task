@@ -146,6 +146,7 @@ function setup() {
   column(tasks, "owner_name").setDataValidation(list(ss.getSheetByName("Members").getRange("B2:B")));
   column(tasks, "state").setDataValidation(pick(STATES));
   column(ss.getSheetByName("Buildings"), "type").setDataValidation(pick(BUILDING_TYPES));
+  column(ss.getSheetByName("Buildings"), "owner").setDataValidation(list(ss.getSheetByName("Members").getRange("B2:B")));
   var invoices = ss.getSheetByName("Invoices");
   column(invoices, "building").setDataValidation(list(buildingNames));
   column(invoices, "status").setDataValidation(pick(INVOICE_STATUS));

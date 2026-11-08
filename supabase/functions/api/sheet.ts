@@ -1,4 +1,5 @@
 // Client for the Apps Script row store (gscript/). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
+import { type BuildingRow, buildingRows } from "./responsibility.ts";
 import { db, HttpError, must } from "./shared.ts";
 import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, type Task, toPeople } from "./sheetRows.ts";
 
@@ -24,7 +25,7 @@ export async function sheet(op: string, payload: object = {}, timeoutMs = 10_000
 
 export type Step =
   | { op: "append"; tab: string; rows: Record<string, string>[] }
-  | { op: "update"; tab: string; id: number; patch: Record<string, string>; expect?: Record<string, string> };
+  | { op: "update"; tab: string; id: number | string; key?: string; patch: Record<string, string>; expect?: Record<string, string> }; // key: match column (default id)
 
 /** All steps or none, under one lock. null when an `expect` no longer holds (someone else got there first). */
 // deno-lint-ignore no-explicit-any
@@ -40,8 +41,13 @@ export async function loadPeople(): Promise<Person[]> {
 }
 
 export async function loadBuildings(): Promise<string[]> {
+  return (await loadBuildingRows()).map((b) => b.name);
+}
+
+/** Buildings with their type and owner (the หัวหน้างาน who looks after it). */
+export async function loadBuildingRows(): Promise<BuildingRow[]> {
   const { tabs } = await sheet("read", { tabs: ["Buildings"] });
-  return names(tabs.Buildings);
+  return buildingRows(tabs.Buildings);
 }
 
 const names = (rows: { name?: string }[]) =>

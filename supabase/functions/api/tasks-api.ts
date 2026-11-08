@@ -2,7 +2,8 @@
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 import { performanceRows, type ScoredTask } from "./scoring.ts";
-import { batch, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
+import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
+import { outsideResponsibility } from "./responsibility.ts";
 import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
@@ -59,11 +60,18 @@ function checkBuilding(name: unknown, buildings: string[]): string {
   return b;
 }
 
+/** A member (หัวหน้างาน) by staff name, as the sheet stores it; 400 when nobody has that name. */
+async function memberName(name: unknown): Promise<string> {
+  const n = String(name ?? "").trim();
+  if (!(await loadPeople()).some((p) => p.role === "member" && p.name === n)) throw new HttpError(400, `no หัวหน้างาน named "${n}"`);
+  return n;
+}
+
 /** Actions for approved members (and admins). Returns undefined for actions it doesn't own. */
 export async function memberTaskActions(action: string, body: Row, me: Me): Promise<unknown> {
   switch (action) {
-    case "listBuildings":
-      return (await loadBuildings()).map((name) => ({ name }));
+    case "listBuildings": // with owner, so the assign form can show only the chosen person's buildings
+      return (await loadBuildingRows()).map(({ name, owner }) => ({ name, owner }));
 
     case "performance": {
       const kind = body.kind === "quarter" ? "quarter" : body.kind === "month" ? "month" : null;
@@ -129,8 +137,24 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
     case "addBuilding": {
       const name = String(body.name ?? "").trim();
       if (!name || name.length > 200) throw new HttpError(400, "building name is required (max 200 characters)");
-      if (!(await loadBuildings()).includes(name)) await sheet("append", { tab: "Buildings", rows: [{ name }] });
-      return { name };
+      // owner = the one หัวหน้างาน picked in the assign form, so the new building is in their list straight away
+      const owner = body.owner_name ? await memberName(body.owner_name) : "";
+      if (!(await loadBuildings()).includes(name)) await sheet("append", { tab: "Buildings", rows: [{ name, owner }] });
+      return { name, owner };
+    }
+
+    case "listResponsibilities": {
+      // ข้อมูลการมอบหมาย: every หัวหน้างาน (member) and every building with its owner
+      const [people, buildings] = await Promise.all([loadPeople(), loadBuildingRows()]);
+      return { people: people.filter((p) => p.role === "member").map((p) => p.name).sort((a, b) => a.localeCompare(b, "th")), buildings };
+    }
+
+    case "setBuildingOwner": {
+      const building = String(body.building ?? "").trim();
+      if (!(await loadBuildings()).includes(building)) throw new HttpError(404, "building not found");
+      const owner = body.owner_name ? await memberName(body.owner_name) : ""; // "" = no one looks after it
+      await batch([{ op: "update", tab: "Buildings", key: "name", id: building, patch: { owner } }]);
+      return { building, owner };
     }
 
     case "createTask": {
@@ -147,6 +171,9 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         // owner_name is how the sheet names the owner, so it must be unique.
         if (data.people.filter((q) => q.name === p!.name).length > 1) throw new HttpError(400, `two people are named "${p!.name}"; give one a different staff name first`);
       }
+      // ข้อมูลการมอบหมาย: a building can only go to the หัวหน้างาน who looks after it
+      const outside = outsideResponsibility(building, picked.map((p) => p!.name), await loadBuildingRows());
+      if (outside) throw new HttpError(400, `"${building}" ไม่อยู่ในความรับผิดชอบของ ${outside} · not in ${outside}'s buildings`);
       const details = String(body.details ?? "").trim() || null;
       const created_at = new Date().toISOString();
       const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: picked.map((p) => taskCells({

@@ -99,6 +99,8 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 3. Run **`checkReports`** once: Google asks for Drive permission, and the log lists the files the app will show.
 4. **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
 
+**ข้อมูลการมอบหมาย (which หัวหน้างาน looks after which building):** run **`setup`** again once to add the **owner** column to **Buildings**. Admins then drag buildings between people on Home → ข้อมูลการมอบหมาย (on phones: tap a building, then tap the person), or pick names in the sheet. The assign form shows only the chosen person’s buildings, and the server refuses a building outside their responsibility. People with no buildings yet are not restricted.
+
 After changing the script later: `clasp push`, then **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
 
 **Hand-edit rules.** Edit freely: `building`, `title`, `details`, `tags`, `owner_name` (= reassign to that person), `due_on`. Leave alone: `id`, `owner_id`, `state`, `current_due_on`, `fix_round` and the Sends and Members tabs (Google shows a warning). Don't copy whole rows: a duplicate id is flagged. A bad row (typo'd date, unknown building or name) is hidden from the app and listed under "Sheet rows to fix" on `admin/tasks.html`.

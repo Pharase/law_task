@@ -41,10 +41,14 @@
       <div class="row tools">
         <button type="button" class="small" id="assignBtn">มอบหมายงาน · Assign task</button>
         <a class="btn" href="admin/tasks.html">ติดตามงาน · Tracking (อนุมัติ)</a>
+        <button type="button" class="small secondary" id="respBtn">ข้อมูลการมอบหมาย</button>
       </div>
       <form id="createForm" hidden>
-        <label for="building" style="margin-top: 24px; display: block;">นิติบุคคล · Building</label>
+        <!-- pick the person first: the building list then shows only the buildings they look after -->
+        <fieldset style="margin-top: 24px;"><legend>ผู้รับงาน · Members</legend><div id="owners"></div></fieldset>
+        <label for="building">นิติบุคคล · Building</label>
         <select id="building" aria-label="Building" required></select>
+        <p class="muted small-note" id="buildingHint"></p>
         <div class="row">
           <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
           <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
@@ -54,13 +58,19 @@
         <label for="details">รายละเอียด · Details</label>
         <textarea id="details" rows="3"></textarea>
         <fieldset><legend>หมวดหมู่ · Tags</legend><div id="tags"></div></fieldset>
-        <fieldset><legend>ผู้รับงาน · Members</legend><div id="owners"></div></fieldset>
         <label for="dueOn">กำหนดส่ง · Due date</label>
         <input type="date" id="dueOn" required>
         <button>มอบหมายงาน</button>
         <p id="createMsg" role="status"></p>
       </form>
     </div>
+    <!-- Admins only: which หัวหน้างาน looks after which building (drag a building to another person) -->
+    <section class="card" id="respCard" hidden>
+      <h2>ข้อมูลการมอบหมาย · Responsibilities</h2>
+      <p class="muted small-note">ลากชื่อนิติบุคคลไปวางที่หัวหน้างานคนใหม่ · บนมือถือ: แตะนิติบุคคล แล้วแตะแถวหัวหน้างาน</p>
+      <p class="resp-picked" id="respPicked" role="status" hidden></p>
+      <div id="respList"><p class="loading" role="status"></p></div>
+    </section>
     <section class="card">
       <h2 id="dashTitle">ภาพรวมงาน</h2>
       <div class="dash" id="dashChart"><p class="loading" role="status"></p></div>
@@ -93,6 +103,10 @@
         $("adminTools").hidden = false;
         $("assignBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; };
         initAssignForm(home).catch((err) => { $("createMsg").textContent = "Error: " + err.message; });
+        $("respBtn").onclick = () => {
+          $("respCard").hidden = !$("respCard").hidden;
+          if (!$("respCard").hidden) initResponsibilities(() => loadBuildings()).catch((err) => { $("respList").textContent = "Error: " + err.message; });
+        };
       }
     }
 

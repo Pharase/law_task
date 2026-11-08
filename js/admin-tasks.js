@@ -132,10 +132,26 @@ function loadAll() {
 
 async function loadBuildings(selectName) {
   buildings = await api("listBuildings");
-  const opts = (first) => [option("", first), ...buildings.map((b) => option(b.name, b.name))];
-  if ($("building")) $("building").replaceChildren(...opts("เลือกนิติบุคคล"));
-  if ($("fBuilding")) $("fBuilding").replaceChildren(...opts("ทุกนิติบุคคล"));
-  if (selectName) $("building").value = selectName;
+  if ($("fBuilding")) $("fBuilding").replaceChildren(option("", "ทุกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
+  if ($("building")) filterBuildings(selectName);
+}
+
+const memberLabel = (m) => (m.staff_name || m.display_name || m.line_user_id).trim();
+
+/**
+ * Assign form: show only the buildings the chosen หัวหน้างาน look after (ข้อมูลการมอบหมาย).
+ * Same rule as the server (responsibility.ts): someone with no buildings yet is not restricted.
+ */
+function filterBuildings(keep = $("building").value) {
+  const chosen = checked("owner").map((id) => memberLabel(members.find((m) => m.line_user_id === id) ?? { line_user_id: id }));
+  const restricted = chosen.filter((n) => buildings.some((b) => b.owner === n));
+  const shown = restricted.length ? buildings.filter((b) => restricted.every((n) => b.owner === n)) : buildings;
+  $("building").replaceChildren(option("", shown.length ? "เลือกนิติบุคคล" : "— ไม่มีนิติบุคคลที่ดูแลร่วมกัน —"), ...shown.map((b) => option(b.name, b.name)));
+  if (shown.some((b) => b.name === keep)) $("building").value = keep;
+  $("buildingHint").textContent = !chosen.length ? "เลือกผู้รับงานก่อน เพื่อแสดงเฉพาะนิติบุคคลที่ดูแล"
+    : !restricted.length ? "ผู้รับงานที่เลือกยังไม่มีนิติบุคคลในข้อมูลการมอบหมาย · แสดงทั้งหมด"
+    : shown.length ? `แสดงเฉพาะนิติบุคคลที่ ${restricted.join(", ")} ดูแล (${shown.length})`
+    : "ผู้รับงานที่เลือกไม่มีนิติบุคคลที่ดูแลร่วมกัน · มอบหมายทีละคน";
 }
 
 /** Home (admins): the assign form, shown by the "มอบหมายงาน" button. onCreated refreshes the dashboard. */
@@ -147,11 +163,14 @@ async function initAssignForm(onCreated) {
     ? members.map((m) => check("owner", m.line_user_id, m.staff_name || m.display_name || m.line_user_id))
     : [el("p", { className: "muted", textContent: "ยังไม่มีสมาชิก (members)" })]));
   await loadBuildings();
+  $("owners").addEventListener("change", () => filterBuildings());
 
   $("addBuildingBtn").onclick = async () => {
     const name = $("newBuilding").value.trim();
     if (!name) return;
-    try { const b = await api("addBuilding", { name }); $("newBuilding").value = ""; await loadBuildings(b.name); }
+    // one person chosen: the new building goes straight into their responsibility
+    const one = checked("owner").length === 1 ? memberLabel(members.find((m) => m.line_user_id === checked("owner")[0])) : "";
+    try { const b = await api("addBuilding", { name, owner_name: one }); $("newBuilding").value = ""; await loadBuildings(b.name); }
     catch (err) { alert(err.message); }
   };
 
@@ -166,6 +185,7 @@ async function initAssignForm(onCreated) {
       });
       $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน`;
       $("createForm").reset();
+      filterBuildings("");
       onCreated();
     } catch (err) { $("createMsg").textContent = "Error: " + err.message; }
   };
@@ -192,4 +212,79 @@ function initReports() {
   $("pKind").onchange = () => { $("pN").max = $("pKind").value === "month" ? 12 : 4; $("pN").value = $("pKind").value === "month" ? m : Math.ceil(m / 3); };
   $("pGo").onclick = () => loadPerformance().catch((e) => alert(e.message));
   loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
+}
+
+/**
+ * Home (admins): ข้อมูลการมอบหมาย — each หัวหน้างาน with the buildings they look after.
+ * Move a building: drag its chip onto another person (desktop), or tap the chip then tap the person (phones,
+ * where drag-and-drop does not work in the LINE browser). onChange refreshes the assign form's building list.
+ */
+async function initResponsibilities(onChange) {
+  const { people, buildings: rows } = await api("listResponsibilities");
+  const NONE = ""; // drop target for "no one looks after it"
+  let picked = null; // chip chosen by tap, waiting for a target row
+
+  const zones = new Map(); // owner name -> chip container
+  const row = (owner, label) => {
+    const chips = el("div", { className: "resp-chips" });
+    const head = el("button", { type: "button", className: "resp-name" + (owner === NONE ? " none" : ""), textContent: label });
+    const r = el("div", { className: "resp-row" }, head, chips);
+    r.dataset.owner = owner;
+    zones.set(owner, chips);
+    // drop target: drag over / drop, or tap the row while a chip is picked
+    r.addEventListener("dragover", (e) => { e.preventDefault(); r.classList.add("over"); });
+    r.addEventListener("dragleave", () => r.classList.remove("over"));
+    r.addEventListener("drop", (e) => { e.preventDefault(); r.classList.remove("over"); move(e.dataTransfer.getData("text/plain"), owner); });
+    r.addEventListener("click", (e) => { if (picked && !e.target.closest(".resp-chip")) move(picked, owner); });
+    return r;
+  };
+  const known = new Set(people);
+  const list = [row(NONE, "ยังไม่มีผู้ดูแล · Unassigned"), ...people.map((p) => row(p, p))];
+
+  const chipFor = (b) => {
+    const c = el("button", { type: "button", className: "resp-chip", textContent: b.name, draggable: true, title: b.type || "" });
+    c.dataset.building = b.name;
+    c.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", b.name); e.dataTransfer.effectAllowed = "move"; c.classList.add("dragging"); });
+    c.addEventListener("dragend", () => c.classList.remove("dragging"));
+    c.addEventListener("click", () => pick(picked === b.name ? null : b.name));
+    return c;
+  };
+  for (const b of rows) zones.get(known.has(b.owner) ? b.owner : NONE).append(chipFor(b)); // an unknown name counts as unassigned
+  const count = () => list.forEach((r) => {
+    const n = zones.get(r.dataset.owner).children.length;
+    r.querySelector(".resp-name").dataset.count = n;
+  });
+
+  function pick(name) {
+    picked = name;
+    $("respList").querySelectorAll(".resp-chip").forEach((c) => c.classList.toggle("picked", c.dataset.building === name));
+    $("respList").classList.toggle("picking", !!name);
+    $("respPicked").hidden = !name;
+    $("respPicked").textContent = name ? `เลือก "${name}" แล้ว · แตะแถวหัวหน้างานที่จะย้ายไป (แตะซ้ำเพื่อยกเลิก)` : "";
+  }
+
+  async function move(name, owner) {
+    pick(null);
+    const chip = [...$("respList").querySelectorAll(".resp-chip")].find((c) => c.dataset.building === name);
+    if (!chip || chip.parentElement === zones.get(owner)) return;
+    const from = chip.parentElement;
+    // show it moved straight away; put it back if the sheet refuses
+    const zone = zones.get(owner);
+    const after = [...zone.children].find((c) => c.dataset.building.localeCompare(name, "th") > 0);
+    zone.insertBefore(chip, after ?? null);
+    chip.classList.add("saving");
+    count();
+    try {
+      await api("setBuildingOwner", { building: name, owner_name: owner });
+      onChange?.();
+    } catch (err) {
+      from.append(chip);
+      count();
+      alert(err.message);
+    }
+    chip.classList.remove("saving");
+  }
+
+  count();
+  $("respList").replaceChildren(...list);
 }
