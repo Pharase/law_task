@@ -16,8 +16,9 @@ LINE app / browser ── index.html, Button */, admin/*.html (GitHub Pages)
         │  js/app.js sends the LINE ID token with every call
         ▼
 Supabase Edge Function `api` ── checks the token with LINE, checks the role
+        ├──▶ Google Sheet via Apps Script (gscript/): Tasks, Sends, Buildings, Members  ← source of truth for work
         ▼
-Postgres (profiles, invites, files, buildings, tasks, task_sends, exdocs, notify_log)
+Postgres (profiles, invites, files, exdocs, notify_log)
 Storage: `uploads` (task attachments, private) · `exdocs` (PDFs, private, never auto-deleted)
 pg_cron: daily cleanup (03:00 UTC) · daily LINE summary (09:05 Bangkok, Mon–Fri)
 ```
@@ -29,7 +30,9 @@ Browsers never talk to the database directly. Every table has RLS on with no pol
 | File | Job |
 |---|---|
 | `index.ts` | Login check and routing |
-| `tasks-api.ts`, `exdocs-api.ts`, `backup-api.ts`, `notify-api.ts` | Database/storage handlers for each feature |
+| `tasks-api.ts`, `exdocs-api.ts`, `backup-api.ts`, `notify-api.ts` | Handlers for each feature |
+| `sheet.ts` | Calls the Apps Script row store (secret, 10 s timeout, compare-and-set batches) |
+| `sheetRows.ts` | **Checks every sheet row** (hand edits): bad rows are hidden and listed on `admin/tasks.html` |
 | `scoring.ts` | **All performance rules (provisional; change them only here)** |
 | `review.ts`, `digest.ts`, `retention.ts`, `dates.ts`, `codes.ts` | Pure rules, unit-tested |
 
@@ -69,12 +72,30 @@ admin assigns ─▶ On Process ─▶ member sends (optional files) ─▶ Wait
 
 ## Go-live checklist (owner, once)
 
-1. **Import staff and buildings:** paste `old-system/import.sql` (generated locally, never committed) into the Supabase **SQL Editor** and run it. It adds 29 staff as members and 80 buildings.
+0. **Google Sheet** (see "Google Sheet setup" below). Until it's done, the Work pages show "Google Sheet not reachable".
+1. **Import staff:** paste `old-system/import.sql` (generated locally, never committed) into the Supabase **SQL Editor** and run it. It adds 29 staff as members. **Buildings:** paste the lines of `old-system/buildings.txt` into the sheet's **Buildings** tab from cell A2.
 2. **Make yourself admin:** log in to the LIFF app once, then run `update profiles set role = 'admin' where display_name = '<your LINE name>';` in the SQL Editor.
 3. **LINE bot token:** in LINE Developers Console → the Messaging API channel → **re-issue** the channel access token (the old one is hard-coded in the old script). Then set it in Supabase: `npx supabase secrets set LINE_MESSAGING_TOKEN=<token>`, or use **Edge Functions → Secrets** in the dashboard. Until it's set, the daily summary is skipped.
 4. **Rich menu links** (LINE Official Account Manager): see the table below.
 5. **LIFF scopes:** `openid` and `profile` (otherwise names and pictures stay empty).
 6. Members must have the bot as a LINE friend to receive summaries (old users already do).
+
+## Google Sheet setup (owner, once)
+
+Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand there; the app re-reads the sheet on every page load.
+
+1. **Turn on the Apps Script API** for your Google account: https://script.google.com/home/usersettings (needed for `clasp push`).
+2. **Push the script:** `cd gscript && npx @google/clasp push --force`.
+3. **Connect the spreadsheet.** If the script was created from the sheet (Extensions → Apps Script), skip this. Otherwise, in the Apps Script editor → **Project Settings → Script properties**, add `SHEET_ID` = the long id in the sheet's URL (`/d/<id>/edit`).
+4. **Secret:** in the same Script properties, add `API_SECRET` = a long random string (for example the output of `openssl rand -hex 32`). Don't paste it in chat or commit it.
+5. **Run `setup`** once from the editor (choose `setup` in the function list, then Run). Google asks for permission the first time. This creates the tabs, headers, dropdowns and warning-only protection. It's safe to run again.
+6. **Run `selfTest`.** The log should end with "selfTest passed".
+7. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone**. Copy the `/exec` URL.
+8. **Give the URL and secret to Supabase:** `npx supabase secrets set GSHEET_URL=<exec url> GSHEET_SECRET=<the same string>`.
+
+After changing the script later: `clasp push`, then **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
+
+**Hand-edit rules.** Edit freely: `building`, `title`, `details`, `tags`, `owner_name` (= reassign to that person), `due_on`. Leave alone: `id`, `owner_id`, `state`, `current_due_on`, `fix_round` and the Sends and Members tabs (Google shows a warning). Don't copy whole rows: a duplicate id is flagged. A bad row (typo'd date, unknown building or name) is hidden from the app and listed under "Sheet rows to fix" on `admin/tasks.html`.
 
 ## Deploy
 
@@ -109,7 +130,7 @@ Rich menu layout: a 3×2 grid where A+B is one wide tile. Folder names contain a
 ## Tests
 
 ```sh
-node --test "supabase/functions/api/*.test.ts"
+node --test "supabase/functions/api/*.test.ts" "gscript/*.test.cjs"
 ```
 
 ### Manual check: the invite gate (after any change to `redeem`)
@@ -138,10 +159,15 @@ Use a second LINE account that isn't approved yet.
 | 8 | Member opens `admin/tasks.html` | Redirected home; no data |
 | 9 | Admin uploads a PDF on `admin/exdoc.html` | Member sees it on Button C; Preview opens it, Download saves it with its original name |
 | 10 | After the token is set, on a weekday after 09:00 call `{"action":"digest"}` | Each person with news gets one LINE message; a second call returns "not now" |
+| 11 | Change a task's `title` by hand in the sheet, reload the app | The new title shows |
+| 12 | Type `tomorrow` into a task's `due_on` cell | The task disappears from the member's list; `admin/tasks.html` lists "Sheet "Tasks" row N: due_on is not a YYYY-MM-DD date" |
+| 13 | Pick another member in a task's `owner_name` dropdown | The task moves to that member; `owner_id` updates itself |
 
 ## Troubleshooting
 
 - **400 Bad Request on login**: the page URL doesn't match the LIFF Endpoint URL.
 - **"Login check failed (invalid or expired LINE ID token)"**: `LINE_CHANNEL_ID` is wrong or not set (`npx supabase secrets list`).
 - **No daily LINE summary**: `LINE_MESSAGING_TOKEN` not set, the quota is used up (admin pages show a banner), or the member hasn't added the bot as a friend. Check the `notify_log` table.
+- **"Google Sheet not reachable, try again"**: `GSHEET_URL` / `GSHEET_SECRET` not set or different from the script's `API_SECRET`, the web app wasn't deployed for "Anyone", or Google took over 10 s. The function logs (Supabase → Edge Functions → api → Logs) show the reason after `sheet`.
+- **LINE "เกิดข้อผิดพลาด" after logging in (new users only)**: the LINE Login channel is still **Developing**; publish it in LINE Developers Console.
 - **Supabase free tier** pauses a project after 7 days with no activity. While it's paused, the app, the cleanup and the LINE summaries stop. Restore it from the dashboard.

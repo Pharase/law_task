@@ -98,7 +98,7 @@ async function loadReview() {
 async function loadList() {
   const list = await api("listTasks", {
     owner: $("fOwner").value || undefined,
-    building_id: $("fBuilding").value || undefined,
+    building: $("fBuilding").value || undefined,
     state: $("fState").value || undefined,
     overdue: $("fOverdue").checked || undefined,
   });
@@ -118,16 +118,23 @@ async function loadPerformance() {
     ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 4 + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
 }
 
+async function loadWarnings() {
+  const bad = await api("sheetWarnings");
+  $("warnCard").hidden = !bad.length;
+  $("warnList").replaceChildren(...bad.map((b) => el("li", { textContent: `Sheet "${b.tab}" row ${b.row}: ${b.reason}` })));
+}
+
 function loadAll() {
+  loadWarnings().catch(() => {}); // the lists below show the error if the sheet is down
   loadReview().catch((e) => { $("reviewList").textContent = "Error: " + e.message; });
   loadList().catch((e) => { $("allList").textContent = "Error: " + e.message; });
 }
 
-async function loadBuildings(selectId) {
+async function loadBuildings(selectName) {
   buildings = await api("listBuildings");
-  $("building").replaceChildren(option("", "เลือกนิติบุคคล"), ...buildings.map((b) => option(b.id, b.name)));
-  $("fBuilding").replaceChildren(option("", "ทุกนิติบุคคล"), ...buildings.map((b) => option(b.id, b.name)));
-  if (selectId) $("building").value = selectId;
+  $("building").replaceChildren(option("", "เลือกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
+  $("fBuilding").replaceChildren(option("", "ทุกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
+  if (selectName) $("building").value = selectName;
 }
 
 async function initAdminTasks() {
@@ -146,7 +153,7 @@ async function initAdminTasks() {
   $("addBuildingBtn").onclick = async () => {
     const name = $("newBuilding").value.trim();
     if (!name) return;
-    try { const b = await api("addBuilding", { name }); $("newBuilding").value = ""; await loadBuildings(b.id); }
+    try { const b = await api("addBuilding", { name }); $("newBuilding").value = ""; await loadBuildings(b.name); }
     catch (err) { alert(err.message); }
   };
 
@@ -156,7 +163,7 @@ async function initAdminTasks() {
     if (!tags.length || !owners.length) return void ($("createMsg").textContent = "เลือกหมวดหมู่และผู้รับงานอย่างน้อย 1");
     try {
       const made = await api("createTask", {
-        building_id: Number($("building").value), title: $("title").value, details: $("details").value,
+        building: $("building").value, title: $("title").value, details: $("details").value,
         tags, owners, due_on: $("dueOn").value,
       });
       $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน`;
