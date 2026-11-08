@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <p id="status" class="loading" role="status">Loading…</p>
+  <p id="status" class="loading" role="status"></p>
 
   <!-- Logged out (external browser only; inside LINE you are always logged in) -->
   <div class="card" id="loggedOutCard" hidden>
@@ -43,8 +43,8 @@
         <a class="btn" href="admin/tasks.html">ติดตามงาน · Tracking (อนุมัติ)</a>
       </div>
       <form id="createForm" hidden>
-        <label for="building">นิติบุคคล · Building</label>
-        <select id="building" required></select>
+        <label for="building" style="margin-top: 24px; display: block;">นิติบุคคล · Building</label>
+        <select id="building" aria-label="Building" required></select>
         <div class="row">
           <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
           <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
@@ -63,7 +63,7 @@
     </div>
     <section class="card">
       <h2 id="dashTitle">ภาพรวมงาน</h2>
-      <div class="dash" id="dashChart"><p class="loading" role="status">Loading…</p></div>
+      <div class="dash" id="dashChart"><p class="loading" role="status"></p></div>
     </section>
     <section class="card">
       <h2 id="dashListTitle">งาน</h2>

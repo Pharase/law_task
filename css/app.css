@@ -219,33 +219,29 @@ caption { padding-bottom: 6px; }
   .card, .navbar { background: #0b0d10; }
 }
 
-/* ---- Loading: a "digital flow" data stream instead of text (the word stays for screen readers) ---- */
-.loading { position: relative; height: 48px; max-width: 240px; margin: 28px auto; color: transparent; font-size: 0; user-select: none; overflow: hidden; border-radius: 999px; } /* the pulse stays inside the track */
+/* ---- Loading: circuit board, signals running left to right (SVG added by js/app.js; screen readers hear "Loading") ---- */
+.loading { display: block; height: 48px; max-width: 240px; margin: 28px auto; }
 .dash .loading { flex: 1 1 200px; margin: 40px auto; }
-/* the track: data dashes flowing left to right */
-.loading::before {
-  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; border-radius: 999px;
-  background:
-    repeating-linear-gradient(90deg, transparent 0 6px, rgba(2, 215, 244, .6) 6px 9px, transparent 9px 16px),
-    linear-gradient(90deg, rgba(17, 69, 84, .7), rgba(13, 65, 188, .55));
-  background-size: 16px 100%, 100% 100%;
-  box-shadow: 0 0 14px rgba(2, 215, 244, .3), inset 0 0 0 1px rgba(2, 215, 244, .25);
-  animation: loading-flow .55s linear infinite;
-}
-/* the packet: a bright pulse racing along the track */
-.loading::after {
-  content: ""; position: absolute; top: 50%; left: 0; width: 56px; height: 10px; margin-top: -5px; border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--cyan) 35%, #fff 50%, var(--blue-hi) 65%, transparent);
-  box-shadow: 0 0 16px var(--cyan), 0 0 32px rgba(79, 99, 240, .7);
-  animation: loading-packet 1.3s cubic-bezier(.65, 0, .35, 1) infinite;
-}
-@keyframes loading-flow { to { background-position: 16px 0, 0 0; } }
-@keyframes loading-packet {
-  0% { transform: translateX(-56px); opacity: 0; }
-  15%, 85% { opacity: 1; }
-  100% { transform: translateX(240px); opacity: 0; } /* = .loading max-width */
+.circuit { display: block; width: 100%; height: 100%; overflow: visible; }
+.circuit .traces path { fill: none; stroke: rgba(2, 215, 244, .22); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.circuit .pads circle { fill: #06181d; stroke: rgba(2, 215, 244, .55); stroke-width: 1.4; animation: pad-blink 1.6s ease-in-out infinite; }
+/* pads light up in order as the signal passes them */
+.circuit .pads circle:nth-child(1) { animation-delay: .12s; }
+.circuit .pads circle:nth-child(5) { animation-delay: .3s; }
+.circuit .pads circle:nth-child(2) { animation-delay: .45s; }
+.circuit .pads circle:nth-child(7) { animation-delay: .65s; }
+.circuit .pads circle:nth-child(3) { animation-delay: .8s; }
+.circuit .pads circle:nth-child(6) { animation-delay: .95s; }
+.circuit .pads circle:nth-child(4) { animation-delay: 1.15s; }
+.circuit .signal { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 34 300; stroke-dashoffset: 34; animation: signal-run 1.6s linear infinite; }
+.circuit .signal.glow { stroke-width: 6; opacity: .8; }
+.circuit .signal.late { stroke-dasharray: 14 300; opacity: .55; animation-delay: .8s; }
+@keyframes signal-run { to { stroke-dashoffset: -300; } }
+@keyframes pad-blink {
+  0%, 100% { fill: #06181d; stroke: rgba(2, 215, 244, .55); filter: none; }
+  12% { fill: #02d7f4; stroke: #c9f8ff; filter: drop-shadow(0 0 4px #02d7f4); }
+  30% { fill: #06181d; stroke: rgba(2, 215, 244, .55); filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .loading::before { animation: none; }
-  .loading::after { animation-duration: 3s; }
+  .circuit .signal, .circuit .pads circle { animation-duration: 4s; }
 }
