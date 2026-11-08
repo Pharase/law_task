@@ -1,6 +1,6 @@
 # Task tracking (Button A) and Ex Doc library (Button C): design
 
-Status: ready for approval · 2026-11-08
+Status: **approved** 2026-11-08 (scoring formulas provisional)
 
 ## Intent
 
@@ -57,7 +57,7 @@ Everything must work on a phone (inside LINE) and on a computer browser.
 
 ### Entry point
 
-Button A opens the **home page** (`index.html`). The rich-menu link for A is the plain LIFF URL `https://liff.line.me/2012450429-k3WOCwtO`, and the `Button A` folder is removed (my call). The home page keeps its current login, invite-code and locked states. For an approved user, the "Menu" card becomes the Work dashboard, and links to the other buttons move to a compact menu.
+Button A opens the **home page** (`index.html`). The `Button A` folder **stays**: its page forwards to the home page, so the rich-menu link for A can be either the plain LIFF URL `https://liff.line.me/2012450429-k3WOCwtO` or `…/Button%20A/`. The home page keeps its current login, invite-code and locked states. For an approved user, the "Menu" card becomes the Work dashboard, and links to the other buttons move to a compact menu.
 
 ### Task fields
 
@@ -121,6 +121,8 @@ Same provider is confirmed, so the LIFF `line_user_id` equals the bot's userId. 
 - Card buttons open LIFF URLs. Postback buttons, like the old "Done ✅", are not used.
 
 ## Performance
+
+**Provisional:** the owner will adjust the formulas later. Build them as written below, but keep **all** scoring rules in one pure module (one file plus its tests), so a later change touches only that file. Store raw dates and history, never precomputed scores.
 
 Computed per member, for a calendar **month** and a calendar **quarter** (Q1 = Jan–Mar, …, Asia/Bangkok dates). It works on tasks whose **original due date** falls in the period, the same filter the old sheet used, and only on **approved** tasks.
 
