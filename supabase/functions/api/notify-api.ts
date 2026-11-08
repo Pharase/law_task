@@ -2,6 +2,7 @@
 import { bangkokDate } from "./dates.ts";
 import { adminDigest, memberDigest, shouldRunDigest, type T } from "./digest.ts";
 import { cutoff } from "./retention.ts";
+import { batch, loadSheet, type Step } from "./sheet.ts";
 import { db, must } from "./shared.ts";
 
 const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
@@ -32,7 +33,7 @@ async function push(to: string, text: string, link: string, token: string): Prom
   return r.ok ? null : `push ${r.status}: ${(await r.text()).slice(0, 200)}`;
 }
 
-const asT = (t: Row): T => ({ title: t.title, building: t.buildings?.name ?? "", due: t.current_due_on });
+const asT = (t: Row): T => ({ title: t.title, building: t.building, due: t.current_due_on });
 
 export async function digest() {
   const now = new Date();
@@ -47,11 +48,9 @@ export async function digest() {
   if (claim.error) return { skipped: "already running" };
 
   const people: Row[] = must(await db.from("profiles").select("line_user_id, role, staff_name, display_name").in("role", ["member", "admin"]));
-  const open: Row[] = must(await db.from("tasks")
-    .select("id, title, owner, state, current_due_on, member_notified_at, buildings(name), owner_profile:profiles!tasks_owner_fkey(staff_name, display_name)")
-    .in("state", ["on_process", "submitted", "approved"]));
-  const reviewed: Row[] = must(await db.from("task_sends").select("id, task_id, outcome, fix_note")
-    .in("outcome", ["fix", "void", "approved"]).is("member_notified_at", null));
+  const sheet = await loadSheet();
+  const open: Row[] = sheet.tasks.filter((t) => t.state !== "cancelled");
+  const reviewed: Row[] = sheet.sends.filter((s) => s.outcome !== "pending" && !s.member_notified_at);
   const { count: backupDue } = await db.from("files").select("id", { count: "exact", head: true })
     .is("deleted_at", null).is("backed_up_at", null).lt("created_at", cutoff(now).toISOString());
   const taskById = new Map(open.map((t) => [t.id, t]));
@@ -59,7 +58,7 @@ export async function digest() {
   // Build every message first (admins first), then send while quota lasts.
   const outbox: { to: string; text: string; link: string; taskIds: number[]; sendIds: number[] }[] = [];
   const waiting = open.filter((t) => t.state === "submitted")
-    .map((t) => ({ ...asT(t), owner: t.owner_profile?.staff_name || t.owner_profile?.display_name || "" }));
+    .map((t) => ({ ...asT(t), owner: t.owner_name }));
   const members = people.filter((p) => p.role === "member");
   const admins = people.filter((p) => p.role === "admin");
   let remaining = await remainingQuota(token).catch(() => Infinity);
@@ -96,8 +95,11 @@ export async function digest() {
     sent++;
     remaining--;
     const at = new Date().toISOString();
-    if (m.taskIds.length) await db.from("tasks").update({ member_notified_at: at }).in("id", m.taskIds);
-    if (m.sendIds.length) await db.from("task_sends").update({ member_notified_at: at }).in("id", m.sendIds);
+    const marks: Step[] = [
+      ...m.taskIds.map((id) => ({ op: "update" as const, tab: "Tasks", id, patch: { member_notified_at: at } })),
+      ...m.sendIds.map((id) => ({ op: "update" as const, tab: "Sends", id, patch: { member_notified_at: at } })),
+    ];
+    if (marks.length) await batch(marks).catch((e) => console.error("digest marks", e)); // unmarked = repeated tomorrow
   }
   return { sent, quotaSkipped, recipients: outbox.length };
 }
