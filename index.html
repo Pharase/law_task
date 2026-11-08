@@ -46,8 +46,19 @@
       <form id="createForm" hidden>
         <!-- pick the person first: the building list then shows only the buildings they look after -->
         <fieldset style="margin-top: 24px;"><legend>ผู้รับงาน · Members</legend><div id="owners"></div></fieldset>
-        <label for="building">นิติบุคคล · Building</label>
-        <select id="building" aria-label="Building" required></select>
+        <label for="buildingBtn">นิติบุคคล · Buildings (เลือกได้หลายแห่ง)</label>
+        <!-- multi-select dropdown: one task per person × building -->
+        <div class="ms" id="buildingPick">
+          <button type="button" class="ms-btn" id="buildingBtn" aria-haspopup="true" aria-expanded="false">เลือกนิติบุคคล</button>
+          <div class="ms-pop" id="buildingPop" hidden>
+            <input type="search" class="ms-search" id="buildingSearch" placeholder="ค้นหานิติบุคคล" aria-label="Search buildings">
+            <div class="ms-actions">
+              <button type="button" class="small secondary" id="buildingAll">เลือกทั้งหมด</button>
+              <button type="button" class="small secondary" id="buildingNone">ล้าง</button>
+            </div>
+            <div class="ms-list" id="building" role="group" aria-label="Buildings"></div>
+          </div>
+        </div>
         <p class="muted small-note" id="buildingHint"></p>
         <div class="row">
           <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">

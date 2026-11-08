@@ -1,6 +1,6 @@
 // Task screens: assign form (Home, admins), tracking page (admin/tasks.html), performance table (Reports).
 // Needs js/app.js and js/work.js (el, thDate, bkkToday, OUTCOME_TEXT, TAG_LIST).
-const STATE_TEXT = { on_process: "On Process", submitted: "รอตรวจ", approved: "อนุมัติ", cancelled: "ยกเลิก" };
+const STATE_TEXT = { on_process: "กำลังดำเนินการ", submitted: "รอตรวจ", approved: "อนุมัติ", cancelled: "ยกเลิก" };
 let buildings = [], members = [];
 
 const option = (value, text) => el("option", { value, textContent: text });
@@ -132,28 +132,61 @@ function loadAll() {
 
 async function loadBuildings(selectName) {
   buildings = await api("listBuildings");
-  if ($("fBuilding")) $("fBuilding").replaceChildren(option("", "ทุกนิติบุคคล"), ...buildings.map((b) => option(b.name, b.name)));
-  if ($("building")) filterBuildings(selectName);
+  if ($("fBuilding")) $("fBuilding").replaceChildren(option("", "นิติบุคคล: ไม่กรอง · Any building"), ...oneAllBuilding(buildings).map((b) => option(b.name, b.name)));
+  if ($("building")) filterBuildings(selectName ? [selectName] : undefined);
 }
 
 const memberLabel = (m) => (m.staff_name || m.display_name || m.line_user_id).trim();
+const isAllBuilding = (b) => b.name.trim().startsWith("ทุกนิติ"); // "ทุกนิติ" = every building (as in responsibility.ts)
+/** "ทุกนิติ" and "ทุกนิติบุคคล" mean the same: keep one (the first) so pickers show it once. */
+const oneAllBuilding = (list) => { let seen = false; return list.filter((b) => !isAllBuilding(b) || (!seen && (seen = true))); };
 
 /**
- * Assign form: show only the buildings the chosen หัวหน้างาน look after (ข้อมูลการมอบหมาย).
+ * Assign form: show only the buildings the chosen หัวหน้างาน look after (ข้อมูลการมอบหมาย), as a multi-select.
  * Same rule as the server (responsibility.ts): someone with no buildings yet is not restricted.
  */
-function filterBuildings(keep = $("building").value) {
+function filterBuildings(keep = checked("bld")) {
   const chosen = checked("owner").map((id) => memberLabel(members.find((m) => m.line_user_id === id) ?? { line_user_id: id }));
   const restricted = chosen.filter((n) => buildings.some((b) => b.owner === n));
-  const all = (b) => b.name.trim().startsWith("ทุกนิติ"); // "ทุกนิติ" = every building: always offered (as in responsibility.ts)
-  const shown = restricted.length ? buildings.filter((b) => all(b) || restricted.every((n) => b.owner === n)) : buildings;
-  const own = shown.filter((b) => !all(b)).length;
-  $("building").replaceChildren(option("", own ? "เลือกนิติบุคคล" : "— ไม่มีนิติบุคคลที่ดูแลร่วมกัน —"), ...shown.map((b) => option(b.name, b.name)));
-  if (shown.some((b) => b.name === keep)) $("building").value = keep;
-  $("buildingHint").textContent = !chosen.length ? "เลือกผู้รับงานก่อน เพื่อแสดงเฉพาะนิติบุคคลที่ดูแล"
+  const shown = oneAllBuilding(restricted.length ? buildings.filter((b) => isAllBuilding(b) || restricted.every((n) => b.owner === n)) : buildings);
+  const own = shown.filter((b) => !isAllBuilding(b)).length;
+  $("building").replaceChildren(...(shown.length ? shown.map((b) => {
+    const box = check("bld", b.name, b.name);
+    box.querySelector("input").checked = keep.includes(b.name); // ticks survive a change of person when still allowed
+    return box;
+  }) : [el("p", { className: "muted", textContent: "— ไม่มีนิติบุคคลที่ดูแลร่วมกัน —" })]));
+  $("buildingSearch").value = "";
+  $("buildingHint").dataset.base = !chosen.length ? "เลือกผู้รับงานก่อน เพื่อแสดงเฉพาะนิติบุคคลที่ดูแล"
     : !restricted.length ? "ผู้รับงานที่เลือกยังไม่มีนิติบุคคลในข้อมูลการมอบหมาย · แสดงทั้งหมด"
     : own ? `แสดงเฉพาะนิติบุคคลที่ ${restricted.join(", ")} ดูแล (${own}) และ "ทุกนิติ"`
     : "ผู้รับงานที่เลือกไม่มีนิติบุคคลที่ดูแลร่วมกัน · มอบหมายทีละคน";
+  showPicked();
+}
+
+/** Button text = what is ticked; hint adds how many task rows will be created (person × building). */
+function showPicked() {
+  const picked = checked("bld"), owners = checked("owner").length;
+  $("buildingBtn").textContent = !picked.length ? "เลือกนิติบุคคล" : picked.length === 1 ? picked[0]
+    : `${picked.length} นิติบุคคล: ${picked.slice(0, 3).join(", ")}${picked.length > 3 ? " …" : ""}`;
+  const rows = owners * picked.length;
+  $("buildingHint").textContent = $("buildingHint").dataset.base + (rows ? ` · จะสร้าง ${rows} งาน (${owners} คน × ${picked.length} นิติบุคคล)` : "");
+}
+
+/** The building dropdown: open/close, search, select all / none. */
+function initBuildingPicker() {
+  const pop = $("buildingPop"), btn = $("buildingBtn");
+  const open = (on) => { pop.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) $("buildingSearch").focus(); };
+  btn.onclick = () => open(pop.hidden);
+  document.addEventListener("pointerdown", (e) => { if (!pop.hidden && !e.target.closest("#buildingPick")) open(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pop.hidden) { open(false); btn.focus(); } });
+  $("buildingSearch").oninput = () => {
+    const q = $("buildingSearch").value.trim().toLowerCase();
+    $("building").querySelectorAll("label").forEach((l) => { l.hidden = !!q && !l.textContent.toLowerCase().includes(q); });
+  };
+  const setAll = (on) => { $("building").querySelectorAll("label:not([hidden]) input").forEach((i) => { i.checked = on; }); showPicked(); };
+  $("buildingAll").onclick = () => setAll(true);   // only the ones the search shows
+  $("buildingNone").onclick = () => setAll(false);
+  $("building").addEventListener("change", showPicked);
 }
 
 /** Home (admins): the assign form, shown by the "มอบหมายงาน" button. onCreated refreshes the dashboard. */
@@ -164,6 +197,7 @@ async function initAssignForm(onCreated) {
   $("owners").replaceChildren(...(members.length
     ? members.map((m) => check("owner", m.line_user_id, m.staff_name || m.display_name || m.line_user_id))
     : [el("p", { className: "muted", textContent: "ยังไม่มีสมาชิก (members)" })]));
+  initBuildingPicker();
   await loadBuildings();
   $("owners").addEventListener("change", () => filterBuildings());
 
@@ -179,15 +213,16 @@ async function initAssignForm(onCreated) {
   $("createForm").onsubmit = async (e) => {
     e.preventDefault();
     const tags = checked("tag"), owners = checked("owner");
-    if (!tags.length || !owners.length) return void ($("createMsg").textContent = "เลือกหมวดหมู่และผู้รับงานอย่างน้อย 1");
+    const picked = checked("bld");
+    if (!tags.length || !owners.length || !picked.length) return void ($("createMsg").textContent = "เลือกผู้รับงาน นิติบุคคล และหมวดหมู่ อย่างน้อยอย่างละ 1");
     try {
       const made = await api("createTask", {
-        building: $("building").value, title: $("title").value, details: $("details").value,
+        buildings: picked, title: $("title").value, details: $("details").value,
         tags, owners, due_on: $("dueOn").value,
       });
       $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน`;
       $("createForm").reset();
-      filterBuildings("");
+      filterBuildings([]);
       onCreated();
     } catch (err) { $("createMsg").textContent = "Error: " + err.message; }
   };

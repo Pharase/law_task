@@ -99,7 +99,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
     case "sendTask": {
       const id = taskId(body);
       const task = taskIn(await loadSheet(), id);
-      if (!canSend(task, me.line_user_id)) throw new HttpError(403, "you can only send your own task while it is On Process");
+      if (!canSend(task, me.line_user_id)) throw new HttpError(403, "you can only send your own task while it is กำลังดำเนินการ (on process)");
       // One locked batch: the flip and the send row land together; a double tap finds state != on_process and gets 409.
       const r = await batch([
         { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
@@ -164,7 +164,10 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
       const tags = checkTags(body.tags);
       const due_on = dueDate(body.due_on);
       const data = await loadSheet();
-      const building = checkBuilding(body.building, data.buildings);
+      // one or more buildings (old pages send `building`); each person x building becomes its own task row
+      const wanted: unknown[] = Array.isArray(body.buildings) ? body.buildings : [body.building];
+      const buildingList = [...new Set(wanted.map((b) => checkBuilding(b, data.buildings)))];
+      if (!buildingList.length) throw new HttpError(400, "pick at least one building");
       const owners: string[] = Array.isArray(body.owners) ? [...new Set(body.owners.map(String))] : [];
       if (!owners.length) throw new HttpError(400, "pick at least one member");
       const picked = owners.map((id) => data.people.find((p) => p.line_user_id === id));
@@ -173,15 +176,19 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         // owner_name is how the sheet names the owner, so it must be unique.
         if (data.people.filter((q) => q.name === p!.name).length > 1) throw new HttpError(400, `two people are named "${p!.name}"; give one a different staff name first`);
       }
-      // ข้อมูลการมอบหมาย: a building can only go to the หัวหน้างาน who looks after it
-      const outside = outsideResponsibility(building, picked.map((p) => p!.name), await loadBuildingRows());
-      if (outside) throw new HttpError(400, `"${building}" ไม่อยู่ในความรับผิดชอบของ ${outside} · not in ${outside}'s buildings`);
+      if (picked.length * buildingList.length > 100) throw new HttpError(400, "too many tasks at once (max 100 person × building)");
+      // ข้อมูลการมอบหมาย: a building can only go to the หัวหน้างาน who looks after it (every pair is checked)
+      const rowsB = await loadBuildingRows();
+      for (const building of buildingList) {
+        const outside = outsideResponsibility(building, picked.map((p) => p!.name), rowsB);
+        if (outside) throw new HttpError(400, `"${building}" ไม่อยู่ในความรับผิดชอบของ ${outside} · not in ${outside}'s buildings`);
+      }
       const details = String(body.details ?? "").trim() || null;
       const created_at = new Date().toISOString();
-      const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: picked.map((p) => taskCells({
+      const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: picked.flatMap((p) => buildingList.map((building) => taskCells({
         building, title, details, tags, owner: p!.line_user_id, owner_name: p!.name, state: "on_process", due_on,
         current_due_on: "", fix_round: 0, created_by: me.line_user_id, created_at, member_notified_at: null,
-      })) }]))!;
+      }))) }]))!; // all rows in one locked batch: all or nothing
       const ids = new Set(rows.map((r: Row) => Number(r.id)));
       return loadTasks((t) => ids.has(t.id));
     }
@@ -189,7 +196,8 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
     case "listTasks":
       return loadTasks((t) =>
         (!body.owner || t.owner === String(body.owner)) &&
-        (!body.building || t.building === String(body.building)) &&
+        // "ทุกนิติ" and "ทุกนิติบุคคล" mean the same (every building): filtering by one finds both
+        (!body.building || t.building === String(body.building) || (isAllBuildings(String(body.building)) && isAllBuildings(t.building))) &&
         (!body.state || t.state === String(body.state)) &&
         (!body.overdue || (t.state === "on_process" && t.current_due_on < today())));
 

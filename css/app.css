@@ -341,3 +341,16 @@ caption { padding-bottom: 6px; }
 .ac-table { margin-top: 8px; font-size: 14px; }
 .ac-table summary { cursor: pointer; color: var(--cyan); }
 .ac-table table { margin-top: 6px; }
+
+/* ---- Multi-select dropdown (assign form buildings) ---- */
+.ms { position: relative; margin-bottom: 6px; }
+.ms .ms-btn { width: 100%; text-align: left; padding: 11px 40px 11px 14px; font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms .ms-btn::after { content: "▾"; position: absolute; right: 14px; color: var(--ink-2); }
+.ms .ms-btn[aria-expanded="true"] { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(2, 215, 244, .22); }
+.ms-pop { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); padding: 10px; border-radius: 16px; background: #0c0e11; border: 1px solid var(--line-2); box-shadow: 0 18px 40px rgba(0, 0, 0, .7); }
+.ms-pop .ms-search { margin-bottom: 8px; }
+.ms-actions { display: flex; gap: 6px; margin-bottom: 6px; }
+.ms-list { max-height: 260px; overflow-y: auto; }
+.ms-list label.inline { display: flex; margin: 0; padding: 8px 6px; border-radius: 10px; }
+.ms-list label.inline:hover { background: rgba(255, 255, 255, .05); }
+.card:has(.ms-pop:not([hidden])) { z-index: 25; } /* the open list pops over the next card */
