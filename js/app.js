@@ -12,7 +12,11 @@ async function api(action, data = {}) {
   if (isForm) data.append("action", action);
   const res = await fetch(API_URL, {
     method: "POST",
-    headers: { "x-line-id-token": liff.getIDToken() ?? "", ...(isForm ? {} : { "content-type": "application/json" }) },
+    headers: {
+      "x-line-id-token": liff.getIDToken() ?? "",
+      "x-line-access-token": liff.getAccessToken?.() ?? "", // lets the server read the live LINE name + picture
+      ...(isForm ? {} : { "content-type": "application/json" }),
+    },
     body: isForm ? data : JSON.stringify({ action, ...data }),
   });
   const body = await res.json().catch(() => ({}));

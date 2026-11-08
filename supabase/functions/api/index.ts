@@ -6,6 +6,7 @@ import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
 import { digest } from "./notify-api.ts";
+import { pickProfile } from "./profile.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions];
@@ -20,7 +21,7 @@ const MIME_EXT: Record<string, string> = {
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, x-line-id-token",
+  "Access-Control-Allow-Headers": "content-type, x-line-id-token, x-line-access-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) =>
@@ -36,6 +37,20 @@ async function verifyLine(idToken: string | null) {
   return await r.json() as { sub: string; name?: string; picture?: string };
 }
 
+/** Current LINE profile via the LIFF access token; null on any problem (the ID token values are kept). */
+async function liveProfile(accessToken: string | null) {
+  if (!accessToken) return null;
+  try {
+    // The access token must be issued for OUR channel, or someone could pass another app's token.
+    const v = await fetch(`https://api.line.me/oauth2/v2.1/verify?access_token=${encodeURIComponent(accessToken)}`);
+    if (!v.ok || (await v.json()).client_id !== LINE_CHANNEL_ID) return null;
+    const p = await fetch("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${accessToken}` } });
+    return p.ok ? await p.json() as { userId: string; displayName?: string; pictureUrl?: string } : null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
@@ -48,8 +63,10 @@ Deno.serve(async (req) => {
     if (body.action === "digest") return json(await digest());
 
     const line = await verifyLine(req.headers.get("x-line-id-token"));
+    // Refresh name + picture from the live LINE profile once per page open ("me"), not on every action.
+    const profile = pickProfile(line, body.action === "me" ? await liveProfile(req.headers.get("x-line-access-token")) : null);
     const me = must(await db.from("profiles").upsert({
-      line_user_id: line.sub, display_name: line.name, picture_url: line.picture, last_seen_at: new Date().toISOString(),
+      line_user_id: line.sub, ...profile, last_seen_at: new Date().toISOString(),
     }).select().single());
     const approved = me.role === "member" || me.role === "admin";
     const isAdmin = me.role === "admin";
