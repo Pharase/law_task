@@ -35,6 +35,14 @@
       <h2>องค์กร · Organization <span id="orgCount" class="badge"></span></h2>
       <div id="orgList"></div>
     </section>
+
+    <!-- 3. Check that LINE notices work: sends one test message to the admin pressing it -->
+    <section class="card">
+      <h2>การแจ้งเตือน LINE · LINE notices</h2>
+      <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้</p>
+      <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
+      <p id="testLineMsg" role="status"></p>
+    </section>
   </div>
 
   <script>
@@ -119,6 +127,20 @@
       $("orgList").replaceChildren(...org.map(orgRow));
     }
 
+    $("testLineBtn").onclick = async () => {
+      const btn = $("testLineBtn"), msg = $("testLineMsg");
+      btn.disabled = true;
+      msg.className = "muted";
+      msg.textContent = "กำลังส่ง…";
+      try {
+        const r = await api("testLine");
+        msg.className = r.ok ? "" : "error";
+        msg.textContent = r.ok
+          ? `✅ ส่งแล้ว ลองเปิด LINE ดู · โควตาคงเหลือเดือนนี้: ${r.quotaLeft ?? "ไม่ทราบ"}`
+          : "❌ ส่งไม่สำเร็จ: " + r.error + (/push 400/.test(r.error || "") ? " (ตรวจว่าเพิ่มบัญชี LINE OA เป็นเพื่อนแล้ว)" : "");
+      } catch (err) { msg.className = "error"; msg.textContent = "Error: " + err.message; }
+      btn.disabled = false;
+    };
     $("newInviteBtn").onclick = () => { $("newInvite").hidden = !$("newInvite").hidden; };
     $("newInvite").onsubmit = (e) => {
       e.preventDefault();

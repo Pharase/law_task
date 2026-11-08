@@ -5,7 +5,7 @@ import { bucket, db, found, HttpError, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
-import { digest } from "./notify-api.ts";
+import { adminNotifyActions, digest } from "./notify-api.ts";
 import { pickProfile } from "./profile.ts";
 import { adminInvoiceActions, memberInvoiceActions } from "./invoices-api.ts";
 import { memberReportActions } from "./reports-api.ts";
@@ -13,7 +13,7 @@ import { adminNewsActions, memberNewsActions } from "./news-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions, memberInvoiceActions, memberReportActions, memberNewsActions];
-const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions];
+const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions, adminNotifyActions];
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const MAX_WRONG_CODES = 5;
