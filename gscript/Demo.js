@@ -1,4 +1,4 @@
-// Demo data for testing the app. Run from the Apps Script editor:
+// Demo data for testing the app. In the Apps Script editor pick one of these in the function dropdown, then Run:
 //   seedDemo   — adds demo buildings, tasks (+ sends), invoices and news
 //   clearDemo  — deletes exactly those rows again
 // Demo rows are marked: created_by = "demo" (Tasks, Invoices, News), Sends of demo tasks, Buildings named "DEMO …".
@@ -10,8 +10,53 @@ var DEMO_TAGS = ["ความถูกต้อง", "เสนออนุม�
 var DEMO_TITLES = ["ตรวจสัญญาเช่า", "ร่างหนังสือแจ้งค้างชำระ", "สรุปมติที่ประชุมใหญ่", "ติดตามคดีฟ้องเรียก", "ตรวจระเบียบนิติบุคคล",
   "เตรียมเอกสารจดทะเบียน", "ทำหนังสือมอบอำนาจ", "ตรวจรายงานงบการเงิน", "ติดต่อสำนักงานที่ดิน", "ร่างประกาศนิติบุคคล"];
 
-/** Pure: the demo rows for `today` (YYYY-MM-DD, Bangkok). members = [{line_user_id, name}] of role member. */
-function demoPlan(today, members, nowIso) {
+/** Adds the demo rows. Stops if demo data is already there (run clearDemo first). */
+function seedDemo() {
+  var tabs = readTabs(["Tasks", "Members", "Buildings"]);
+  if (tabs.Tasks.some(function (r) { return normCell(r.created_by).trim() === DEMO; })) throw new Error("Demo data already exists: run clearDemo first.");
+  var members = tabs.Members
+    .filter(function (m) { return normCell(m.role).trim() === "member" && normCell(m.name).trim(); })
+    .map(function (m) { return { line_user_id: normCell(m.line_user_id).trim(), name: normCell(m.name).trim() }; });
+  var today = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd");
+  var plan = demoPlan_(today, members, new Date().toISOString());
+
+  var have = tabs.Buildings.map(function (b) { return normCell(b.name).trim(); });
+  runBatch([{ op: "append", tab: "Buildings", rows: plan.buildings.filter(function (b) { return have.indexOf(b.name) < 0; }) }]);
+  var sendCount = 0;
+  if (plan.tasks.length) {
+    var made = runBatch([{ op: "append", tab: "Tasks", rows: plan.tasks.map(function (t) { return t.cells; }) }]).results[0];
+    var sends = [];
+    plan.tasks.forEach(function (t, k) { t.sends.forEach(function (s) { s.task_id = made[k].id; sends.push(s); }); });
+    if (sends.length) runBatch([{ op: "append", tab: "Sends", rows: sends }]);
+    sendCount = sends.length;
+  }
+  runBatch([{ op: "append", tab: "Invoices", rows: plan.invoices }]);
+  runBatch([{ op: "append", tab: "News", rows: plan.news }]);
+  Logger.log("Demo added: %s buildings, %s tasks, %s sends, %s invoices, %s news.",
+    plan.buildings.length, plan.tasks.length, sendCount, plan.invoices.length, plan.news.length);
+  if (!members.length) Logger.log("No members in the Members tab, so no demo tasks. Open an admin page in the app once (it fills Members), then run clearDemo and seedDemo again.");
+}
+
+/** Deletes exactly the demo rows added by seedDemo. Safe to run more than once. */
+function clearDemo() {
+  var tabs = readTabs(["Tasks", "Buildings"]);
+  var taskIds = tabs.Tasks.filter(function (r) { return normCell(r.created_by).trim() === DEMO; }).map(function (r) { return r.id; });
+  var demoBuildings = tabs.Buildings.map(function (b) { return normCell(b.name).trim(); }).filter(function (n) { return n.indexOf("DEMO ") === 0; });
+  var out = withLock(function () {
+    return {
+      sends: deleteRows("Sends", "task_id", taskIds),
+      tasks: deleteRows("Tasks", "created_by", [DEMO]),
+      invoices: deleteRows("Invoices", "created_by", [DEMO]),
+      news: deleteRows("News", "created_by", [DEMO]),
+      buildings: deleteRows("Buildings", "name", demoBuildings),
+    };
+  });
+  Logger.log("Demo removed: " + JSON.stringify(out));
+}
+
+/** (helper, hidden from the Run menu by the trailing _) Pure: the demo rows for `today` (YYYY-MM-DD, Bangkok). members = [{line_user_id, name}] of role member. */
+function demoPlan_(today, members, nowIso) {
+  members = members || []; // guard: never crash if run on its own
   var add = function (iso, n) { var d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   var at9 = function (iso) { return new Date(iso + "T02:00:00Z").toISOString(); }; // 09:00 in Bangkok
   var people = members.slice(0, 4);
@@ -81,48 +126,4 @@ function demoPlan(today, members, nowIso) {
   return { buildings: buildings, tasks: tasks, invoices: invoices, news: news };
 }
 
-/** Adds the demo rows. Stops if demo data is already there (run clearDemo first). */
-function seedDemo() {
-  var tabs = readTabs(["Tasks", "Members", "Buildings"]);
-  if (tabs.Tasks.some(function (r) { return normCell(r.created_by).trim() === DEMO; })) throw new Error("Demo data already exists: run clearDemo first.");
-  var members = tabs.Members
-    .filter(function (m) { return normCell(m.role).trim() === "member" && normCell(m.name).trim(); })
-    .map(function (m) { return { line_user_id: normCell(m.line_user_id).trim(), name: normCell(m.name).trim() }; });
-  var today = Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd");
-  var plan = demoPlan(today, members, new Date().toISOString());
-
-  var have = tabs.Buildings.map(function (b) { return normCell(b.name).trim(); });
-  runBatch([{ op: "append", tab: "Buildings", rows: plan.buildings.filter(function (b) { return have.indexOf(b.name) < 0; }) }]);
-  var sendCount = 0;
-  if (plan.tasks.length) {
-    var made = runBatch([{ op: "append", tab: "Tasks", rows: plan.tasks.map(function (t) { return t.cells; }) }]).results[0];
-    var sends = [];
-    plan.tasks.forEach(function (t, k) { t.sends.forEach(function (s) { s.task_id = made[k].id; sends.push(s); }); });
-    if (sends.length) runBatch([{ op: "append", tab: "Sends", rows: sends }]);
-    sendCount = sends.length;
-  }
-  runBatch([{ op: "append", tab: "Invoices", rows: plan.invoices }]);
-  runBatch([{ op: "append", tab: "News", rows: plan.news }]);
-  Logger.log("Demo added: %s buildings, %s tasks, %s sends, %s invoices, %s news.",
-    plan.buildings.length, plan.tasks.length, sendCount, plan.invoices.length, plan.news.length);
-  if (!members.length) Logger.log("No members in the Members tab, so no demo tasks. Open an admin page in the app once (it fills Members), then run clearDemo and seedDemo again.");
-}
-
-/** Deletes exactly the demo rows added by seedDemo. Safe to run more than once. */
-function clearDemo() {
-  var tabs = readTabs(["Tasks", "Buildings"]);
-  var taskIds = tabs.Tasks.filter(function (r) { return normCell(r.created_by).trim() === DEMO; }).map(function (r) { return r.id; });
-  var demoBuildings = tabs.Buildings.map(function (b) { return normCell(b.name).trim(); }).filter(function (n) { return n.indexOf("DEMO ") === 0; });
-  var out = withLock(function () {
-    return {
-      sends: deleteRows("Sends", "task_id", taskIds),
-      tasks: deleteRows("Tasks", "created_by", [DEMO]),
-      invoices: deleteRows("Invoices", "created_by", [DEMO]),
-      news: deleteRows("News", "created_by", [DEMO]),
-      buildings: deleteRows("Buildings", "name", demoBuildings),
-    };
-  });
-  Logger.log("Demo removed: " + JSON.stringify(out));
-}
-
-if (typeof module !== "undefined") module.exports = { demoPlan: demoPlan };
+if (typeof module !== "undefined") module.exports = { demoPlan: demoPlan_ };
