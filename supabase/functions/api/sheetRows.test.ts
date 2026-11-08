@@ -147,3 +147,16 @@ test("sheetDownHint turns the failure into what to fix (no secrets in it)", asyn
   assert.match(sheetDownHint("The operation was aborted due to timeout"), /10/);
   assert.match(sheetDownHint("tab Invoices is missing; run setup"), /tab Invoices is missing/);
 });
+
+test("recentTaskKeys: same admin, same owner/building/title/due within 2 minutes, not cancelled", async () => {
+  const { recentTaskKeys, taskKey } = await import("./sheetRows.ts");
+  const now = Date.parse("2026-11-09T03:00:00Z");
+  const t = (over: Record<string, unknown>) => ({ owner: "U1", building: "KL2", title: "ตรวจสัญญา", due_on: "2026-11-20", created_by: "UA", created_at: "2026-11-09T02:59:30Z", state: "on_process", ...over });
+  const keys = recentTaskKeys([
+    t({}),                                                   // 30 s ago -> duplicate
+    t({ building: "KL3", created_at: "2026-11-09T02:57:00Z" }), // 3 min ago -> too old
+    t({ building: "Mono1", created_by: "UB" }),               // another admin -> not counted
+    t({ building: "SD7", state: "cancelled" }),               // cancelled -> not counted
+  ] as never, "UA", now);
+  assert.deepEqual([...keys], [taskKey("U1", "KL2", "ตรวจสัญญา", "2026-11-20")]);
+});

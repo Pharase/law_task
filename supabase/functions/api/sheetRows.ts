@@ -156,3 +156,14 @@ export function sheetDownHint(reason: string): string {
   if (/abort|timeout/i.test(reason)) return "Google took over 10 seconds; try again";
   return reason.slice(0, 200); // the script's own message, e.g. "tab Invoices is missing; run setup"
 }
+
+/** Identity of one assigned task, for spotting a double submit. */
+export const taskKey = (owner: string, building: string, title: string, due: string) => [owner, building, title.trim(), due].join("|");
+
+/** Tasks this admin created in the last `windowMs` (not cancelled): a repeat of one of these is a double submit. */
+export function recentTaskKeys(tasks: Pick<Task, "owner" | "building" | "title" | "due_on" | "created_by" | "created_at" | "state">[],
+  adminId: string, nowMs: number, windowMs = 120_000): Set<string> {
+  return new Set(tasks
+    .filter((t) => t.created_by === adminId && t.state !== "cancelled" && nowMs - Date.parse(t.created_at) <= windowMs)
+    .map((t) => taskKey(t.owner, t.building, t.title, t.due_on)));
+}

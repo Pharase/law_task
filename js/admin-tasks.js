@@ -215,11 +215,18 @@ async function initAssignForm(onCreated) {
     catch (err) { alert(err.message); }
   };
 
+  let saving = false; // one save at a time: a double tap / second click while saving does nothing
   $("createForm").onsubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
     const tags = checked("tag"), owners = checked("owner");
     const picked = checked("bld");
     if (!tags.length || !owners.length || !picked.length) return void ($("createMsg").textContent = "เลือกผู้รับงาน นิติบุคคล และหมวดหมู่ อย่างน้อยอย่างละ 1");
+    const btn = e.submitter ?? $("createForm").querySelector("button:not([type=button])");
+    const label = btn.textContent;
+    saving = true;
+    btn.disabled = true;
+    btn.textContent = "กำลังมอบหมาย…";
     try {
       const made = await api("createTask", {
         buildings: picked, title: $("title").value, details: $("details").value,
@@ -230,6 +237,9 @@ async function initAssignForm(onCreated) {
       filterBuildings([]);
       onCreated();
     } catch (err) { $("createMsg").textContent = "Error: " + err.message; }
+    saving = false;
+    btn.disabled = false;
+    btn.textContent = label;
   };
 }
 

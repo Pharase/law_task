@@ -5,7 +5,7 @@ import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { notifyNewTasks } from "./notify-api.ts";
-import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
+import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
@@ -186,10 +186,15 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
       }
       const details = String(body.details ?? "").trim() || null;
       const created_at = new Date().toISOString();
-      const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: picked.flatMap((p) => buildingList.map((building) => taskCells({
-        building, title, details, tags, owner: p!.line_user_id, owner_name: p!.name, state: "on_process", due_on,
+      // double submit guard: the same person + building + title + due date this admin created in the last 2 minutes is skipped
+      const recent = recentTaskKeys(data.tasks, me.line_user_id, Date.now());
+      const pairs = picked.flatMap((p) => buildingList.map((building) => ({ p: p!, building })))
+        .filter(({ p, building }) => !recent.has(taskKey(p.line_user_id, building, title, due_on)));
+      if (!pairs.length) throw new HttpError(409, "เพิ่งมอบหมายงานนี้ไปแล้ว · this task was just assigned (duplicate)");
+      const [rows] = (await batch([{ op: "append", tab: "Tasks", rows: pairs.map(({ p, building }) => taskCells({
+        building, title, details, tags, owner: p.line_user_id, owner_name: p.name, state: "on_process", due_on,
         current_due_on: "", fix_round: 0, created_by: me.line_user_id, created_at, member_notified_at: null,
-      }))) }]))!; // all rows in one locked batch: all or nothing
+      })) }]))!; // all rows in one locked batch: all or nothing
       const ids = new Set(rows.map((r: Row) => Number(r.id)));
       // instant LINE notice (08:30–17:30 only): one message per person; a LINE problem never undoes the assignment
       try {
