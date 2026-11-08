@@ -1,114 +1,118 @@
 # law_task
 
-A LINE LIFF app for the team: LINE login, admin/member roles, invite codes, and uploads that delete themselves after 1 year. Feature pages (tasks, news, documents, performance, finance) will be added as separate `.html` files, each with an admin version in `admin/`.
+A LINE LIFF app for the legal team. It replaces the old Google Sheets task system.
+
+- **Work (Button A / home page):** admins assign tasks; members send work in with attachments; admins approve or send it back (กดผิด / มีปรับแก้). Monthly and quarterly performance is calculated from this.
+- **Ex Doc. (Button C):** a library of example legal PDFs. Admins upload; members preview or download.
+- **Daily LINE summary:** one message per person per weekday at 09:00, sent only when there's news.
+- **Uploads:** kept at least 1 year, and deleted only after an admin has downloaded a backup.
+
+Design: [docs/superpowers/specs/2026-11-08-task-tracking-exdoc-design.md](docs/superpowers/specs/2026-11-08-task-tracking-exdoc-design.md)
 
 ## How it fits together
 
 ```
-LINE app / browser ── index.html, admin/*.html (GitHub Pages)
+LINE app / browser ── index.html, Button */, admin/*.html (GitHub Pages)
         │  js/app.js sends the LINE ID token with every call
         ▼
 Supabase Edge Function `api` ── checks the token with LINE, checks the role
         ▼
-Postgres (profiles, invites, files)  +  Storage bucket `uploads` (private)
+Postgres (profiles, invites, files, buildings, tasks, task_sends, exdocs, notify_log)
+Storage: `uploads` (task attachments, private) · `exdocs` (PDFs, private, never auto-deleted)
+pg_cron: daily cleanup (03:00 UTC) · daily LINE summary (09:05 Bangkok, Mon–Fri)
 ```
 
 Browsers never talk to the database directly. Every table has RLS on with no policies, so only the `api` function (service role) can read or write. The pages are public, so the real access control is the role check in `api`, not the `admin/` folder.
+
+**Code map** (`supabase/functions/api/`):
+
+| File | Job |
+|---|---|
+| `index.ts` | Login check and routing |
+| `tasks-api.ts`, `exdocs-api.ts`, `backup-api.ts`, `notify-api.ts` | Database/storage handlers for each feature |
+| `scoring.ts` | **All performance rules (provisional; change them only here)** |
+| `review.ts`, `digest.ts`, `retention.ts`, `dates.ts`, `codes.ts` | Pure rules, unit-tested |
 
 ## Roles and onboarding
 
 | role | can |
 |---|---|
 | `pending` | nothing; sees the invite-code screen |
-| `member` | use the member pages, upload, see their own files |
-| `admin` | everything a member can, plus the `admin/` pages |
+| `member` | own tasks, send work, own performance, Ex Doc |
+| `admin` | the "boss": assign/review all tasks, all performance, Ex Doc upload, members, backups. **Never owns tasks.** |
 | `revoked` | nothing |
+
+Staff from the old sheet are imported already approved (see Go-live). Everyone else joins with an invite code:
 
 1. An admin opens `admin/members.html`, enters a staff name and role, and gets an 8-character code (no `0 O 1 I L`).
 2. The code works **once** and expires after **15 minutes**.
 3. The new person opens the LIFF link, logs in, and enters the code. They're approved immediately.
 4. After **5 wrong codes**, the LINE account is locked. An admin unlocks it (or approves it directly) on `admin/members.html`.
 
-## Uploads
+## Work: task flow
 
-- Pictures (JPG, PNG, WEBP) and PDFs, 10 MB max. HEIC is rejected because only Apple devices can display it. Safari and LINE on iPhone convert HEIC to JPEG before upload anyway.
-- Before upload, the browser shrinks pictures to at most 1600 px on the long side and re-encodes them as JPEG, aiming for 50% of the original size or less.
-- A daily job (03:00 UTC, `pg_cron`) deletes files older than **365 days** (`RETENTION_DAYS` in `supabase/functions/api/index.ts`). Only use uploads for working copies, not legal documents you must keep.
-
-## Deploy (once)
-
-Needs Node.js. Run from the repo root:
-
-```sh
-npx supabase login
-npx supabase link --project-ref edymfgeecbsmepdveqkj
-npx supabase db push                                   # tables, bucket, daily cleanup job
-npx supabase secrets set LINE_CHANNEL_ID=2012450429    # the number before "-" in the LIFF ID
-npx supabase functions deploy api                      # verify_jwt=false comes from supabase/config.toml
+```
+admin assigns ─▶ On Process ─▶ member sends (optional files) ─▶ Waiting for review
+                     ▲                                             │
+                     ├── กดผิด: send ignored, same due date ◀──────┤
+                     ├── มีปรับแก้: fix note + new due date ◀───────┤
+                     └─────────────────────────── Approved ◀───────┘
 ```
 
-### Automatic deploys (GitHub Actions)
+- **Admin page** `admin/tasks.html`: assign (pick several members to create one task each), the review queue, all tasks with filters, edit/cancel before the first send, and performance by month or quarter.
+- **Scoring (provisional):** 10 points if sent on time, minus 1 per 3 days late, never below 0. The task score averages on-time and accuracy (each fix round scored against its own due date). Shown on a 1–5 scale across members. See `scoring.ts` and its tests.
 
-Every push to `main` that changes `supabase/` runs [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml). It runs the tests, applies new migrations, sets `LINE_CHANNEL_ID` and deploys `api`. It needs one repo secret, and no database password: the CLI logs in with the token.
+## Uploads and backups
+
+- Pictures (JPG, PNG, WEBP) and PDFs, 10 MB max. Pictures are shrunk in the browser (≤1600 px, JPEG, about half the size). HEIC is rejected.
+- Files over **365 days** old are **due**. Admin pages then show a banner with **Download backup**, which builds a ZIP in the browser (parts of ≤200 MB) and records the backup. The daily cleanup deletes **only due files that have a recorded backup**, and keeps the row so task history shows "deleted after backup".
+
+## Go-live checklist (owner, once)
+
+1. **Import staff and buildings:** paste `old-system/import.sql` (generated locally, never committed) into the Supabase **SQL Editor** and run it. It adds 29 staff as members and 80 buildings.
+2. **Make yourself admin:** log in to the LIFF app once, then run `update profiles set role = 'admin' where display_name = '<your LINE name>';` in the SQL Editor.
+3. **LINE bot token:** in LINE Developers Console → the Messaging API channel → **re-issue** the channel access token (the old one is hard-coded in the old script). Then set it in Supabase: `npx supabase secrets set LINE_MESSAGING_TOKEN=<token>`, or use **Edge Functions → Secrets** in the dashboard. Until it's set, the daily summary is skipped.
+4. **Rich menu links** (LINE Official Account Manager): see the table below.
+5. **LIFF scopes:** `openid` and `profile` (otherwise names and pictures stay empty).
+6. Members must have the bot as a LINE friend to receive summaries (old users already do).
+
+## Deploy
+
+Every push to `main` that changes `supabase/` runs [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml): tests → migrations → `LINE_CHANNEL_ID` → deploy `api`. You can also run it by hand from any branch: `gh workflow run supabase-deploy.yml --ref <branch>`. It needs one repo secret, and no database password:
 
 ```sh
 gh secret set SUPABASE_ACCESS_TOKEN   # paste a token from https://supabase.com/dashboard/account/tokens at the prompt
 ```
 
-You can also run it by hand: **GitHub → Actions → Deploy Supabase → Run workflow**.
-
-**Make yourself the first admin.** Open the LIFF app and log in once. You'll land on the invite-code screen. Then run this in the Supabase **SQL Editor**:
-
-```sql
-update profiles set role = 'admin' where display_name = '<your LINE name>';
-```
-
-After that, add everyone else with invite codes.
-
 ## LINE setup
 
-LINE Developers Console → your LINE Login channel → **LIFF**:
-- **Endpoint URL**: `https://pharase.github.io/law_task/`
-- **Scopes**: `openid`, `profile`
-
+LINE Developers Console → LINE Login channel → **LIFF**: Endpoint URL `https://pharase.github.io/law_task/`, scopes `openid`, `profile`.
 LIFF link: https://liff.line.me/2012450429-k3WOCwtO
 
 ## Rich menu buttons
 
-Each button has its own folder (`Button A` … `Button F`) with an `index.html`. In links, the space is written `%20`. Each page requires an approved member and shows "Coming soon" until its feature is built.
+Rich menu layout: a 3×2 grid where A+B is one wide tile. Folder names contain a space, written `%20` in links. Keep the trailing `/`.
 
-Rich menu layout: a 3×2 grid where A+B is one wide tile.
+| Button | Feature | Rich menu link |
+|---|---|---|
+| A (A+B) | Work · งานรอดำเนินการ (home page) | `https://liff.line.me/2012450429-k3WOCwtO` or `…/Button%20A/` |
+| C | Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย | `https://liff.line.me/2012450429-k3WOCwtO/Button%20C/` |
+| D | Reports · รายงานประจำสัปดาห์ (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
+| E | Property Right · อายัดและแจ้งบุริมสิทธิ (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20E/` |
+| F | Invoice · ใบแจ้งหนี้ค้างเบิก (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
 
-| Button | Feature | Folder | Rich menu link |
-|---|---|---|---|
-| A (A+B) | Work · งานรอดำเนินการ | [Button A/](Button%20A/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20A/` |
-| C | Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย | [Button C/](Button%20C/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20C/` |
-| D | Reports · รายงานประจำสัปดาห์ | [Button D/](Button%20D/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
-| E | Property Right · อายัดและแจ้งบุริมสิทธิ | [Button E/](Button%20E/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20E/` |
-| F | Invoice · ใบแจ้งหนี้ค้างเบิก | [Button F/](Button%20F/index.html) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
+## Adding a feature
 
-Keep the trailing `/`. Without it, the page's `../js/app.js` path breaks.
-
-## Adding a feature page
-
-```html
-<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="js/app.js"></script>      <!-- ../js/app.js inside admin/ -->
-<link rel="stylesheet" href="css/app.css">
-<script>
-  start("member").then((me) => { /* page code; call api("action", {...}) */ });   // "admin" in admin/
-</script>
-```
-
-Add the page's actions to `supabase/functions/api/index.ts`. Put admin-only ones after the `isAdmin` check.
+- **Page:** load the LIFF SDK, `js/app.js` (`../js/app.js` from a subfolder) and `css/app.css`, then `start("member")` (or `"admin"`) and call `api("action", {...})`. Build DOM with `textContent` (`el()` in `js/work.js`), never `innerHTML`.
+- **Backend:** add a `<feature>-api.ts` exporting `member…Actions` / `admin…Actions(action, body, me)` that return `undefined` for actions they don't own. Add them to `MEMBER_HANDLERS` / `ADMIN_HANDLERS` in `index.ts`. Put rules in a pure module with a test.
 
 ## Tests
 
 ```sh
-node --test supabase/functions/api/codes.test.ts
+node --test "supabase/functions/api/*.test.ts"
 ```
 
-### Manual check: the invite gate (run after every change to `redeem`)
+### Manual check: the invite gate (after any change to `redeem`)
 
 Use a second LINE account that isn't approved yet.
 
@@ -120,8 +124,24 @@ Use a second LINE account that isn't approved yet.
 | 4 | Enter 5 random codes | 5th shows "Account locked"; admin page shows LOCKED |
 | 5 | While locked, enter a fresh valid code | Still locked until an admin clicks Unlock |
 
+### Manual check: tasks, Ex Doc, backups (after deploy; one admin + one member account)
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Admin assigns a task to the member | Appears in the member's Active list |
+| 2 | Member attaches a file and taps Send | Moves to Waiting; admin sees it in the review queue with the file |
+| 3 | Admin: Not approved → กดผิด | Back to Active, same due date; that send doesn't count in performance |
+| 4 | Send again; admin: Not approved → มีปรับแก้ with an empty note | Blocked |
+| 5 | มีปรับแก้ with a note and a new date | Member sees the note and the new due date, plus "รอบแก้ 1" |
+| 6 | Send again; two admins tap Approved at the same time | One succeeds; the other sees "already reviewed by another admin" |
+| 7 | Member calls `sendTask` with another member's file id | That file is not attached |
+| 8 | Member opens `admin/tasks.html` | Redirected home; no data |
+| 9 | Admin uploads a PDF on `admin/exdoc.html` | Member sees it on Button C; Preview opens it, Download saves it with its original name |
+| 10 | After the token is set, on a weekday after 09:00 call `{"action":"digest"}` | Each person with news gets one LINE message; a second call returns "not now" |
+
 ## Troubleshooting
 
 - **400 Bad Request on login**: the page URL doesn't match the LIFF Endpoint URL.
 - **"Login check failed (invalid or expired LINE ID token)"**: `LINE_CHANNEL_ID` is wrong or not set (`npx supabase secrets list`).
-- **Supabase free tier** pauses a project after 7 days with no activity. While it's paused, the app and the cleanup job stop. Restore it from the dashboard.
+- **No daily LINE summary**: `LINE_MESSAGING_TOKEN` not set, the quota is used up (admin pages show a banner), or the member hasn't added the bot as a friend. Check the `notify_log` table.
+- **Supabase free tier** pauses a project after 7 days with no activity. While it's paused, the app, the cleanup and the LINE summaries stop. Restore it from the dashboard.
