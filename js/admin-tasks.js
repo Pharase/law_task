@@ -207,11 +207,23 @@ function initReports() {
   $("status").hidden = true;
   $("page").hidden = false;
   const [y, m] = bkkToday().split("-").map(Number);
-  $("pYear").value = y;
-  $("pN").value = m;
-  $("pKind").onchange = () => { $("pN").max = $("pKind").value === "month" ? 12 : 4; $("pN").value = $("pKind").value === "month" ? m : Math.ceil(m / 3); };
-  $("pGo").onclick = () => loadPerformance().catch((e) => alert(e.message));
-  loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
+  // dropdowns: years shown in พ.ศ. (value stays ค.ศ. for the server), Thai month names, quarters with their months
+  const SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  $("pYear").replaceChildren(...Array.from({ length: y - 2024 + 1 }, (_, i) => y - i) // this year back to 2024 (2567)
+    .map((yy) => option(yy, String(yy + 543))));
+  const fillN = (n) => {
+    const month = $("pKind").value === "month";
+    $("pN").replaceChildren(...(month
+      ? TH_MONTHS.map((name, i) => option(i + 1, name))
+      : [1, 2, 3, 4].map((q) => option(q, `ไตรมาส ${q} (${SHORT[q * 3 - 3]}–${SHORT[q * 3 - 1]})`))));
+    $("pN").value = n;
+  };
+  const reload = () => loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
+  fillN(m);
+  // changing any dropdown reloads straight away, so the table never shows a different period than the picks
+  $("pKind").onchange = () => { fillN($("pKind").value === "month" ? m : Math.ceil(m / 3)); reload(); };
+  $("pYear").onchange = $("pN").onchange = reload;
+  reload();
 }
 
 /**

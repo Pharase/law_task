@@ -23,9 +23,8 @@
       <p class="muted">Members see their own scores; admins see the whole team.</p>
       <div class="row filters">
         <select id="pKind" aria-label="Period"><option value="month">เดือน</option><option value="quarter">ไตรมาส</option></select>
-        <input type="number" id="pYear" aria-label="Year" min="2020" max="2100">
-        <input type="number" id="pN" aria-label="Month or quarter" min="1" max="12">
-        <button type="button" class="small" id="pGo">ดู</button>
+        <select id="pYear" aria-label="ปี · Year"></select>
+        <select id="pN" aria-label="เดือนหรือไตรมาส · Month or quarter"></select>
       </div>
       <div class="table-wrap"><table id="perfTable"></table></div>
     </section>
