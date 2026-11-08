@@ -55,8 +55,13 @@
       <div class="row tools">
         <button type="button" class="small" id="assignBtn">มอบหมายงาน · Assign task</button>
         <a class="btn" href="admin/tasks.html">ติดตามงาน · Tracking (อนุมัติ)</a>
-        <a class="btn secondary-link" href="admin/members.html">สมาชิก · Members</a>
       </div>
+      <a class="stat-tile" href="admin/members.html" id="usersTile">
+        <span class="stat-num" id="usersCount">…</span>
+        <span>ผู้ใช้ที่เชื่อมต่อ · Users connected</span>
+        <span class="muted" id="usersPending"></span>
+        <span class="stat-go">สมาชิกและรหัสเชิญ · Members &amp; invite codes ›</span>
+      </a>
       <form id="createForm" hidden>
         <h2>มอบหมายงาน · Assign</h2>
         <label for="building">นิติบุคคล · Building</label>
@@ -130,6 +135,12 @@
       if (me.role === "admin") {
         $("adminTools").hidden = false;
         $("assignBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; };
+        api("listUsers").then((users) => {
+          // connected = approved LINE accounts (members + admins); pending = logged in, waiting for an invite code
+          $("usersCount").textContent = users.filter((u) => u.role === "member" || u.role === "admin").length;
+          const pending = users.filter((u) => u.role === "pending").length;
+          $("usersPending").textContent = pending ? "รออนุมัติ " + pending + " คน · waiting for a code" : "ไม่มีผู้รออนุมัติ";
+        }).catch(() => { $("usersCount").textContent = "-"; });
         initAssignForm(home).catch((err) => { $("createMsg").textContent = "Error: " + err.message; });
       }
     }

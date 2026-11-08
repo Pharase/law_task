@@ -183,3 +183,14 @@ async function renderHome(me) {
   // Open the list people most likely need: work to fix or do first, then waiting review, then the backlog.
   pick([parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
 }
+
+// ---- Ex Doc groups (Button C and admin/exdoc.html) ----
+const NO_GROUP = "อื่นๆ · ไม่มีกลุ่ม";
+/** [{ id, name, docs }] in group order (A-Z), documents without a group last. Empty groups only when keepEmpty. */
+function groupDocs(groups, docs, keepEmpty = false) {
+  const known = new Set(groups.map((g) => g.id));
+  const sections = [...groups, { id: null, name: NO_GROUP }].map((g) => ({
+    ...g, docs: docs.filter((d) => (g.id === null ? !known.has(d.group_id) : d.group_id === g.id)),
+  }));
+  return sections.filter((s) => s.docs.length || (keepEmpty && s.id !== null));
+}

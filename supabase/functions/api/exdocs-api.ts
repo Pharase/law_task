@@ -14,17 +14,35 @@ function checkTitle(title: unknown): string {
   return t;
 }
 
+function checkGroupName(name: unknown): string {
+  const n = String(name ?? "").trim();
+  if (!n || n.length > 100) throw new HttpError(400, "group name is required (max 100 characters)");
+  return n;
+}
+
+/** null (no group) or the id of an existing group. */
+async function groupId(id: unknown): Promise<string | null> {
+  if (id === null || id === undefined || id === "") return null;
+  return found(must(await db.from("exdoc_groups").select("id").eq("id", String(id)).maybeSingle()), "group").id;
+}
+
+/** { groups, docs }: both A-Z (Thai-aware); group_id is null for documents without a group. */
 export async function memberExDocActions(action: string, _body: Row, _me: Me): Promise<unknown> {
   if (action !== "listExDocs") return undefined;
-  const docs: Row[] = must(await db.from("exdocs").select("id, title, name, size, path, created_at"));
+  const groups: Row[] = must(await db.from("exdoc_groups").select("id, name"));
+  groups.sort((a, b) => a.name.localeCompare(b.name, "th"));
+  const docs: Row[] = must(await db.from("exdocs").select("id, title, name, size, path, created_at, group_id"));
   docs.sort((a, b) => a.title.localeCompare(b.title, "th"));
-  if (!docs.length) return [];
+  if (!docs.length) return { groups, docs: [] };
   const urls = must(await exdocs.createSignedUrls(docs.map((d) => d.path), 3600));
-  return docs.map(({ path: _p, ...d }, i) => {
-    const previewUrl = urls[i]?.signedUrl ?? null;
-    // Storage serves an attachment with this file name when `download=` is added (what the SDK does too).
-    return { ...d, previewUrl, downloadUrl: previewUrl && `${previewUrl}&download=${encodeURIComponent(d.name)}` };
-  });
+  return {
+    groups,
+    docs: docs.map(({ path: _p, ...d }, i) => {
+      const previewUrl = urls[i]?.signedUrl ?? null;
+      // Storage serves an attachment with this file name when `download=` is added (what the SDK does too).
+      return { ...d, previewUrl, downloadUrl: previewUrl && `${previewUrl}&download=${encodeURIComponent(d.name)}` };
+    }),
+  };
 }
 
 export async function adminExDocActions(action: string, body: Row, me: Me): Promise<unknown> {
@@ -47,13 +65,31 @@ export async function adminExDocActions(action: string, body: Row, me: Me): Prom
       if (probe.error) throw new HttpError(400, "upload not found, try again");
       return must(await db.from("exdocs").insert({
         path, title: checkTitle(body.title), name: String(body.name ?? "document.pdf").slice(0, 255),
-        size: Number(body.size) || 0, uploaded_by: me.line_user_id,
-      }).select("id, title, name, size, created_at").single());
+        size: Number(body.size) || 0, uploaded_by: me.line_user_id, group_id: await groupId(body.group_id),
+      }).select("id, title, name, size, created_at, group_id").single());
     }
 
     case "exdocRename":
       return found(must(await db.from("exdocs").update({ title: checkTitle(body.title) })
         .eq("id", String(body.id)).select("id, title").maybeSingle()), "document");
+
+    case "exdocSetGroup":
+      return found(must(await db.from("exdocs").update({ group_id: await groupId(body.group_id) })
+        .eq("id", String(body.id)).select("id, group_id").maybeSingle()), "document");
+
+    case "exdocGroupSave": {
+      // id given = rename, otherwise create. A duplicate name hits the unique index.
+      const name = checkGroupName(body.name);
+      const r = body.id
+        ? await db.from("exdoc_groups").update({ name }).eq("id", String(body.id)).select("id, name").maybeSingle()
+        : await db.from("exdoc_groups").insert({ name }).select("id, name").single();
+      if ((r.error as { code?: string } | null)?.code === "23505") throw new HttpError(409, "a group with this name already exists");
+      return found(must(r), "group");
+    }
+
+    case "exdocGroupDelete":
+      // Its documents fall back to "no group" (on delete set null); no file is deleted.
+      return found(must(await db.from("exdoc_groups").delete().eq("id", String(body.id)).select("id").maybeSingle()), "group");
 
     case "exdocDelete": {
       const doc = found(must(await db.from("exdocs").select("id, path").eq("id", String(body.id)).maybeSingle()), "document");

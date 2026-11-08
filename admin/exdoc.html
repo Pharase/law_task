@@ -22,9 +22,20 @@
       <input type="file" id="pdf" accept="application/pdf,.pdf" required>
       <label for="docTitle">ชื่อเอกสาร · Title</label>
       <input id="docTitle" maxlength="200" required>
+      <label for="docGroup">กลุ่ม · Group</label>
+      <select id="docGroup"></select>
       <button>อัปโหลด</button>
       <p id="uploadMsg" role="status"></p>
     </form>
+    <section class="card">
+      <h2>กลุ่มเอกสาร · Groups</h2>
+      <p class="muted">ลบกลุ่มแล้ว เอกสารในกลุ่มจะย้ายไป "อื่นๆ · ไม่มีกลุ่ม" (ไม่ลบเอกสาร)</p>
+      <div class="row">
+        <input id="newGroup" maxlength="100" placeholder="ชื่อกลุ่มใหม่" aria-label="New group name">
+        <button type="button" class="small" id="addGroupBtn">เพิ่มกลุ่ม</button>
+      </div>
+      <div id="groupList"></div>
+    </section>
     <section class="card">
       <h2>เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
       <div id="docList"></div>
@@ -34,11 +45,42 @@
   <script>
     const MAX = 20 * 1024 * 1024;
     const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
+    const groupSelect = (groups, value) => {
+      const s = el("select", { "aria-label": "Group" }, el("option", { value: "", textContent: NO_GROUP }),
+        ...groups.map((g) => el("option", { value: g.id, textContent: g.name })));
+      s.value = value ?? "";
+      return s;
+    };
+    const run = async (fn) => { try { await fn(); loadDocs(); } catch (e) { alert(e.message); } };
+
+    function renderGroups(groups, docs) {
+      const keep = $("docGroup").value;
+      $("docGroup").replaceWith(Object.assign(groupSelect(groups, keep), { id: "docGroup" }));
+      $("groupList").replaceChildren(...(groups.length ? groups.map((g) => {
+        const rename = el("button", { type: "button", className: "small secondary", textContent: "เปลี่ยนชื่อ" });
+        rename.onclick = () => {
+          const name = prompt("ชื่อกลุ่มใหม่", g.name);
+          if (name && name !== g.name) run(() => api("exdocGroupSave", { id: g.id, name }));
+        };
+        const del = el("button", { type: "button", className: "small danger", textContent: "ลบกลุ่ม" });
+        del.onclick = () => { if (confirm(`ลบกลุ่ม "${g.name}"? เอกสารจะย้ายไป "${NO_GROUP}"`)) run(() => api("exdocGroupDelete", { id: g.id })); };
+        return el("div", { className: "doc-row" },
+          el("div", { className: "grow" }, el("strong", { textContent: g.name }),
+            el("span", { className: "muted", textContent: ` · ${docs.filter((d) => d.group_id === g.id).length} เอกสาร` })),
+          rename, del);
+      }) : [el("p", { className: "muted", textContent: "ยังไม่มีกลุ่ม" })]));
+    }
+
+    $("addGroupBtn").onclick = () => {
+      const name = $("newGroup").value.trim();
+      if (name) run(async () => { await api("exdocGroupSave", { name }); $("newGroup").value = ""; });
+    };
 
     async function loadDocs() {
-      const docs = await api("listExDocs");
+      const { groups, docs } = await api("listExDocs");
+      renderGroups(groups, docs);
       $("docCount").textContent = docs.length;
-      $("docList").replaceChildren(...(docs.length ? docs.map((d) => {
+      const row = (d) => {
         const rename = el("button", { type: "button", className: "small secondary", textContent: "เปลี่ยนชื่อ" });
         rename.onclick = async () => {
           const title = prompt("ชื่อเอกสารใหม่", d.title);
@@ -50,11 +92,18 @@
           if (!confirm(`ลบ "${d.title}"? ลบแล้วกู้คืนไม่ได้`)) return;
           try { await api("exdocDelete", { id: d.id }); loadDocs(); } catch (e) { alert(e.message); }
         };
+        const move = groupSelect(groups, d.group_id);
+        move.onchange = () => run(() => api("exdocSetGroup", { id: d.id, group_id: move.value || null }));
         return el("div", { className: "doc-row" },
           el("div", { className: "grow" }, el("a", { href: d.previewUrl, target: "_blank", textContent: d.title }),
             el("div", { className: "muted", textContent: `${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
-          rename, del);
-      }) : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
+          move, rename, del);
+      };
+      $("docList").replaceChildren(...(docs.length ? groupDocs(groups, docs).map((s) =>
+        el("details", { className: "doc-group", open: true },
+          el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
+          ...s.docs.map(row)))
+        : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
     }
 
     $("pdf").onchange = () => {
@@ -76,7 +125,7 @@
         body.append("", new File([f], f.name, { type: "application/pdf" }));
         const put = await fetch(signedUrl, { method: "PUT", body });
         if (!put.ok) throw new Error("upload failed (" + put.status + ")");
-        await api("exdocSave", { path, title: $("docTitle").value, name: f.name, size: f.size });
+        await api("exdocSave", { path, title: $("docTitle").value, name: f.name, size: f.size, group_id: $("docGroup").value || null });
         $("uploadMsg").textContent = "อัปโหลดแล้ว";
         $("uploadForm").reset();
         loadDocs();

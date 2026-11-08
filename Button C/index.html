@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
-  <h1>Ex Doc.</h1>
+  <h1>Example Document</h1>
   <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย</p>
   <p id="status" class="muted" role="status">Loading…</p>
   <div class="card" id="page" hidden>
@@ -18,23 +18,28 @@
     <div id="docList"></div>
   </div>
   <script>
-    let docs = [];
+    let groups = [], docs = [];
     const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
+    const docRow = (d) => el("div", { className: "doc-row" },
+      el("div", { className: "grow" }, el("strong", { textContent: d.title }),
+        el("div", { className: "muted", textContent: `${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
+      el("a", { className: "btn small", href: d.previewUrl, target: "_blank", textContent: "ดู (Preview)" }),
+      el("a", { className: "btn small secondary", href: d.downloadUrl, textContent: "ดาวน์โหลด" }));
 
     function render() {
       const q = $("q").value.trim().toLowerCase();
       const shown = docs.filter((d) => d.title.toLowerCase().includes(q));
-      $("docList").replaceChildren(...(shown.length ? shown.map((d) => el("div", { className: "doc-row" },
-        el("div", { className: "grow" }, el("strong", { textContent: d.title }),
-          el("div", { className: "muted", textContent: `${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
-        el("a", { className: "btn small", href: d.previewUrl, target: "_blank", textContent: "ดู (Preview)" }),
-        el("a", { className: "btn small secondary", href: d.downloadUrl, textContent: "ดาวน์โหลด" }),
-      )) : [el("p", { className: "muted", textContent: docs.length ? "ไม่พบเอกสาร" : "ยังไม่มีเอกสาร" })]));
+      // One open section per group; a search opens every matching group.
+      $("docList").replaceChildren(...(shown.length ? groupDocs(groups, shown).map((s) =>
+        el("details", { className: "doc-group", open: true },
+          el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
+          ...s.docs.map(docRow)))
+        : [el("p", { className: "muted", textContent: docs.length ? "ไม่พบเอกสาร" : "ยังไม่มีเอกสาร" })]));
     }
 
     $("q").oninput = render;
     start("member").then(async () => {
-      docs = await api("listExDocs"); // already sorted A–Z (Thai-aware) by the server
+      ({ groups, docs } = await api("listExDocs")); // both already sorted A–Z (Thai-aware) by the server
       $("status").hidden = true;
       $("page").hidden = false;
       render();
