@@ -367,3 +367,24 @@ caption { padding-bottom: 6px; }
 #acTable { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
 #acTable table { margin-top: 0; }
 #acTable th { position: sticky; top: 0; z-index: 1; background: #0e1114; }
+
+/* ---- Invoice: status track (ตั้งเบิก → … → เรียบร้อย) + ✏️ next to the price ---- */
+.inv-status { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.inv-status-name { font-size: 13px; font-weight: 600; }
+.inv-track { position: relative; width: 168px; height: 14px; margin: 0 6px; }
+.inv-track-line { position: absolute; left: 0; right: 0; top: 6px; height: 2px; border-radius: 2px; background: rgba(255, 255, 255, .12); }
+/* the fill shows the part of one full-width gradient, so each point keeps its own color */
+.inv-track-fill { position: absolute; left: 0; top: 5px; height: 4px; border-radius: 4px;
+  background: linear-gradient(90deg, #ff8a3d, #ffc23d 30%, #3ddc84 66%, #4f8cff) 0 0 / 168px 100% no-repeat; box-shadow: 0 0 8px var(--c); }
+.inv-track-fill:not(.empty)::after { /* arrow running along the filled part, left to right */
+  content: ""; position: absolute; top: -4px; left: 0; border: 6px solid transparent; border-left: 8px solid #fff; border-right: 0;
+  filter: drop-shadow(0 0 4px var(--c)); animation: inv-run 1.8s ease-in-out infinite; }
+@keyframes inv-run { 0% { left: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { left: calc(100% - 16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .inv-track-fill:not(.empty)::after { animation: none; left: calc(50% - 4px); } }
+.inv-track-fill.empty { width: 0; box-shadow: none; }
+.inv-node { position: absolute; top: 3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; box-sizing: border-box; background: #0b0d10; border: 2px solid rgba(255, 255, 255, .22); }
+.inv-node.done { background: var(--c); border-color: var(--c); }
+.inv-node.now { top: 0; width: 14px; height: 14px; margin-left: -7px; background: var(--c); border: 2px solid #0b0d10; box-shadow: 0 0 0 2px var(--c), 0 0 12px var(--c); }
+.inv-price { display: flex; align-items: center; gap: 6px; }
+.inv-row .inv-edit { width: 32px; height: 32px; padding: 0; margin: 0; display: grid; place-items: center; font-size: 15px; border-radius: 10px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line-2); box-shadow: none; }
+.inv-row .inv-edit:hover { border-color: var(--cyan); background: rgba(17, 69, 84, .4); }

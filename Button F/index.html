@@ -79,14 +79,26 @@
           el("div", { className: "muted small-note", textContent: dates }),
           inv.note && el("div", { className: "muted pre", textContent: inv.note })),
         el("div", { className: "inv-side" },
-          el("span", { className: `status-chip s${STATUS.indexOf(inv.status)}`, textContent: inv.status }),
-          el("strong", { className: "inv-amount", textContent: "฿" + baht(inv.amount) })));
-      if (isAdmin) {
-        const edit = el("button", { type: "button", className: "small secondary", textContent: "แก้ไข" });
-        edit.onclick = () => openForm(inv);
-        row.lastChild.append(edit);
-      }
+          statusTrack(inv.status),
+          el("div", { className: "inv-price" },
+            el("strong", { className: "inv-amount", textContent: "฿" + baht(inv.amount) }),
+            isAdmin && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openForm(inv) }))));
       return row;
+    }
+
+    // Status as a track: 5 points left -> right, filled with an orange -> yellow -> green -> blue gradient up to the
+    // current point, ending in an arrow. The status name is always written too, so color is never the only cue.
+    const STEP_COLOR = ["#ff8a3d", "#ffc23d", "#b8e03d", "#3dd6a0", "#4f8cff"]; // sampled along the gradient
+    function statusTrack(status) {
+      const i = Math.max(0, STATUS.indexOf(status)), last = STATUS.length - 1;
+      const track = el("div", { className: "inv-track", role: "img", ariaLabel: `สถานะ ${status} (ขั้น ${i + 1}/${last + 1})` },
+        el("span", { className: "inv-track-line" }),
+        el("span", { className: "inv-track-fill" + (i ? "" : " empty"), style: `width:${(i / last) * 100}%;--c:${STEP_COLOR[i]}` }),
+        ...STATUS.map((s, k) => el("span", {
+          className: "inv-node" + (k < i ? " done" : k === i ? " now" : ""), title: s,
+          style: `left:${(k / last) * 100}%;--c:${STEP_COLOR[k]}`,
+        })));
+      return el("div", { className: "inv-status" }, el("span", { className: "inv-status-name", style: `color:${STEP_COLOR[i]}`, textContent: status }), track);
     }
 
     function render() {
