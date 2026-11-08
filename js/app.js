@@ -346,3 +346,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }).observe(document.body, { childList: true, subtree: true });
 });
+
+/**
+ * Open a file link in a way the LINE app can handle. Inside LINE: a preview opens in LINE's browser, a download in
+ * the phone's own browser (LINE's browser often cannot save files). Elsewhere: preview in a new tab, download here.
+ */
+function openFile(url, download = false) {
+  if (window.liff?.isInClient?.()) return liff.openWindow({ url, external: download });
+  if (download) location.href = url; // served as an attachment: the page stays
+  else window.open(url, "_blank", "noopener");
+}

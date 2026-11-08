@@ -28,8 +28,9 @@
     </section>
     <section class="card">
       <h2>รายงานประจำเดือน · Monthly reports</h2>
-      <p class="muted small-note">ดูหรือดาวน์โหลดได้ในแอป · เปิดแล้วได้ฉบับล่าสุดเสมอ</p>
+      <p class="muted small-note">ฉบับล่าสุด ดูหรือดาวน์โหลดได้ในแอป · ฉบับก่อนๆ เปิดในโฟลเดอร์ Google Drive</p>
       <div id="reportList"><p class="loading" role="status"></p></div>
+      <p id="reportMsg" class="small-note" role="status"></p>
     </section>
     <section class="card">
       <h2>ผลงาน · Performance</h2>
@@ -55,28 +56,38 @@
   <script>
     const busy = (b, on) => { b.disabled = on; b.classList.toggle("busy", on); };
     async function openReport(r, mode, btn) {
-      // the preview window is opened before the wait, so phones do not block it as a pop-up
-      const win = mode === "view" ? window.open("about:blank", "_blank") : null;
+      // computer: open the preview tab before the wait, so the pop-up blocker allows it.
+      // LINE app: openFile (preview in LINE's browser, download in the phone's browser, which can save files).
+      const inLine = liff.isInClient();
+      const win = mode === "view" && !inLine ? window.open("about:blank", "_blank") : null;
       busy(btn, true);
+      $("reportMsg").textContent = "กำลังเตรียมไฟล์…";
       try {
         const { previewUrl, downloadUrl } = await api("reportUrl", { id: r.id });
-        const url = mode === "view" ? previewUrl : downloadUrl;
-        if (win) win.location = url; else location.href = url; // download = attachment, the page stays
-      } catch (err) { win?.close(); alert(err.message); }
+        if (win) win.location = previewUrl;
+        else openFile(mode === "view" ? previewUrl : downloadUrl, mode !== "view");
+        $("reportMsg").textContent = "";
+      } catch (err) { win?.close(); $("reportMsg").textContent = "❌ " + err.message; }
       busy(btn, false);
     }
     async function loadMonthly() {
-      const list = await api("listReports");
-      $("reportList").replaceChildren(...(list.length ? list.map((r) => {
+      const { latest, count, folderUrl } = await api("listReports");
+      const rows = latest.map((r) => {
         const view = el("button", { type: "button", className: "small", textContent: "ดู (Preview)" });
         const down = el("button", { type: "button", className: "small secondary", textContent: "ดาวน์โหลด" });
         view.onclick = () => openReport(r, "view", view);
         down.onclick = () => openReport(r, "download", down);
         return el("div", { className: "doc-row" },
-          el("div", { className: "grow" }, el("strong", { textContent: r.name.replace(/\.pdf$/i, "") }),
+          el("div", { className: "grow" }, el("span", { className: "badge on", textContent: "ล่าสุด" }), " ",
+            el("strong", { textContent: r.name.replace(/\.pdf$/i, "") }),
             el("div", { className: "muted", textContent: "อัปเดต " + thDate(r.modified.slice(0, 10)) })),
           view, down);
-      }) : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]));
+      });
+      // older reports: opened in the Google Drive folder (the phone's browser / Drive app inside LINE)
+      const older = folderUrl && el("button", { type: "button", className: "small secondary", onclick: () => openFile(folderUrl, true),
+        textContent: count > 1 ? `📂 รายงานเดือนก่อนๆ (${count - 1}) · เปิด Google Drive` : "📂 เปิดโฟลเดอร์ Google Drive" });
+      $("reportList").replaceChildren(...(rows.length ? rows : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]),
+        ...(older ? [el("div", { className: "report-older" }, older)] : []));
     }
     start("member").then((me) => {
       initReports();

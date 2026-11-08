@@ -18,11 +18,12 @@
   <script>
     let groups = [], docs = [];
     const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
+    // ดู only when the browser can show it (PDF, pictures); Word files are download-only. openFile handles the LINE app.
     const docRow = (d) => el("div", { className: "doc-row" },
       el("div", { className: "grow" }, el("strong", { textContent: d.title }),
-        el("div", { className: "muted", textContent: `${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
-      el("a", { className: "btn small", href: d.previewUrl, target: "_blank", textContent: "ดู (Preview)" }),
-      el("a", { className: "btn small secondary", href: d.downloadUrl, textContent: "ดาวน์โหลด" }));
+        el("div", { className: "muted", textContent: `${fileType(d.name)} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
+      d.preview && el("button", { type: "button", className: "small", textContent: "ดู (Preview)", onclick: () => openFile(d.previewUrl) }),
+      el("button", { type: "button", className: "small secondary", textContent: "ดาวน์โหลด", onclick: () => openFile(d.downloadUrl, true) }));
 
     function render() {
       const q = $("q").value.trim().toLowerCase();
@@ -31,7 +32,7 @@
       $("docList").replaceChildren(...(shown.length ? groupDocs(groups, shown).map((s) =>
         el("details", { className: "doc-group", open: true },
           el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
-          ...s.docs.map(docRow)))
+          ...docsBySubgroup(s.docs, docRow)))
         : [el("p", { className: "muted", textContent: docs.length ? "ไม่พบเอกสาร" : "ยังไม่มีเอกสาร" })]));
     }
 

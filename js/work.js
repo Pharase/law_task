@@ -252,3 +252,18 @@ async function initNews(me) {
   items = await api("listNews");
   render();
 }
+
+/** Inside one group: documents with no subfolder first, then one open section per subfolder (A-Z). */
+function docsBySubgroup(docs, rowFn) {
+  const subs = [...new Set(docs.map((d) => d.subgroup).filter(Boolean))].sort((a, b) => a.localeCompare(b, "th"));
+  return [
+    ...docs.filter((d) => !d.subgroup).map(rowFn),
+    ...subs.map((sg) => {
+      const inside = docs.filter((d) => d.subgroup === sg);
+      return el("details", { className: "doc-sub", open: true },
+        el("summary", {}, "📁 ", el("span", { textContent: sg }), el("span", { className: "badge", textContent: inside.length })),
+        ...inside.map(rowFn));
+    }),
+  ];
+}
+const fileType = (name) => (/\.docx?$/i.test(name) ? "Word" : /\.(jpe?g|png)$/i.test(name) ? "รูป" : "PDF");

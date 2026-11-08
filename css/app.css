@@ -406,3 +406,8 @@ caption { padding-bottom: 6px; }
   box-shadow: 0 0 0 2px #0b0d10, 0 0 10px rgba(255, 59, 92, .6); }
 .inv-warn { margin: 8px 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; color: #ffd27a; background: rgba(255, 199, 90, .08); border: 1px solid rgba(255, 199, 90, .4); }
 .inv-warn ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink-2); }
+/* Example Document subfolders inside a group */
+.doc-sub { margin: 4px 0 4px 14px; padding-left: 10px; border-left: 2px solid rgba(2, 215, 244, .25); }
+.doc-sub > summary { cursor: pointer; padding: 8px 0; font-weight: 500; color: var(--ink-2); }
+.doc-sub > summary .badge { margin-left: 8px; }
+.report-older { display: flex; justify-content: flex-end; margin-top: 10px; }

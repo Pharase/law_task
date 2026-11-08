@@ -15,17 +15,29 @@
 
   <div id="page" hidden>
     <form class="card" id="uploadForm">
-      <h2>อัปโหลด PDF</h2>
+      <h2>อัปโหลดเอกสาร</h2>
       <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย: สมาชิกดูและดาวน์โหลดได้อย่างเดียว · ไม่ถูกลบอัตโนมัติ</p>
-      <label for="pdf">ไฟล์ PDF (ไม่เกิน 20 MB)</label>
-      <input type="file" id="pdf" accept="application/pdf,.pdf" required>
+      <label for="pdf">ไฟล์ PDF, Word (.doc/.docx) หรือรูป (.jpg/.png) ไม่เกิน 20 MB</label>
+      <input type="file" id="pdf" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
       <label for="docTitle">ชื่อเอกสาร · Title</label>
       <input id="docTitle" maxlength="200" required>
       <label for="docGroup">กลุ่ม · Group</label>
       <select id="docGroup"></select>
+      <label for="docSub">โฟลเดอร์ย่อย · Subfolder (ไม่บังคับ)</label>
+      <input id="docSub" maxlength="100" placeholder="เช่น ตัวอย่างเอกสารแนบบุริม">
+
       <button>อัปโหลด</button>
       <p id="uploadMsg" role="status"></p>
     </form>
+    <!-- Upload a whole folder: each top folder = a group (created if missing); files right in the chosen folder are skipped -->
+    <section class="card">
+      <h2>อัปโหลดทั้งโฟลเดอร์ · Upload a folder</h2>
+      <p class="muted small-note">เลือกโฟลเดอร์หลัก (เช่น src) · โฟลเดอร์ย่อยชั้นแรก = ชื่อกลุ่ม · ไฟล์ในโฟลเดอร์ย่อยลึกลงไป ชื่อจะมีชื่อโฟลเดอร์นำหน้า · ข้ามไฟล์ที่อัปโหลดแล้ว (ชื่อเดียวกันในกลุ่มเดียวกัน) และไฟล์ที่ไม่ใช่ PDF / Word / รูป</p>
+      <input type="file" id="folderPick" webkitdirectory multiple aria-label="เลือกโฟลเดอร์">
+      <div id="folderPlan" class="muted small-note"></div>
+      <button type="button" class="small" id="folderGo" hidden>อัปโหลดทั้งหมด</button>
+      <p id="folderMsg" role="status"></p>
+    </section>
     <section class="card">
       <h2>กลุ่มเอกสาร · Groups</h2>
       <p class="muted">ลบกลุ่มแล้ว เอกสารในกลุ่มจะย้ายไป "อื่นๆ · ไม่มีกลุ่ม" (ไม่ลบเอกสาร)</p>
@@ -93,38 +105,100 @@
         };
         const move = groupSelect(groups, d.group_id);
         move.onchange = () => run(() => api("exdocSetGroup", { id: d.id, group_id: move.value || null }));
+        const sub = el("button", { type: "button", className: "small secondary", textContent: "📁 โฟลเดอร์ย่อย", title: d.subgroup || "ไม่มีโฟลเดอร์ย่อย" });
+        sub.onclick = () => {
+          const name = prompt("ชื่อโฟลเดอร์ย่อยในกลุ่มนี้ (เว้นว่าง = ไม่อยู่ในโฟลเดอร์ย่อย)", d.subgroup || "");
+          if (name !== null && name.trim() !== (d.subgroup || "")) run(() => api("exdocSetSubgroup", { id: d.id, subgroup: name }));
+        };
         return el("div", { className: "doc-row" },
           el("div", { className: "grow" }, el("a", { href: d.previewUrl, target: "_blank", textContent: d.title }),
-            el("div", { className: "muted", textContent: `${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
-          move, rename, del);
+            el("div", { className: "muted", textContent: `${fileType(d.name)} · ${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
+          move, sub, rename, del);
       };
       $("docList").replaceChildren(...(docs.length ? groupDocs(groups, docs).map((s) =>
         el("details", { className: "doc-group", open: true },
           el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
-          ...s.docs.map(row)))
+          ...docsBySubgroup(s.docs, row)))
         : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
+    }
+
+    const OK_TYPE = /\.(pdf|docx?|jpe?g|png)$/i; // same list as the server (exdocTypes.ts)
+    const baseName = (n) => n.replace(/\.[^.]+$/, "");
+
+    /** One file to Storage (signed upload URL), then its row. */
+    async function uploadOne(f, title, groupId, subgroup = "") {
+      const { path, signedUrl, contentType } = await api("exdocUploadUrl", { name: f.name, size: f.size });
+      const body = new FormData(); // same request shape as supabase-js uploadToSignedUrl
+      body.append("cacheControl", "3600");
+      body.append("", new File([f], f.name, { type: contentType }));
+      const put = await fetch(signedUrl, { method: "PUT", body });
+      if (!put.ok) throw new Error("upload failed (" + put.status + ")");
+      await api("exdocSave", { path, title, name: f.name, size: f.size, group_id: groupId || null, subgroup });
     }
 
     $("pdf").onchange = () => {
       const f = $("pdf").files[0];
-      if (f && !$("docTitle").value) $("docTitle").value = f.name.replace(/\.pdf$/i, "");
+      if (f && !$("docTitle").value) $("docTitle").value = baseName(f.name);
+    };
+
+    // ---- whole folder: <chosen>/<group>/[sub/...]/file ----
+    let plan = [];
+    $("folderPick").onchange = () => {
+      const files = [...$("folderPick").files];
+      plan = [];
+      let skipped = 0;
+      for (const f of files) {
+        const parts = (f.webkitRelativePath || f.name).split("/");
+        // parts[0] = the chosen folder; files directly inside it have no group folder
+        if (parts.length < 3 || !OK_TYPE.test(f.name) || f.size > MAX) { skipped++; continue; }
+        // deeper folders = the subfolder (several levels are joined with " / ")
+        plan.push({ file: f, group: parts[1].trim(), subgroup: parts.slice(2, -1).join(" / ").slice(0, 100), title: baseName(f.name).slice(0, 200) });
+      }
+      const groups = [...new Set(plan.map((p) => p.group))];
+      $("folderPlan").replaceChildren(
+        el("p", { textContent: `พบ ${plan.length} ไฟล์ใน ${groups.length} กลุ่ม · ข้าม ${skipped} ไฟล์ (ชนิดไม่รองรับ / ใหญ่เกิน 20 MB / อยู่นอกโฟลเดอร์กลุ่ม)` }),
+        el("ul", {}, ...groups.map((g) => {
+          const inG = plan.filter((p) => p.group === g), subs = [...new Set(inG.map((p) => p.subgroup).filter(Boolean))];
+          return el("li", { textContent: `${g} (${inG.length})${subs.length ? " · โฟลเดอร์ย่อย: " + subs.join(", ") : ""}` });
+        })));
+      $("folderGo").hidden = !plan.length;
+      $("folderMsg").textContent = "";
+    };
+    $("folderGo").onclick = async () => {
+      const btn = $("folderGo");
+      btn.disabled = true;
+      let done = 0, same = 0, failed = 0;
+      try {
+        let { groups, docs } = await api("listExDocs");
+        const idOf = new Map(groups.map((g) => [g.name, g.id]));
+        for (const g of new Set(plan.map((p) => p.group))) {
+          if (!idOf.has(g)) idOf.set(g, (await api("exdocGroupSave", { name: g })).id); // create missing groups
+        }
+        // same group + subfolder + file name = already uploaded (a .doc and a .pdf of one form both go up)
+        const key = (gid, sub, name) => `${gid}|${sub || ""}|${name}`;
+        const have = new Set(docs.map((d) => key(d.group_id, d.subgroup, d.name)));
+        for (const [i, p] of plan.entries()) {
+          $("folderMsg").textContent = `กำลังอัปโหลด ${i + 1}/${plan.length}: ${p.subgroup ? p.subgroup + " / " : ""}${p.title}`;
+          const gid = idOf.get(p.group);
+          if (have.has(key(gid, p.subgroup, p.file.name))) { same++; continue; } // already uploaded: running again never duplicates
+          try { await uploadOne(p.file, p.title, gid, p.subgroup); done++; have.add(key(gid, p.subgroup, p.file.name)); }
+          catch (err) { failed++; console.error(p.title, err); }
+        }
+        $("folderMsg").textContent = `เสร็จแล้ว: อัปโหลด ${done} · มีอยู่แล้ว ${same} · ไม่สำเร็จ ${failed}`;
+      } catch (err) { $("folderMsg").textContent = "Error: " + err.message; }
+      btn.disabled = false;
+      loadDocs();
     };
 
     $("uploadForm").onsubmit = async (e) => {
       e.preventDefault();
       const f = $("pdf").files[0];
-      if (f.type !== "application/pdf" && !/\.pdf$/i.test(f.name)) return void ($("uploadMsg").textContent = "PDF เท่านั้น");
+      if (!OK_TYPE.test(f.name)) return void ($("uploadMsg").textContent = "รองรับ PDF, Word (.doc/.docx) หรือรูป (.jpg/.png)");
       if (f.size > MAX) return void ($("uploadMsg").textContent = "ไฟล์ใหญ่เกิน 20 MB");
       const btn = e.submitter; btn.disabled = true;
       try {
         $("uploadMsg").textContent = "กำลังอัปโหลด…";
-        const { path, signedUrl } = await api("exdocUploadUrl", { name: f.name, size: f.size });
-        const body = new FormData(); // same request shape as supabase-js uploadToSignedUrl
-        body.append("cacheControl", "3600");
-        body.append("", new File([f], f.name, { type: "application/pdf" }));
-        const put = await fetch(signedUrl, { method: "PUT", body });
-        if (!put.ok) throw new Error("upload failed (" + put.status + ")");
-        await api("exdocSave", { path, title: $("docTitle").value, name: f.name, size: f.size, group_id: $("docGroup").value || null });
+        await uploadOne(f, $("docTitle").value, $("docGroup").value, $("docSub").value);
         $("uploadMsg").textContent = "อัปโหลดแล้ว";
         $("uploadForm").reset();
         loadDocs();

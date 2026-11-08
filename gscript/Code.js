@@ -43,7 +43,7 @@ function dispatch(body) {
     case "setup": setup(); return { ok: true };
     case "replaceMembers": return withLock(function () { replaceMembers(body.rows || []); return { ok: true }; });
     case "deleteRows": return withLock(function () { return { deleted: deleteRows(body.tab, body.key, body.values || []) }; });
-    case "listReports": return { files: listReports() };
+    case "listReports": return { files: listReports(), folderUrl: reportFolder().getUrl() }; // folderUrl: "older reports" button
     case "reportFile": return reportFile(String(body.id || ""));
   }
   return { error: "unknown op" };

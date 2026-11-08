@@ -1,9 +1,10 @@
-// Ex Doc library (spec "Button C"). PDFs go straight from the admin's browser to Storage via a signed upload URL.
+// Ex Doc library (spec "Button C"). Files (PDF, Word, pictures; see exdocTypes.ts) go straight from the admin's
+// browser to Storage via a signed upload URL.
+import { fileKind, isExDocPath } from "./exdocTypes.ts";
 import { db, found, HttpError, type Me, must } from "./shared.ts";
 
 const exdocs = db.storage.from("exdocs");
 const MAX_BYTES = 20 * 1024 * 1024;
-const PATH = /^[0-9a-f-]{36}\.pdf$/;
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -12,6 +13,13 @@ function checkTitle(title: unknown): string {
   const t = String(title ?? "").trim();
   if (!t || t.length > 200) throw new HttpError(400, "title is required (max 200 characters)");
   return t;
+}
+
+/** Optional subfolder name inside a group: blank -> null. */
+function subgroupOf(v: unknown): string | null {
+  const n = String(v ?? "").trim();
+  if (n.length > 100) throw new HttpError(400, "subfolder name is over 100 characters");
+  return n || null;
 }
 
 function checkGroupName(name: unknown): string {
@@ -31,7 +39,7 @@ export async function memberExDocActions(action: string, _body: Row, _me: Me): P
   if (action !== "listExDocs") return undefined;
   const groups: Row[] = must(await db.from("exdoc_groups").select("id, name"));
   groups.sort((a, b) => a.name.localeCompare(b.name, "th"));
-  const docs: Row[] = must(await db.from("exdocs").select("id, title, name, size, path, created_at, group_id"));
+  const docs: Row[] = must(await db.from("exdocs").select("id, title, name, size, path, created_at, group_id, subgroup"));
   docs.sort((a, b) => a.title.localeCompare(b.title, "th"));
   if (!docs.length) return { groups, docs: [] };
   const urls = must(await exdocs.createSignedUrls(docs.map((d) => d.path), 3600));
@@ -40,7 +48,8 @@ export async function memberExDocActions(action: string, _body: Row, _me: Me): P
     docs: docs.map(({ path: _p, ...d }, i) => {
       const previewUrl = urls[i]?.signedUrl ?? null;
       // Storage serves an attachment with this file name when `download=` is added (what the SDK does too).
-      return { ...d, previewUrl, downloadUrl: previewUrl && `${previewUrl}&download=${encodeURIComponent(d.name)}` };
+      // preview: the browser can show it (PDF, pictures); Word files are download-only
+      return { ...d, preview: fileKind(d.name)?.preview ?? true, previewUrl, downloadUrl: previewUrl && `${previewUrl}&download=${encodeURIComponent(d.name)}` };
     }),
   };
 }
@@ -50,28 +59,34 @@ export async function adminExDocActions(action: string, body: Row, me: Me): Prom
     case "exdocUploadUrl": {
       const name = String(body.name ?? "");
       const size = Number(body.size);
-      if (!/\.pdf$/i.test(name)) throw new HttpError(400, "only PDF files");
+      const kind = fileKind(name);
+      if (!kind) throw new HttpError(400, "only PDF, Word (.doc/.docx) or pictures (.jpg/.png)");
       if (!(size > 0) || size > MAX_BYTES) throw new HttpError(400, "file must be under 20 MB");
-      const path = `${crypto.randomUUID()}.pdf`;
+      const path = `${crypto.randomUUID()}.${kind.ext}`;
       const { signedUrl } = must(await exdocs.createSignedUploadUrl(path));
-      return { path, signedUrl };
+      return { path, signedUrl, contentType: kind.mime };
     }
 
     case "exdocSave": {
       const path = String(body.path ?? "");
-      if (!PATH.test(path)) throw new HttpError(400, "bad path");
+      if (!isExDocPath(path)) throw new HttpError(400, "bad path");
       // The object must really be there (upload finished) before we list it.
       const probe = await exdocs.createSignedUrl(path, 60);
       if (probe.error) throw new HttpError(400, "upload not found, try again");
       return must(await db.from("exdocs").insert({
         path, title: checkTitle(body.title), name: String(body.name ?? "document.pdf").slice(0, 255),
         size: Number(body.size) || 0, uploaded_by: me.line_user_id, group_id: await groupId(body.group_id),
-      }).select("id, title, name, size, created_at, group_id").single());
+        subgroup: subgroupOf(body.subgroup),
+      }).select("id, title, name, size, created_at, group_id, subgroup").single());
     }
 
     case "exdocRename":
       return found(must(await db.from("exdocs").update({ title: checkTitle(body.title) })
         .eq("id", String(body.id)).select("id, title").maybeSingle()), "document");
+
+    case "exdocSetSubgroup": // move a document into a subfolder of its group (blank = out of any subfolder)
+      return found(must(await db.from("exdocs").update({ subgroup: subgroupOf(body.subgroup) })
+        .eq("id", String(body.id)).select("id, subgroup").maybeSingle()), "document");
 
     case "exdocSetGroup":
       return found(must(await db.from("exdocs").update({ group_id: await groupId(body.group_id) })
