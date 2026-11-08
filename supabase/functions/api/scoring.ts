@@ -77,3 +77,8 @@ export function scale(values: Record<string, number>): Record<string, number> {
     Object.entries(values).map(([k, x]) => [k, max === min ? 5 : 1 + (4 * (x - min)) / (max - min)]),
   );
 }
+
+/** Who sees which performance rows: admins see everyone; anyone else only their own row (never other people's). */
+export function visibleRows<T extends { line_user_id: string }>(rows: T[], me: { line_user_id: string; role: string }): T[] {
+  return me.role === "admin" ? rows : rows.filter((r) => r.line_user_id === me.line_user_id);
+}

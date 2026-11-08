@@ -1,7 +1,7 @@
 // Task actions (spec "Button A"). Data lives in the Google Sheet (sheet.ts); rules live in review.ts / scoring.ts / sheetRows.ts.
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
-import { performanceRows, type ScoredTask } from "./scoring.ts";
+import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { scoredSends, type Task, taskCells } from "./sheetRows.ts";
@@ -90,7 +90,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       }));
       const names = Object.fromEntries(tasks.map((t) => [t.owner, role.get(t.owner)!.name]));
       const rows = performanceRows(scored, names); // scaled against everyone, then trimmed for members
-      return { from, to, rows: me.role === "admin" ? rows : rows.filter((r) => r.line_user_id === me.line_user_id) };
+      return { from, to, rows: visibleRows(rows, me) }; // members: their own row only, filtered here on the server
     }
 
     case "myTasks":

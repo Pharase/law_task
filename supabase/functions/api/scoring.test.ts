@@ -64,3 +64,12 @@ test("memberScores skips tasks that aren't approved", () => {
   const m = memberScores([{ owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "pending")] }]);
   assert.deepEqual(m, {});
 });
+
+test("performance rows: admins see everyone, anyone else only their own row", async () => {
+  const { visibleRows } = await import("./scoring.ts");
+  const rows = [{ line_user_id: "U1", name: "a" }, { line_user_id: "U2", name: "b" }];
+  assert.deepEqual(visibleRows(rows, { line_user_id: "UA", role: "admin" }).map((r) => r.line_user_id), ["U1", "U2"]);
+  assert.deepEqual(visibleRows(rows, { line_user_id: "U2", role: "member" }).map((r) => r.line_user_id), ["U2"]);
+  assert.deepEqual(visibleRows(rows, { line_user_id: "U9", role: "member" }), []);
+  assert.deepEqual(visibleRows(rows, { line_user_id: "U1", role: "revoked" }).map((r) => r.line_user_id), ["U1"]);
+});
