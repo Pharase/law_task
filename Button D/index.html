@@ -14,6 +14,11 @@
   <p id="status" class="loading" role="status"></p>
   <div id="page" hidden>
     <section class="card">
+      <h2>รายงานประจำเดือน · Monthly reports</h2>
+      <p class="muted small-note">ดูหรือดาวน์โหลดได้ในแอป · เปิดแล้วได้ฉบับล่าสุดเสมอ</p>
+      <div id="reportList"><p class="loading" role="status"></p></div>
+    </section>
+    <section class="card">
       <h2>ผลงาน · Performance</h2>
       <p class="muted">Members see their own scores; admins see the whole team.</p>
       <div class="row filters">
@@ -26,7 +31,35 @@
     </section>
   </div>
   <script>
-    start("member").then(initReports).catch((err) => {
+    const busy = (b, on) => { b.disabled = on; b.classList.toggle("busy", on); };
+    async function openReport(r, mode, btn) {
+      // the preview window is opened before the wait, so phones do not block it as a pop-up
+      const win = mode === "view" ? window.open("about:blank", "_blank") : null;
+      busy(btn, true);
+      try {
+        const { previewUrl, downloadUrl } = await api("reportUrl", { id: r.id });
+        const url = mode === "view" ? previewUrl : downloadUrl;
+        if (win) win.location = url; else location.href = url; // download = attachment, the page stays
+      } catch (err) { win?.close(); alert(err.message); }
+      busy(btn, false);
+    }
+    async function loadMonthly() {
+      const list = await api("listReports");
+      $("reportList").replaceChildren(...(list.length ? list.map((r) => {
+        const view = el("button", { type: "button", className: "small", textContent: "ดู (Preview)" });
+        const down = el("button", { type: "button", className: "small secondary", textContent: "ดาวน์โหลด" });
+        view.onclick = () => openReport(r, "view", view);
+        down.onclick = () => openReport(r, "download", down);
+        return el("div", { className: "doc-row" },
+          el("div", { className: "grow" }, el("strong", { textContent: r.name.replace(/\.pdf$/i, "") }),
+            el("div", { className: "muted", textContent: "อัปเดต " + thDate(r.modified.slice(0, 10)) })),
+          view, down);
+      }) : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]));
+    }
+    start("member").then(() => {
+      initReports();
+      loadMonthly().catch((err) => { $("reportList").textContent = "Error: " + err.message; });
+    }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });

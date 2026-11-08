@@ -93,6 +93,12 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 7. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone**. Copy the `/exec` URL.
 8. **Give the URL and secret to Supabase:** `npx supabase secrets set GSHEET_URL=<exec url> GSHEET_SECRET=<the same string>`.
 
+**Invoices and monthly reports (added later; do once):**
+1. In the Apps Script editor, run **`setup`** again. It adds the **Invoices** tab and a **type** column (บ้านจัดสรร / อาคารชุด dropdown) to **Buildings**; existing data stays. Set each building's type there once.
+2. Put the monthly reports in one Google Drive folder (PDF, Google Docs, Sheets or Slides; Docs/Sheets/Slides are exported to PDF). In **Project Settings → Script properties** add `REPORT_FOLDER_ID` = the folder id from its URL (`/folders/<id>`).
+3. Run **`checkReports`** once: Google asks for Drive permission, and the log lists the files the app will show.
+4. **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
+
 After changing the script later: `clasp push`, then **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
 
 **Hand-edit rules.** Edit freely: `building`, `title`, `details`, `tags`, `owner_name` (= reassign to that person), `due_on`. Leave alone: `id`, `owner_id`, `state`, `current_due_on`, `fix_round` and the Sends and Members tabs (Google shows a warning). Don't copy whole rows: a duplicate id is flagged. A bad row (typo'd date, unknown building or name) is hidden from the app and listed under "Sheet rows to fix" on `admin/tasks.html`.
@@ -118,9 +124,9 @@ Rich menu layout: a 3×2 grid where A+B is one wide tile. The same buttons form 
 |---|---|---|
 | A (A+B) | Work · งานรอดำเนินการ (home page) | `https://liff.line.me/2012450429-k3WOCwtO` or `…/Button%20A/` |
 | C | Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย | `https://liff.line.me/2012450429-k3WOCwtO/Button%20C/` |
-| D | Reports · performance scores | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
+| D | Reports · รายงานประจำเดือน (from Google Drive, view/download in the app) and performance scores | `https://liff.line.me/2012450429-k3WOCwtO/Button%20D/` |
 | E | Property Right · อายัดและแจ้งบุริมสิทธิ (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20E/` |
-| F | Invoice · ใบแจ้งหนี้ค้างเบิก (coming soon) | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
+| F | Invoice · ใบแจ้งหนี้ค้างเบิก: everyone sees all invoices (filter บ้านจัดสรร / อาคารชุด); admins add and edit | `https://liff.line.me/2012450429-k3WOCwtO/Button%20F/` |
 
 ## Adding a feature
 

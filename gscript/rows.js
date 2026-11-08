@@ -6,7 +6,9 @@ var HEADERS = {
     "fix_round", "created_by", "created_at", "member_notified_at"],
   Sends: ["id", "task_id", "sent_on", "sent_at", "due_on", "outcome", "fix_note", "next_due_on", "reviewed_by",
     "reviewed_at", "member_notified_at"],
-  Buildings: ["name"],
+  Buildings: ["name", "type"], // type: บ้านจัดสรร or อาคารชุด, set once per building
+  Invoices: ["id", "building", "subject", "amount", "billed_on", "transfer_on", "receipt_on", "status", "note",
+    "created_by", "created_at", "updated_at"],
   Members: ["line_user_id", "name", "role"],
 };
 

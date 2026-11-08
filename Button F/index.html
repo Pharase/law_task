@@ -6,18 +6,150 @@
   <title>Invoice – law_task</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
-  <div class="card" id="page" hidden>
-    <h2>ใบแจ้งหนี้ค้างเบิก</h2>
-    <p class="muted">Coming soon.</p>
+  <div id="page" hidden>
+    <section class="card">
+      <div class="row card-head">
+        <h2 class="grow">ใบแจ้งหนี้ค้างเบิก · Invoices <span id="invCount" class="badge"></span></h2>
+        <button type="button" class="small" id="addBtn" hidden>+ เพิ่มรายการเบิก</button>
+      </div>
+
+      <!-- Admins: add / edit one invoice -->
+      <form id="invForm" class="inv-form" hidden>
+        <input type="hidden" name="id">
+        <label for="fBuilding">นิติบุคคล · Building</label>
+        <select id="fBuilding" name="building" required></select>
+        <p class="muted small-note" id="fType"></p>
+        <label for="fSubject">ขอเบิกเรื่อง · Subject</label>
+        <input id="fSubject" name="subject" maxlength="300" required>
+        <label for="fAmount">ยอด (บาท) · Amount</label>
+        <input id="fAmount" name="amount" inputmode="decimal" placeholder="เช่น 1,500.00" required>
+        <div class="inv-dates">
+          <div><label for="fBilled">วันวางบิล</label><input type="date" id="fBilled" name="billed_on"></div>
+          <div><label for="fTransfer">วันโอน</label><input type="date" id="fTransfer" name="transfer_on"></div>
+          <div><label for="fReceipt">วันส่งใบเสร็จ</label><input type="date" id="fReceipt" name="receipt_on"></div>
+        </div>
+        <label for="fStatus">สถานะ · Status</label>
+        <select id="fStatus" name="status"></select>
+        <label for="fNote">หมายเหตุ · Note</label>
+        <textarea id="fNote" name="note" rows="2" maxlength="1000"></textarea>
+        <div class="row tools">
+          <button class="small">บันทึก · Save</button>
+          <button type="button" class="small secondary" id="cancelBtn">ยกเลิก</button>
+        </div>
+        <p id="formMsg" class="error" role="alert"></p>
+      </form>
+
+      <div class="row filters type-tabs" id="typeTabs" role="tablist" aria-label="ประเภท"></div>
+      <input type="search" id="q" placeholder="ค้นหา นิติบุคคล หรือ เรื่อง · Search" aria-label="Search invoices">
+      <div id="invList"></div>
+      <div id="invTotal" class="inv-total muted"></div>
+    </section>
   </div>
+
   <script>
-    start("member").then(() => {
+    const STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"];
+    const baht = (n) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let data = { invoices: [], buildings: [], types: [] }, tab = "all", isAdmin = false;
+
+    function renderTabs() {
+      const count = (t) => data.invoices.filter((i) => t === "all" || (t === "none" ? !i.type : i.type === t)).length;
+      const tabs = [["all", "ทั้งหมด"], ...data.types.map((t) => [t, t])];
+      if (count("none")) tabs.push(["none", "ไม่ระบุประเภท"]);
+      $("typeTabs").replaceChildren(...tabs.map(([key, label]) => {
+        const b = el("button", { type: "button", className: "small " + (key === tab ? "" : "secondary"), textContent: `${label} (${count(key)})` });
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(key === tab));
+        b.onclick = () => { tab = key; render(); };
+        return b;
+      }));
+    }
+
+    function invoiceRow(inv) {
+      const dates = [["วางบิล", inv.billed_on], ["โอน", inv.transfer_on], ["ใบเสร็จ", inv.receipt_on]]
+        .map(([k, v]) => `${k} ${v ? thDate(v) : "-"}`).join(" · ");
+      const row = el("div", { className: "inv-row" },
+        el("div", { className: "grow" },
+          el("strong", { textContent: inv.subject }),
+          el("div", { className: "muted", textContent: `${inv.building}${inv.type ? " · " + inv.type : ""}` }),
+          el("div", { className: "muted small-note", textContent: dates }),
+          inv.note && el("div", { className: "muted pre", textContent: inv.note })),
+        el("div", { className: "inv-side" },
+          el("span", { className: `status-chip s${STATUS.indexOf(inv.status)}`, textContent: inv.status }),
+          el("strong", { className: "inv-amount", textContent: "฿" + baht(inv.amount) })));
+      if (isAdmin) {
+        const edit = el("button", { type: "button", className: "small secondary", textContent: "แก้ไข" });
+        edit.onclick = () => openForm(inv);
+        row.lastChild.append(edit);
+      }
+      return row;
+    }
+
+    function render() {
+      renderTabs();
+      const q = $("q").value.trim().toLowerCase();
+      const shown = data.invoices.filter((i) =>
+        (tab === "all" || (tab === "none" ? !i.type : i.type === tab)) &&
+        (!q || i.subject.toLowerCase().includes(q) || i.building.toLowerCase().includes(q)));
+      $("invCount").textContent = data.invoices.length;
+      $("invList").replaceChildren(...(shown.length ? shown.map(invoiceRow)
+        : [el("p", { className: "muted", textContent: data.invoices.length ? "ไม่พบรายการ" : "ยังไม่มีรายการเบิก" })]));
+      const open = shown.filter((i) => i.status !== "เรียบร้อย");
+      $("invTotal").textContent = shown.length
+        ? `รวม ${shown.length} รายการ ฿${baht(shown.reduce((s, i) => s + i.amount, 0))} · ค้าง ${open.length} รายการ ฿${baht(open.reduce((s, i) => s + i.amount, 0))}`
+        : "";
+    }
+
+    function showType() {
+      const b = data.buildings.find((x) => x.name === $("fBuilding").value);
+      $("fType").textContent = b ? (b.type ? "ประเภท: " + b.type : "ยังไม่ระบุประเภท — ตั้งได้ในชีต แท็บ Buildings คอลัมน์ type") : "";
+    }
+
+    function openForm(inv) {
+      const f = $("invForm");
+      f.reset();
+      $("formMsg").textContent = "";
+      $("fBuilding").replaceChildren(el("option", { value: "", textContent: "เลือกนิติบุคคล" }),
+        ...data.buildings.map((b) => el("option", { value: b.name, textContent: b.name + (b.type ? " · " + b.type : "") })));
+      $("fStatus").replaceChildren(...STATUS.map((s) => el("option", { value: s, textContent: s })));
+      f.elements.id.value = inv?.id ?? ""; // via .elements: a field named "id" would shadow form.id
+      if (inv) {
+        f.building.value = inv.building; f.subject.value = inv.subject; f.amount.value = baht(inv.amount);
+        f.billed_on.value = inv.billed_on ?? ""; f.transfer_on.value = inv.transfer_on ?? ""; f.receipt_on.value = inv.receipt_on ?? "";
+        f.status.value = inv.status; f.note.value = inv.note ?? "";
+      }
+      showType();
+      f.hidden = false;
+      f.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    $("fBuilding").onchange = showType;
+    $("q").oninput = render;
+    $("addBtn").onclick = () => openForm(null);
+    $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
+    $("invForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = e.submitter;
+      btn.disabled = true;
+      try {
+        data = await api("saveInvoice", Object.fromEntries(new FormData(f)));
+        f.hidden = true;
+        render();
+      } catch (err) { $("formMsg").textContent = err.message; }
+      btn.disabled = false;
+    };
+
+    start("member").then(async (me) => {
+      isAdmin = me.role === "admin";
+      $("addBtn").hidden = !isAdmin;
+      data = await api("listInvoices");
       $("status").hidden = true;
       $("page").hidden = false;
+      render();
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";

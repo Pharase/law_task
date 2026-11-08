@@ -5,14 +5,14 @@ import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow
 const DOWN = "Google Sheet not reachable, try again";
 
 // deno-lint-ignore no-explicit-any
-export async function sheet(op: string, payload: object = {}): Promise<any> {
+export async function sheet(op: string, payload: object = {}, timeoutMs = 10_000): Promise<any> {
   const url = Deno.env.get("GSHEET_URL"), secret = Deno.env.get("GSHEET_SECRET");
   try {
     if (!url || !secret) throw new SheetDown("GSHEET_URL / GSHEET_SECRET not set");
     const r = await fetch(url, {
       method: "POST",
       body: JSON.stringify({ secret, op, ...payload }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     return parseReply(r.status, await r.text());
   } catch (e) {

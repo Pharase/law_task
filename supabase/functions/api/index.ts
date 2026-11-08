@@ -7,10 +7,12 @@ import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
 import { digest } from "./notify-api.ts";
 import { pickProfile } from "./profile.ts";
+import { adminInvoiceActions, memberInvoiceActions } from "./invoices-api.ts";
+import { memberReportActions } from "./reports-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
-const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions];
-const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions];
+const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions, memberInvoiceActions, memberReportActions];
+const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions];
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const MAX_WRONG_CODES = 5;

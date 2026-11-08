@@ -13,7 +13,7 @@ const NAV = [
   ["Button%20C/", "Example Document", false, "admin/exdoc.html"],
   ["Button%20D/", "Reports"],
   ["Button%20E/", "Property Right", true],
-  ["Button%20F/", "Invoice", true],
+  ["Button%20F/", "Invoice"],
 ];
 let navAdmin = false;
 const pageUrl = () => location.href.split(/[?#]/)[0].replace(/index\.html$/, "");

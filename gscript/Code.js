@@ -4,9 +4,12 @@
 
 var PROPS = PropertiesService.getScriptProperties();
 var STATES = ["on_process", "submitted", "approved", "cancelled"];
+var BUILDING_TYPES = ["บ้านจัดสรร", "อาคารชุด"];
+var INVOICE_STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"];
 var DATE_COLS = {
   Tasks: ["due_on", "current_due_on", "created_at", "member_notified_at"],
   Sends: ["sent_on", "sent_at", "due_on", "next_due_on", "reviewed_at", "member_notified_at"],
+  Invoices: ["billed_on", "transfer_on", "receipt_on", "created_at", "updated_at"],
 };
 var APP_COLS = ["id", "owner_id", "state", "current_due_on", "fix_round", "created_by", "created_at", "member_notified_at"];
 
@@ -38,6 +41,8 @@ function dispatch(body) {
     case "batch": return runBatch(body.steps || []);
     case "setup": setup(); return { ok: true };
     case "replaceMembers": return withLock(function () { replaceMembers(body.rows || []); return { ok: true }; });
+    case "listReports": return { files: listReports() };
+    case "reportFile": return reportFile(String(body.id || ""));
   }
   return { error: "unknown op" };
 }
@@ -125,14 +130,25 @@ function setup() {
   Object.keys(HEADERS).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
     if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, HEADERS[name].length).setValues([HEADERS[name]]).setFontWeight("bold");
+    // a newer version added columns (e.g. Buildings.type): append the missing headers, existing data stays put
+    var have = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(normCell);
+    HEADERS[name].filter(function (h) { return have.indexOf(h) < 0; }).forEach(function (h) {
+      sh.getRange(1, sh.getLastColumn() + 1).setValue(h).setFontWeight("bold");
+    });
     sh.setFrozenRows(1);
     (DATE_COLS[name] || []).forEach(function (h) { column(sh, h).setNumberFormat("@"); }); // typed dates stay YYYY-MM-DD text
   });
   var tasks = ss.getSheetByName("Tasks");
   var list = function (range) { return SpreadsheetApp.newDataValidation().requireValueInRange(range, true).setAllowInvalid(false).build(); };
-  column(tasks, "building").setDataValidation(list(ss.getSheetByName("Buildings").getRange("A2:A")));
+  var pick = function (values) { return SpreadsheetApp.newDataValidation().requireValueInList(values, true).build(); };
+  var buildingNames = ss.getSheetByName("Buildings").getRange("A2:A");
+  column(tasks, "building").setDataValidation(list(buildingNames));
   column(tasks, "owner_name").setDataValidation(list(ss.getSheetByName("Members").getRange("B2:B")));
-  column(tasks, "state").setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(STATES, true).build());
+  column(tasks, "state").setDataValidation(pick(STATES));
+  column(ss.getSheetByName("Buildings"), "type").setDataValidation(pick(BUILDING_TYPES));
+  var invoices = ss.getSheetByName("Invoices");
+  column(invoices, "building").setDataValidation(list(buildingNames));
+  column(invoices, "status").setDataValidation(pick(INVOICE_STATUS));
 
   ss.getProtections(SpreadsheetApp.ProtectionType.RANGE).concat(ss.getProtections(SpreadsheetApp.ProtectionType.SHEET))
     .forEach(function (p) { if (p.getDescription() === "law_task") p.remove(); });
@@ -166,4 +182,37 @@ function selfTest() {
     ss.deleteSheet(sh);
     PROPS.deleteProperty("next_id__selftest");
   }
+}
+
+// ---- Monthly reports: files in the Drive folder REPORT_FOLDER_ID (Script Property) ----
+// PDFs and Google Docs/Sheets/Slides only; Google files are exported to PDF, so the app always gets the latest version.
+var REPORT_TYPES = [MimeType.PDF, MimeType.GOOGLE_DOCS, MimeType.GOOGLE_SHEETS, MimeType.GOOGLE_SLIDES];
+
+function reportFolder() {
+  var id = PROPS.getProperty("REPORT_FOLDER_ID");
+  if (!id) throw new Error("REPORT_FOLDER_ID is not set");
+  return DriveApp.getFolderById(id);
+}
+
+function listReports() {
+  var files = reportFolder().getFiles(), out = [];
+  while (files.hasNext()) {
+    var f = files.next();
+    if (f.isTrashed() || REPORT_TYPES.indexOf(f.getMimeType()) < 0) continue;
+    out.push({ id: f.getId(), name: f.getName(), modified: f.getLastUpdated().toISOString() });
+  }
+  return out;
+}
+
+function reportFile(id) {
+  var f = DriveApp.getFileById(id), folderId = reportFolder().getId(), inFolder = false, parents = f.getParents();
+  while (parents.hasNext()) if (parents.next().getId() === folderId) inFolder = true;
+  if (!inFolder || REPORT_TYPES.indexOf(f.getMimeType()) < 0) throw new Error("not a report"); // only files from the report folder
+  var blob = f.getMimeType() === MimeType.PDF ? f.getBlob() : f.getAs(MimeType.PDF);
+  return { name: f.getName().replace(/\.pdf$/i, "") + ".pdf", modified: f.getLastUpdated().toISOString(), base64: Utilities.base64Encode(blob.getBytes()) };
+}
+
+/** Run once from the editor after setting REPORT_FOLDER_ID: grants Drive access and logs what the app will list. */
+function checkReports() {
+  Logger.log(JSON.stringify(listReports(), null, 1));
 }
