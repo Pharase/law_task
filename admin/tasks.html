@@ -8,6 +8,7 @@
   <script src="../js/app.js"></script>
   <script src="../js/work.js"></script>
   <script src="../js/admin-tasks.js"></script>
+  <script src="../js/backup.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
@@ -70,7 +71,7 @@
   </div>
 
   <script>
-    start("admin").then(initAdminTasks).catch((err) => {
+    start("admin").then((me) => { initBackupBanner(); return initAdminTasks(me); }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
     });

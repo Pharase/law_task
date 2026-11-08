@@ -4,13 +4,13 @@ import { newCode, normalizeCode } from "./codes.ts";
 import { bucket, db, found, HttpError, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
+import { adminBackupActions, cleanup } from "./backup-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions];
-const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions];
+const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions];
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
-const RETENTION_DAYS = 365;
 const MAX_WRONG_CODES = 5;
 const MAX_BYTES = 10 * 1024 * 1024;
 const MIME_EXT: Record<string, string> = {
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     const form = req.headers.get("content-type")?.startsWith("multipart/") ? await req.formData() : null;
     const body = form ? Object.fromEntries(form) : await req.json().catch(() => ({}));
 
-    // Public on purpose: it only deletes what is already past retention, so a stranger calling it changes nothing.
+    // Public on purpose: it only deletes files that are due AND backed up, so a stranger calling it changes nothing.
     if (body.action === "cleanup") return json(await cleanup());
 
     const line = await verifyLine(req.headers.get("x-line-id-token"));
@@ -147,16 +147,3 @@ Deno.serve(async (req) => {
   }
 });
 
-async function cleanup() {
-  const cutoff = new Date(Date.now() - RETENTION_DAYS * 864e5).toISOString();
-  let deleted = 0;
-  for (;;) {
-    const old = must(await db.from("files").select("id, path").lt("created_at", cutoff).limit(100));
-    if (!old.length) break;
-    must(await bucket.remove(old.map((f: { path: string }) => f.path))); // storage first: a leftover row is retried tomorrow, a leftover file never would be
-    must(await db.from("files").delete().in("id", old.map((f: { id: string }) => f.id)));
-    deleted += old.length;
-  }
-  must(await db.from("invites").delete().is("used_at", null).lt("expires_at", new Date().toISOString()));
-  return { deleted };
-}

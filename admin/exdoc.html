@@ -7,6 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
   <script src="../js/work.js"></script>
+  <script src="../js/backup.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
@@ -85,6 +86,7 @@
     };
 
     start("admin").then(() => {
+      initBackupBanner();
       $("status").hidden = true;
       $("page").hidden = false;
       return loadDocs();

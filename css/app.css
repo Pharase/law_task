@@ -54,3 +54,4 @@ th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
 .doc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid #eee; padding: 10px 0; }
 a.btn { display: inline-block; padding: 6px 10px; border-radius: 8px; background: #06c755; color: #fff; text-decoration: none; font-size: 14px; }
 a.btn.secondary { background: #888; }
+.backup-banner { border: 2px solid #f0b400; }
