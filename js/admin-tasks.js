@@ -114,13 +114,13 @@ async function loadPerformance() {
   const score = (scaled, raw) => el("td", { className: "perf-score" },
     el("strong", { textContent: scaled.toFixed(2) }), el("span", { className: "muted", textContent: pct(raw) }));
   const rank = navAdmin; // members only get their own row, so a rank would always read 1
-  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน", "คะแนนรวม", ...TAG_LIST].map((h) => el("th", { textContent: h })));
+  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน", "คะแนนรวม", "ความตรงเวลา", "ความแม่นยำ", ...TAG_LIST].map((h) => el("th", { textContent: h })));
   const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r, i) => el("tr", {},
     rank && el("td", { className: "muted", textContent: i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.tasks }),
-    score(r.overall5, r.overall),
+    score(r.overall5, r.overall), score(r.onTime5, r.onTime), score(r.accuracy5, r.accuracy),
     ...TAG_LIST.map((tag) => (r.byTag[tag] ? score(r.byTag[tag].scaled, r.byTag[tag].raw) : el("td", { className: "muted", textContent: "-" })))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 4 : 3) + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 6 : 5) + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
 }
 
 async function loadWarnings() {

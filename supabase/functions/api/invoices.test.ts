@@ -59,3 +59,14 @@ for (const [name, over, msg] of [
 ] as const) {
   test(`invoiceCells rejects: ${name}`, () => assert.throws(() => invoiceCells({ ...input, ...over }, buildings), msg));
 }
+
+test("visibleInvoices: admins see all; a member only invoices of buildings they look after (+ ทุกนิติ)", async () => {
+  const { visibleInvoices } = await import("./invoices.ts");
+  const owners = new Map([["KL2", "ทีมนุ่น"], ["SD7", "ทีมมิน"], ["ทุกนิติ", ""], ["The One", ""]]);
+  const inv = (id: number, building: string) => ({ id, building }) as never;
+  const list = [inv(1, "KL2"), inv(2, "SD7"), inv(3, "ทุกนิติ"), inv(4, "The One")];
+  const ids = (xs: { id: number }[]) => xs.map((x) => x.id);
+  assert.deepEqual(ids(visibleInvoices(list, owners, { role: "admin", name: "Admin" })), [1, 2, 3, 4]);
+  assert.deepEqual(ids(visibleInvoices(list, owners, { role: "member", name: "ทีมนุ่น" })), [1, 3]);
+  assert.deepEqual(ids(visibleInvoices(list, owners, { role: "member", name: "ทีมใหม่" })), [3]);
+});

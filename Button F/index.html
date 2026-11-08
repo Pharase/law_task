@@ -44,6 +44,7 @@
         <p id="formMsg" class="error" role="alert"></p>
       </form>
 
+      <p class="muted small-note" id="invScope" hidden>แสดงเฉพาะนิติบุคคลที่คุณดูแล (ตามข้อมูลการมอบหมาย) และรายการของ "ทุกนิติ"</p>
       <div class="row filters type-tabs" id="typeTabs" role="tablist" aria-label="ประเภท"></div>
       <input type="search" id="q" placeholder="ค้นหา นิติบุคคล หรือ เรื่อง · Search" aria-label="Search invoices">
       <div id="invList"></div>
@@ -52,7 +53,7 @@
   </div>
 
   <script>
-    const STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"];
+    const STATUS = ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"];
     const baht = (n) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let data = { invoices: [], buildings: [], types: [] }, tab = "all", isAdmin = false;
 
@@ -158,6 +159,7 @@
     start("member").then(async (me) => {
       isAdmin = me.role === "admin";
       $("addBtn").hidden = !isAdmin;
+      $("invScope").hidden = isAdmin; // the server already filtered the list for non-admins
       data = await api("listInvoices");
       $("status").hidden = true;
       $("page").hidden = false;

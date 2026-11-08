@@ -1,5 +1,6 @@
 // Invoices (Invoice tab): rows in the Google Sheet "Invoices" tab <-> typed invoices. Pure: no Deno or npm imports.
 import { type Bad, normDate, type Row } from "./sheetRows.ts";
+import { isAllBuildings } from "./responsibility.ts";
 
 export const INVOICE_STATUS = ["ตั้งเบิก", "รอวางบิล", "รอโอนเงิน", "รอใบเสร็จ", "เรียบร้อย"] as const;
 export const BUILDING_TYPES = ["บ้านจัดสรร", "อาคารชุด"] as const;
@@ -64,4 +65,13 @@ export function invoiceCells(body: Record<string, unknown>, buildings: string[])
   const note = s("note");
   if (note.length > 1000) throw new Error("note is over 1000 characters");
   return { ...out, status, note };
+}
+
+/**
+ * Who sees which invoices: admins see all; anyone else only invoices of buildings they look after
+ * (owner in ข้อมูลการมอบหมาย), plus "ทุกนิติ" invoices, which concern every building.
+ */
+export function visibleInvoices<T extends { building: string }>(invoices: T[], ownerOf: Map<string, string>, me: { role: string; name: string }): T[] {
+  if (me.role === "admin") return invoices;
+  return invoices.filter((i) => isAllBuildings(i.building) || (ownerOf.get(i.building) ?? "") === me.name);
 }

@@ -73,3 +73,19 @@ test("performance rows: admins see everyone, anyone else only their own row", as
   assert.deepEqual(visibleRows(rows, { line_user_id: "U9", role: "member" }), []);
   assert.deepEqual(visibleRows(rows, { line_user_id: "U1", role: "revoked" }).map((r) => r.line_user_id), ["U1"]);
 });
+
+test("on-time and accuracy are averaged per member (each / 10) and scaled 1-5 like the overall", () => {
+  const rows = performanceRows([
+    // U1: sent on time, approved first try -> onTime 10, accuracy 10
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
+    // U2: one fix round sent 3 days late (9), then approved 6 days late against the new due (8)
+    { owner: "U2", tags: ["การประสานงาน"], sends: [s("2026-01-13", "2026-01-10", "fix"), s("2026-01-26", "2026-01-20", "approved")] },
+  ], { U1: "A", U2: "B" });
+  const u1 = rows.find((r) => r.line_user_id === "U1")!, u2 = rows.find((r) => r.line_user_id === "U2")!;
+  assert.equal(u1.onTime, 1);
+  assert.equal(u1.accuracy, 1);
+  assert.equal(u2.onTime, 0.8);    // last send 6 days after the latest due date -> 10 - 2
+  assert.equal(u2.accuracy, 0.85); // mean(9, 8) / 10
+  assert.equal(u1.onTime5, 5);
+  assert.equal(u2.onTime5, 1);
+});
