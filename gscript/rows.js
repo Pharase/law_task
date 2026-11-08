@@ -79,4 +79,12 @@ function planBatch(steps, tables, nextId) {
   return { writes: writes, results: results };
 }
 
-if (typeof module !== "undefined") module.exports = { HEADERS: HEADERS, normCell: normCell, toObjects: toObjects, planBatch: planBatch };
+/** Sheet row numbers whose `key` cell is one of `values`, bottom first (deleting bottom-up keeps the rest numbered). */
+function rowsToDelete(rows, key, values) {
+  var wanted = values.map(function (v) { return String(v).trim(); });
+  return rows.filter(function (r) { return wanted.indexOf(normCell(r[key]).trim()) >= 0; })
+    .map(function (r) { return r._row; })
+    .sort(function (a, b) { return b - a; });
+}
+
+if (typeof module !== "undefined") module.exports = { HEADERS: HEADERS, normCell: normCell, toObjects: toObjects, planBatch: planBatch, rowsToDelete: rowsToDelete };

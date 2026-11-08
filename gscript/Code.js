@@ -42,6 +42,7 @@ function dispatch(body) {
     case "batch": return runBatch(body.steps || []);
     case "setup": setup(); return { ok: true };
     case "replaceMembers": return withLock(function () { replaceMembers(body.rows || []); return { ok: true }; });
+    case "deleteRows": return withLock(function () { return { deleted: deleteRows(body.tab, body.key, body.values || []) }; });
     case "listReports": return { files: listReports() };
     case "reportFile": return reportFile(String(body.id || ""));
   }
@@ -217,4 +218,14 @@ function reportFile(id) {
 /** Run once from the editor after setting REPORT_FOLDER_ID: grants Drive access and logs what the app will list. */
 function checkReports() {
   Logger.log(JSON.stringify(listReports(), null, 1));
+}
+
+/** Deletes the rows whose `key` cell is one of `values` (used to remove demo data). Returns how many. */
+function deleteRows(tab, key, values) {
+  if (!HEADERS[tab]) throw new Error("unknown tab " + tab);
+  var sh = book().getSheetByName(tab);
+  if (!sh || sh.getLastRow() < 2 || !values.length) return 0;
+  var nums = rowsToDelete(toObjects(sh.getDataRange().getValues()), key, values);
+  nums.forEach(function (n) { sh.deleteRow(n); });
+  return nums.length;
 }

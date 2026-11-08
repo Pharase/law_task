@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { HEADERS, normCell, toObjects, planBatch } = require("./rows.js");
+const { HEADERS, normCell, toObjects, planBatch, rowsToDelete } = require("./rows.js");
 
 const counter = () => { const n = { Tasks: 5, Sends: 1 }; return (tab) => n[tab]++; };
 const tables = () => ({
@@ -83,3 +83,9 @@ test("update by key with no match -> not found", () =>
 
 test("News tab columns (deleted_at = soft delete, pinned = 1 or blank)", () =>
   assert.deepEqual(HEADERS.News, ["id", "title", "body", "pinned", "created_by", "created_at", "deleted_at"]));
+
+test("rowsToDelete: matching sheet rows, bottom first (so deleting one keeps the others numbered)", () => {
+  const rows = [{ _row: 2, created_by: "demo" }, { _row: 3, created_by: "UA" }, { _row: 5, created_by: " demo " }, { _row: 6, created_by: "" }];
+  assert.deepEqual(rowsToDelete(rows, "created_by", ["demo"]), [5, 2]);
+  assert.deepEqual(rowsToDelete(rows, "created_by", []), []);
+});

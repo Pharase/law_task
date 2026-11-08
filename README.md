@@ -103,6 +103,8 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 
 **ข้อมูลการมอบหมาย (which หัวหน้างาน looks after which building):** run **`setup`** again once to add the **owner** column to **Buildings**. Admins then drag buildings between people on Home → ข้อมูลการมอบหมาย (on phones: tap a building, then tap the person), or pick names in the sheet. The assign form shows only the chosen person’s buildings, and the server refuses a building outside their responsibility. People with no buildings yet are not restricted.
 
+**Demo data (for testing):** in the Apps Script editor run **`seedDemo`** to add demo buildings ("DEMO อาคาร …", with type and owner), about 30 tasks with sends in every state (titles start with "[DEMO]"), 8 invoices and 3 news items; tasks go to the real members in the Members tab (open an admin page once so it is filled) and are marked as already notified, so no LINE summary is sent about them. Run **`clearDemo`** to delete exactly those rows (`created_by = demo`, their sends, buildings named "DEMO …"). Needs the latest deployment (Deploy → Manage deployments → New version).
+
 After changing the script later: `clasp push`, then **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
 
 **Hand-edit rules.** Edit freely: `building`, `title`, `details`, `tags`, `owner_name` (= reassign to that person), `due_on`. Leave alone: `id`, `owner_id`, `state`, `current_due_on`, `fix_round` and the Sends and Members tabs (Google shows a warning). Don't copy whole rows: a duplicate id is flagged. A bad row (typo'd date, unknown building or name) is hidden from the app and listed under "Sheet rows to fix" on `admin/tasks.html`.
