@@ -170,6 +170,23 @@ caption { padding-bottom: 6px; }
 .doc-group > summary { cursor: pointer; padding: 6px 0; font-weight: 600; }
 .doc-group > summary .badge { margin-left: 8px; }
 
+/* ---- Members page: approval list + organization ---- */
+.card-head { flex-wrap: wrap; margin-bottom: 4px; }
+.card-head h2 { margin: 0; }
+.person { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.person-id { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; min-width: 0; }
+.person-id .badge { margin-top: 4px; }
+.person-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.person-actions input, .person-actions select { width: auto; margin: 0; padding: 8px 12px; font-size: 14px; }
+.person-actions input { flex: 1 1 160px; min-width: 140px; }
+.person .invite-result:empty, #newInvite .invite-result:empty { display: none; }
+.person .invite-result { flex-basis: 100%; }
+#newInvite { padding: 12px 0; border-top: 1px solid var(--line); }
+#newInvite p { flex-basis: 100%; margin: 0; }
+.person.revoked { opacity: .55; }
+.person.org { flex-wrap: nowrap; } /* name left, role right, even on phones */
+.person.org .person-id { flex: 1 1 auto; }
+
 /* ---- Home dashboard: donut + legend (the legend doubles as the table view) ---- */
 .dash { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
 .donut { width: 168px; height: 168px; flex: none; filter: drop-shadow(0 0 22px rgba(2, 215, 244, .12)); }

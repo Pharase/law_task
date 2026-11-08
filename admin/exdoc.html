@@ -45,7 +45,7 @@
     const MAX = 20 * 1024 * 1024;
     const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
     const groupSelect = (groups, value) => {
-      const s = el("select", { "aria-label": "Group" }, el("option", { value: "", textContent: NO_GROUP }),
+      const s = el("select", { ariaLabel: "Group" }, el("option", { value: "", textContent: NO_GROUP }),
         ...groups.map((g) => el("option", { value: g.id, textContent: g.name })));
       s.value = value ?? "";
       return s;

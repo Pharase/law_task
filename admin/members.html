@@ -6,90 +6,131 @@
   <title>Members – admin</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
+  <script src="../js/work.js"></script>
   <script src="../js/backup.js"></script>
   <link rel="stylesheet" href="../css/app.css">
 </head>
 <body>
-  <p id="status">Loading…</p>
+  <p id="status" class="muted" role="status">Loading…</p>
 
-  <form class="card" id="inviteForm" hidden>
-    <label for="staffName">Staff name</label>
-    <input id="staffName" required>
-    <label for="inviteRole">Role</label>
-    <select id="inviteRole"><option value="member">member</option><option value="admin">admin</option></select>
-    <button>Create invite code</button>
-    <div id="inviteResult" role="status" aria-live="polite"></div>
-  </form>
+  <div id="page" hidden>
+    <!-- 1. People who logged in and wait: approve them directly or create an invite code for them -->
+    <section class="card">
+      <div class="row card-head">
+        <h2 class="grow">รออนุมัติ · Approval list <span id="pendingCount" class="badge"></span></h2>
+        <button type="button" class="small secondary" id="newInviteBtn">+ รหัสเชิญ (คนใหม่)</button>
+      </div>
+      <form id="newInvite" class="person-actions" hidden>
+        <p class="muted">สำหรับพนักงานที่ยังไม่เคยเปิดแอป · For staff who haven't opened the app yet</p>
+        <input name="staff" placeholder="ชื่อพนักงาน · Staff name" maxlength="100" required aria-label="Staff name">
+        <select name="role" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select>
+        <button class="small">สร้างรหัสเชิญ</button>
+        <div class="invite-result" role="status" aria-live="polite"></div>
+      </form>
+      <div id="pendingList"></div>
+    </section>
 
-  <div class="card" id="usersCard" hidden>
-    <label>Users</label>
-    <div id="users"></div>
+    <!-- 2. Everyone with access (or revoked): name, LINE name, role -->
+    <section class="card">
+      <h2>องค์กร · Organization <span id="orgCount" class="badge"></span></h2>
+      <div id="orgList"></div>
+    </section>
   </div>
 
   <script>
     let myId;
-
-    function button(text, cls, onclick) {
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "small " + cls; b.textContent = text; b.onclick = onclick;
-      return b;
-    }
+    const ROLES = { admin: "Admin", member: "Member", revoked: "Revoked" };
+    const nameOf = (u) => u.staff_name || u.display_name || u.line_user_id;
+    const avatar = (u) => u.picture_url
+      ? el("img", { className: "nav-avatar", src: u.picture_url, alt: "" })
+      : el("span", { className: "nav-avatar nav-initial", textContent: nameOf(u).trim().charAt(0) });
+    const roleSelect = (value, roles) => {
+      const s = el("select", { ariaLabel: "Role" }, ...roles.map((r) => el("option", { value: r, textContent: ROLES[r] })));
+      s.value = value;
+      return s;
+    };
 
     async function act(action, data) {
       try { await api(action, data); await loadUsers(); }
       catch (err) { alert(err.message); }
     }
 
-    async function loadUsers() {
-      const users = await api("listUsers");
-      // pending/locked first so admins see who is waiting
-      users.sort((a, b) => (b.role === "pending") - (a.role === "pending") || b.locked - a.locked);
-      $("users").replaceChildren(...users.map((u) => {
-        const row = document.createElement("div");
-        row.className = "row";
-        row.style.cssText = "border-top:1px solid #eee;padding:8px 0;flex-wrap:wrap";
-        const img = document.createElement("img");
-        img.alt = ""; if (u.picture_url) img.src = u.picture_url;
-        const info = document.createElement("div");
-        info.style.flex = "1";
-        const name = document.createElement("strong");
-        name.textContent = u.staff_name || u.display_name || u.line_user_id;
-        const meta = document.createElement("div");
-        meta.className = u.locked ? "error" : "muted";
-        meta.textContent = `${u.role}${u.locked ? " · LOCKED" : ""} · LINE: ${u.display_name ?? "-"}`;
-        info.append(name, meta);
-        row.append(img, info);
-        if (u.line_user_id !== myId) {
-          const id = u.line_user_id;
-          if (u.locked) row.append(button("Unlock", "", () => act("unlock", { line_user_id: id })));
-          if (u.role !== "member") row.append(button("Make member", "", () => act("setRole", { line_user_id: id, role: "member" })));
-          if (u.role !== "admin") row.append(button("Make admin", "secondary", () => act("setRole", { line_user_id: id, role: "admin" })));
-          if (u.role !== "revoked") row.append(button("Revoke", "danger", () =>
-            confirm(`Revoke ${name.textContent}?`) && act("setRole", { line_user_id: id, role: "revoked" })));
-        }
-        return row;
-      }));
+    /** Shows a new invite code inside `box`. */
+    async function invite(box, staff_name, role) {
+      try {
+        const inv = await api("createInvite", { staff_name, role });
+        box.replaceChildren(
+          el("div", { className: "code", textContent: inv.code }),
+          el("p", { className: "muted", textContent: `For ${inv.staff_name} (${inv.role}). Expires ${new Date(inv.expires_at).toLocaleTimeString()} — send it privately now.` }));
+      } catch (err) { alert(err.message); }
     }
 
-    $("inviteForm").onsubmit = async (e) => {
+    function pendingRow(u) {
+      const staff = el("input", { value: u.staff_name || u.display_name || "", maxLength: 100, placeholder: "ชื่อพนักงาน · Staff name", ariaLabel: "Staff name" });
+      const role = roleSelect("member", ["member", "admin"]);
+      const result = el("div", { className: "invite-result", role: "status" });
+      const approve = el("button", { type: "button", className: "small", textContent: "อนุมัติ · Approve" });
+      approve.onclick = () => {
+        if (!staff.value.trim()) return staff.focus();
+        act("setRole", { line_user_id: u.line_user_id, role: role.value, staff_name: staff.value });
+      };
+      const code = el("button", { type: "button", className: "small secondary", textContent: "สร้างรหัสเชิญ" });
+      code.onclick = () => (staff.value.trim() ? invite(result, staff.value, role.value) : staff.focus());
+      const unlock = u.locked && el("button", { type: "button", className: "small secondary", textContent: "ปลดล็อก · Unlock" });
+      if (unlock) unlock.onclick = () => act("unlock", { line_user_id: u.line_user_id });
+      return el("div", { className: "person" },
+        el("div", { className: "person-id" }, avatar(u),
+          el("div", { className: "grow" },
+            el("strong", { textContent: u.display_name || u.line_user_id }),
+            el("div", { className: "muted", textContent: `เข้าสู่ระบบ ${thDate(u.created_at.slice(0, 10))}` }),
+            u.locked && el("span", { className: "badge late", textContent: "LOCKED · ใส่รหัสผิด 5 ครั้ง" }))),
+        el("div", { className: "person-actions" }, staff, role, approve, code, unlock),
+        result);
+    }
+
+    function orgRow(u) {
+      const self = u.line_user_id === myId;
+      const right = self
+        ? el("span", { className: "badge on", textContent: ROLES[u.role] + " · คุณ" })
+        : roleSelect(u.role, ["member", "admin", "revoked"]);
+      if (!self) {
+        right.onchange = () => {
+          if (right.value === "revoked" && !confirm(`Revoke ${nameOf(u)}? They lose access at once.`)) return void (right.value = u.role);
+          act("setRole", { line_user_id: u.line_user_id, role: right.value });
+        };
+      }
+      return el("div", { className: "person org" + (u.role === "revoked" ? " revoked" : "") },
+        el("div", { className: "person-id" }, avatar(u),
+          el("div", { className: "grow" },
+            el("strong", { textContent: nameOf(u) }),
+            el("div", { className: "muted", textContent: `LINE: ${u.display_name ?? "-"}` }))),
+        el("div", { className: "person-actions" }, right));
+    }
+
+    async function loadUsers() {
+      const users = await api("listUsers");
+      const pending = users.filter((u) => u.role === "pending");
+      const order = { admin: 0, member: 1, revoked: 2 };
+      const org = users.filter((u) => u.role !== "pending")
+        .sort((a, b) => order[a.role] - order[b.role] || nameOf(a).localeCompare(nameOf(b), "th"));
+      $("pendingCount").textContent = pending.length;
+      $("orgCount").textContent = org.length;
+      $("pendingList").replaceChildren(...(pending.length ? pending.map(pendingRow) : [el("p", { className: "muted", textContent: "ไม่มีผู้รออนุมัติ · Nobody is waiting" })]));
+      $("orgList").replaceChildren(...org.map(orgRow));
+    }
+
+    $("newInviteBtn").onclick = () => { $("newInvite").hidden = !$("newInvite").hidden; };
+    $("newInvite").onsubmit = (e) => {
       e.preventDefault();
-      try {
-        const inv = await api("createInvite", { staff_name: $("staffName").value, role: $("inviteRole").value });
-        const code = document.createElement("div");
-        code.className = "code"; code.textContent = inv.code;
-        const note = document.createElement("p");
-        note.className = "muted";
-        note.textContent = `For ${inv.staff_name} (${inv.role}). Expires ${new Date(inv.expires_at).toLocaleTimeString()} — send it privately now.`;
-        $("inviteResult").replaceChildren(code, note);
-        $("staffName").value = "";
-      } catch (err) { alert(err.message); }
+      const f = e.target;
+      invite(f.querySelector(".invite-result"), f.staff.value, f.role.value).then(() => { f.staff.value = ""; });
     };
 
     start("admin").then(async (me) => {
       initBackupBanner();
       myId = me.line_user_id;
       $("status").hidden = true;
-      $("inviteForm").hidden = $("usersCard").hidden = false;
+      $("page").hidden = false;
       await loadUsers();
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;

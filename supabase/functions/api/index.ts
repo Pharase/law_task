@@ -151,7 +151,10 @@ Deno.serve(async (req) => {
       case "setRole": {
         if (!["member", "admin", "revoked"].includes(body.role)) throw new HttpError(400, "bad role");
         if (body.line_user_id === me.line_user_id) throw new HttpError(400, "you can't change your own role");
-        return json(found(must(await db.from("profiles").update({ role: body.role, locked: false, failed_codes: 0 })
+        // Optional staff name, set when an admin approves someone directly (the sheet names task owners by it).
+        const staff_name = body.staff_name === undefined ? undefined : String(body.staff_name).trim();
+        if (staff_name !== undefined && (!staff_name || staff_name.length > 100)) throw new HttpError(400, "staff name is required (max 100 characters)");
+        return json(found(must(await db.from("profiles").update({ role: body.role, locked: false, failed_codes: 0, ...(staff_name ? { staff_name } : {}) })
           .eq("line_user_id", body.line_user_id).select().maybeSingle())));
       }
 
