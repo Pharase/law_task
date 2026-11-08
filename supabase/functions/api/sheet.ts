@@ -1,6 +1,6 @@
 // Client for the Apps Script row store (gscript/). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
 import { db, HttpError, must } from "./shared.ts";
-import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, type Task } from "./sheetRows.ts";
+import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, type Task, toPeople } from "./sheetRows.ts";
 
 const DOWN = "Google Sheet not reachable, try again";
 
@@ -36,10 +36,7 @@ export async function batch(steps: Step[]): Promise<any[] | null> {
 export type SheetData = { tasks: Task[]; sends: SendRow[]; buildings: string[]; people: Person[]; bad: Bad[] };
 
 export async function loadPeople(): Promise<Person[]> {
-  const rows = must(await db.from("profiles").select("line_user_id, role, staff_name, display_name"));
-  return rows.map((p: Record<string, string>) => ({
-    line_user_id: p.line_user_id, role: p.role, name: (p.staff_name || p.display_name || p.line_user_id).trim(),
-  }));
+  return toPeople(must(await db.from("profiles").select("line_user_id, role, staff_name, display_name")));
 }
 
 export async function loadBuildings(): Promise<string[]> {

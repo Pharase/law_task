@@ -60,8 +60,13 @@ function readTabs(names) {
 
 function withLock(fn) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000); // throws after 10 s -> {error}, the caller shows "try again"
-  try { return fn(); } finally { lock.releaseLock(); }
+  lock.waitLock(5000); // throws -> {error}, the caller shows "try again"; well under the caller's 10 s timeout
+  try {
+    return fn();
+  } finally {
+    SpreadsheetApp.flush(); // writes are buffered: commit them BEFORE the next caller can read, or two sends could both win
+    lock.releaseLock();
+  }
 }
 
 /** All steps under one lock, written only if every step's `expect` still holds. */
@@ -77,10 +82,19 @@ function runBatch(steps) {
     });
     var plan = planBatch(steps, tables, function (tab) { return nextId(tab, tables[tab].rows); });
     if (!plan.writes) return plan;
+    // A tab has a fixed number of rows (1000 when new); grow it first, so no write half-fails past the end.
+    Object.keys(tables).forEach(function (tab) {
+      var sh = tables[tab].sheet;
+      var last = plan.writes.reduce(function (m, w) { return w.tab === tab ? Math.max(m, w.row._row) : m; }, 0);
+      if (last > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), last - sh.getMaxRows() + 100);
+    });
     plan.writes.forEach(function (w) {
       var t = tables[w.tab];
       var cols = w.kind === "append" ? t.headers.filter(String) : w.cols;
-      cols.forEach(function (h) { t.sheet.getRange(w.row._row, t.headers.indexOf(h) + 1).setValue(w.row[h]); });
+      cols.forEach(function (h) {
+        // Plain text: otherwise Sheets turns "1/2" into a date, "007" into 7, "=..." or "- ..." into a formula.
+        t.sheet.getRange(w.row._row, t.headers.indexOf(h) + 1).setNumberFormat("@").setValue(w.row[h]);
+      });
     });
     return { results: plan.results };
   });

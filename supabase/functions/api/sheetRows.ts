@@ -19,6 +19,13 @@ export type SendRow = {
   member_notified_at: string | null;
 };
 
+/** Profiles -> people who may own or be named on tasks. Pending (anyone who opened the link) are left out. */
+export function toPeople(profiles: { line_user_id: string; role: string; staff_name?: string | null; display_name?: string | null }[]): Person[] {
+  return profiles.filter((p) => ["member", "admin", "revoked"].includes(p.role)).map((p) => ({
+    line_user_id: p.line_user_id, role: p.role, name: (p.staff_name || p.display_name || p.line_user_id).trim(),
+  }));
+}
+
 const STATES: State[] = ["on_process", "submitted", "approved", "cancelled"];
 const OUTCOMES: Outcome[] = ["pending", "approved", "void", "fix"];
 const cell = (r: Row, k: string) => String(r[k] ?? "").trim();

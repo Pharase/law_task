@@ -43,12 +43,13 @@ export async function digest() {
   if (!shouldRunDigest(now, last)) return { skipped: "not now" };
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
   if (!token) return { skipped: "no token" }; // not logged, so it runs as soon as the token is set
+  // Read everything BEFORE claiming the day: if Google is down this throws and the next cron run retries.
+  const people: Row[] = must(await db.from("profiles").select("line_user_id, role, staff_name, display_name").in("role", ["member", "admin"]));
+  const sheet = await loadSheet();
   // Claim today's run; a concurrent call hits the unique index and stops here.
   const claim = await db.from("notify_log").insert({ run_date: today, line_user_id: null, ok: true });
   if (claim.error) return { skipped: "already running" };
 
-  const people: Row[] = must(await db.from("profiles").select("line_user_id, role, staff_name, display_name").in("role", ["member", "admin"]));
-  const sheet = await loadSheet();
   const open: Row[] = sheet.tasks.filter((t) => t.state !== "cancelled");
   const reviewed: Row[] = sheet.sends.filter((s) => s.outcome !== "pending" && !s.member_notified_at);
   const { count: backupDue } = await db.from("files").select("id", { count: "exact", head: true })

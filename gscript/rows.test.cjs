@@ -51,6 +51,13 @@ test("append on a tab without an id column assigns no id", () => {
   assert.deepEqual(r.results[0], [{ name: "B2", _row: 3 }]);
 });
 
+test("expect ignores stray spaces typed into the sheet (the app reads cells trimmed)", () => {
+  const t = tables();
+  t.Tasks.rows[0].owner_name = "Ann ";
+  const r = planBatch([{ op: "update", tab: "Tasks", id: 4, patch: { owner_id: "U2" }, expect: { owner_name: "Ann" } }], t, counter());
+  assert.equal(r.results[0].owner_id, "U2");
+});
+
 test("update of a missing id -> not found", () =>
   assert.deepEqual(planBatch([{ op: "update", tab: "Tasks", id: 99, patch: { title: "x" } }], tables(), counter()), { error: "not found" }));
 

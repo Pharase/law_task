@@ -62,7 +62,8 @@ function planBatch(steps, tables, nextId) {
       var found = tab.rows.filter(function (r) { return r.id === String(step.id); })[0];
       if (!found) return { error: "not found" };
       var expect = step.expect || {};
-      for (var k in expect) if (normCell(found[k]) !== normCell(expect[k])) return { conflict: true };
+      // Trimmed like the app reads cells, so a stray space typed by hand can't cause a permanent conflict.
+      for (var k in expect) if (normCell(found[k]).trim() !== normCell(expect[k]).trim()) return { conflict: true };
       var cols = Object.keys(step.patch || {}).filter(function (h) { return h !== "id" && tab.headers.indexOf(h) >= 0; });
       cols.forEach(function (h) { found[h] = normCell(step.patch[h]); });
       writes.push({ tab: step.tab, kind: "update", row: found, cols: cols }); // only patched cells are written

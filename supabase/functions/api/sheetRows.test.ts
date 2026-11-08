@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normDate, parseReply, parseSends, parseTasks, scoredSends, SheetDown, taskCells, type Task } from "./sheetRows.ts";
+import { normDate, parseReply, parseSends, parseTasks, scoredSends, SheetDown, taskCells, toPeople, type Task } from "./sheetRows.ts";
 
 const people = [
   { line_user_id: "U1", name: "Ann", role: "member" },
@@ -116,6 +116,16 @@ test("scoredSends: round 0 uses the task's current due_on, later rounds the fix'
     ["2026-11-25", "void"], ["2026-11-25", "fix"], ["2026-11-30", "void"], ["2026-11-30", "approved"],
   ]);
 });
+
+test("toPeople: only real logins (pending strangers can't shadow a staff name); staff_name wins", () =>
+  assert.deepEqual(toPeople([
+    { line_user_id: "U1", role: "member", staff_name: "Ann ", display_name: "ann_line" },
+    { line_user_id: "U7", role: "pending", staff_name: null, display_name: "Ann" },
+    { line_user_id: "U4", role: "revoked", staff_name: null, display_name: "Gone" },
+  ]), [
+    { line_user_id: "U1", role: "member", name: "Ann" },
+    { line_user_id: "U4", role: "revoked", name: "Gone" },
+  ]));
 
 test("taskCells: tags joined, owner -> owner_id, null -> empty, only given keys", () =>
   assert.deepEqual(taskCells({ tags: ["a", "b"], owner: "U1", details: null, fix_round: 2 }),
