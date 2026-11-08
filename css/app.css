@@ -24,3 +24,19 @@ h2 { margin: 0 0 8px; font-size: 18px; }
 .menu li:first-child { border-top: 0; }
 .soon { font-size: 12px; color: #999; }
 [hidden] { display: none !important; }
+/* Work dashboard */
+.task { border-top: 1px solid #eee; padding: 10px 0 10px 8px; }
+.task summary { cursor: pointer; line-height: 1.5; }
+.task summary .badge { margin-left: 6px; }
+.task-body { padding: 8px 0 0; }
+.overdue { border-left: 4px solid #c00; }
+.badge.late { background: #fde2e2; color: #b00; }
+.tag { display: inline-block; font-size: 12px; background: #eef3ff; color: #2851a3; border-radius: 6px; padding: 2px 8px; margin: 0 4px 4px 0; }
+.pre { white-space: pre-wrap; }
+.fix-note { background: #fff6e0; border-radius: 8px; padding: 8px; margin: 8px 0; }
+.timeline { padding-left: 20px; margin: 4px 0; }
+p.label { font-weight: 600; margin: 8px 0 4px; }
+@media (min-width: 900px) {
+  body { max-width: 1100px; }
+  .work-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+}

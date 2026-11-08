@@ -4,26 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Work – law_task</title>
-  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="../js/app.js"></script>
-  <link rel="stylesheet" href="../css/app.css">
+  <script>location.replace("../" + location.search);</script>
 </head>
 <body>
-  <p><a href="../">← Home</a></p>
-  <h1>Work</h1>
-  <p class="muted">งานรอดำเนินการ</p>
-  <p id="status" class="muted" role="status">Loading…</p>
-  <div class="card" id="page" hidden>
-    <p>Coming soon.</p>
-  </div>
-  <script>
-    start("member").then(() => {
-      $("status").hidden = true;
-      $("page").hidden = false;
-    }).catch((err) => {
-      $("status").textContent = "Error: " + err.message;
-      $("status").className = "error";
-    });
-  </script>
+  <p><a href="../">Open Work · งานรอดำเนินการ</a></p>
 </body>
 </html>

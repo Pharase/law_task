@@ -6,6 +6,7 @@
   <title>law_task</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/work.js"></script>
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -48,10 +49,27 @@
 
   <!-- Logged in and approved -->
   <div id="appCard" hidden>
+    <div class="card" id="perfCard" hidden>
+      <h2>ผลงานของฉัน · My performance</h2>
+      <p>เดือนนี้: <strong id="perfMonth">…</strong> · ไตรมาสนี้: <strong id="perfQuarter">…</strong></p>
+    </div>
+    <div class="work-grid">
+      <section class="card">
+        <h2>งานที่ต้องทำ · Active <span id="activeCount" class="badge"></span></h2>
+        <div id="activeList"><p class="muted">Loading…</p></div>
+      </section>
+      <section class="card">
+        <h2>รอตรวจ · Waiting for review <span id="waitingCount" class="badge"></span></h2>
+        <div id="waitingList"></div>
+      </section>
+    </div>
+    <section class="card">
+      <h2>เสร็จแล้ว · Done</h2>
+      <div id="doneList"></div>
+    </section>
     <div class="card">
       <h2>Menu</h2>
       <ul class="menu">
-        <li><a href="Button%20A/">Work · งานรอดำเนินการ</a> <span class="soon">Coming soon</span></li>
         <li><a href="Button%20C/">Ex Doc. · ตัวอย่างเอกสารฝ่ายกฎหมาย</a> <span class="soon">Coming soon</span></li>
         <li><a href="Button%20D/">Reports · รายงานประจำสัปดาห์</a> <span class="soon">Coming soon</span></li>
         <li><a href="Button%20E/">Property Right · อายัดและแจ้งบุริมสิทธิ</a> <span class="soon">Coming soon</span></li>
@@ -63,7 +81,6 @@
       <label for="file">Upload a picture or PDF (max 10 MB, deleted after 1 year)</label>
       <input type="file" id="file" accept="image/*,application/pdf">
       <p id="uploadMsg" role="status"></p>
-      <ul id="files"></ul>
     </div>
   </div>
 
@@ -99,17 +116,7 @@
       $("lockedCard").hidden = approved || !me.locked;
       $("appCard").hidden = !approved;
       $("adminItem").hidden = me.role !== "admin";
-      if (approved) loadFiles();
-    }
-
-    async function loadFiles() {
-      $("files").replaceChildren(...(await api("myFiles")).map((f) => {
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.href = f.url; a.target = "_blank"; a.textContent = f.name;
-        li.append(a, ` (${Math.round(f.size / 1024)} KB, ${new Date(f.created_at).toLocaleDateString()})`);
-        return li;
-      }));
+      if (approved) renderWork(me).catch((err) => { $("activeList").textContent = "Error: " + err.message; });
     }
 
     $("loginBtn").onclick = login;
@@ -133,7 +140,6 @@
         const saved = await uploadFile(file);
         $("uploadMsg").textContent = `Saved ${Math.round(saved.size / 1024)} KB (original ${Math.round(file.size / 1024)} KB)`;
         $("file").value = "";
-        loadFiles();
       } catch (err) { $("uploadMsg").textContent = "Error: " + err.message; }
     };
 
