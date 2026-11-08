@@ -143,6 +143,13 @@ async function renderHome(me) {
   const isAdmin = me.role === "admin";
   const reload = () => renderHome(me);
   const all = (isAdmin ? await api("listTasks", {}) : await api("myTasks")).filter((t) => t.state !== "cancelled");
+  if (isAdmin && $("trackDot")) {
+    // red dot on "ติดตามงาน": how many sent tasks wait for review (อนุมัติ / ไม่อนุมัติ)
+    const waiting = all.filter((t) => t.state === "submitted").length;
+    $("trackDot").hidden = !waiting;
+    $("trackDot").textContent = waiting > 99 ? "99+" : waiting;
+    $("trackBtn").setAttribute("aria-label", `ติดตามงาน · Tracking: รอตรวจ ${waiting} งาน`);
+  }
   const thisMonth = all.filter((t) => bkkMonth(t.created_at) === month);
   const older = all.filter((t) => bkkMonth(t.created_at) !== month && t.state !== "approved");
   const parts = HOME_STATUS.map((s) => ({ ...s, tasks: thisMonth.filter((t) => homeStatus(t) === s.key) })).map((p) => ({ ...p, n: p.tasks.length }));

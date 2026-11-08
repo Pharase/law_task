@@ -398,3 +398,9 @@ caption { padding-bottom: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #5ce8ff, #7b8cff) padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 .navbar, .nav-links { scrollbar-width: none; } /* the menu bar keeps scrolling sideways without a bar */
+
+/* red count dot on a button (admin Home: tasks waiting for review on "ติดตามงาน") */
+.btn-badged { position: relative; overflow: visible; }
+.btn-dot { position: absolute; top: -7px; right: -7px; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: grid; place-items: center; font-size: 11px; font-weight: 600; line-height: 1; color: #fff; background: #ff3b5c;
+  box-shadow: 0 0 0 2px #0b0d10, 0 0 10px rgba(255, 59, 92, .6); }
