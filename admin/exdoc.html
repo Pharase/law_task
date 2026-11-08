@@ -17,8 +17,8 @@
     <form class="card" id="uploadForm">
       <h2>อัปโหลดเอกสาร</h2>
       <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย: สมาชิกดูและดาวน์โหลดได้อย่างเดียว · ไม่ถูกลบอัตโนมัติ</p>
-      <label for="pdf">ไฟล์ PDF, Word (.doc/.docx) หรือรูป (.jpg/.png) ไม่เกิน 20 MB</label>
-      <input type="file" id="pdf" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+      <label for="pdf">ไฟล์ PDF, Word (.doc/.docx), รูป (.jpg/.png) หรือไฟล์บีบอัด (.zip/.rar) ไม่เกิน 20 MB</label>
+      <input type="file" id="pdf" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.rar" required>
       <label for="docTitle">ชื่อเอกสาร · Title</label>
       <input id="docTitle" maxlength="200" required>
       <label for="docGroup">กลุ่ม · Group</label>
@@ -32,8 +32,13 @@
     <!-- Upload a whole folder: each top folder = a group (created if missing); files right in the chosen folder are skipped -->
     <section class="card">
       <h2>อัปโหลดทั้งโฟลเดอร์ · Upload a folder</h2>
-      <p class="muted small-note">เลือกโฟลเดอร์หลัก (เช่น src) · โฟลเดอร์ย่อยชั้นแรก = ชื่อกลุ่ม · ไฟล์ในโฟลเดอร์ย่อยลึกลงไป ชื่อจะมีชื่อโฟลเดอร์นำหน้า · ข้ามไฟล์ที่อัปโหลดแล้ว (ชื่อเดียวกันในกลุ่มเดียวกัน) และไฟล์ที่ไม่ใช่ PDF / Word / รูป</p>
+      <p class="muted small-note">เลือกโฟลเดอร์หลัก (เช่น src: โฟลเดอร์ย่อยชั้นแรก = ชื่อกลุ่ม) หรือเลือกโฟลเดอร์กลุ่มเดียว · โฟลเดอร์ที่ลึกลงไป = โฟลเดอร์ย่อย · ข้ามไฟล์ที่อัปโหลดแล้ว (ชื่อเดียวกันในกลุ่มเดียวกัน) · รองรับ PDF / Word / รูป / .zip / .rar</p>
       <input type="file" id="folderPick" webkitdirectory multiple aria-label="เลือกโฟลเดอร์">
+      <label for="folderMode">โฟลเดอร์ที่เลือกคือ</label>
+      <select id="folderMode">
+        <option value="root">โฟลเดอร์หลัก · โฟลเดอร์ย่อยชั้นแรก = ชื่อกลุ่ม</option>
+        <option value="group">กลุ่มเดียว · ชื่อโฟลเดอร์ที่เลือก = ชื่อกลุ่ม</option>
+      </select>
       <div id="folderPlan" class="muted small-note"></div>
       <button type="button" class="small" id="folderGo" hidden>อัปโหลดทั้งหมด</button>
       <p id="folderMsg" role="status"></p>
@@ -122,7 +127,7 @@
         : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
     }
 
-    const OK_TYPE = /\.(pdf|docx?|jpe?g|png)$/i; // same list as the server (exdocTypes.ts)
+    const OK_TYPE = /\.(pdf|docx?|jpe?g|png|zip|rar)$/i; // same list as the server (exdocTypes.ts)
     const baseName = (n) => n.replace(/\.[^.]+$/, "");
 
     /** One file to Storage (signed upload URL), then its row. */
@@ -141,29 +146,41 @@
       if (f && !$("docTitle").value) $("docTitle").value = baseName(f.name);
     };
 
-    // ---- whole folder: <chosen>/<group>/[sub/...]/file ----
+    // ---- whole folder: root mode <chosen>/<group>/[sub/...]/file · group mode <chosen = group>/[sub/...]/file ----
     let plan = [];
+    const relParts = (f) => (f.webkitRelativePath || f.name).split("/");
     $("folderPick").onchange = () => {
-      const files = [...$("folderPick").files];
+      // guess: most files inside subfolders = a main folder of groups (like src); otherwise one group folder. The select can change it.
+      const files = [...$("folderPick").files], deep = files.filter((f) => relParts(f).length >= 3).length;
+      $("folderMode").value = deep > files.length - deep ? "root" : "group";
+      makePlan();
+    };
+    $("folderMode").onchange = makePlan;
+    function makePlan() {
+      const at = $("folderMode").value === "group" ? 0 : 1; // which path part is the group name
       plan = [];
-      let skipped = 0;
-      for (const f of files) {
-        const parts = (f.webkitRelativePath || f.name).split("/");
-        // parts[0] = the chosen folder; files directly inside it have no group folder
-        if (parts.length < 3 || !OK_TYPE.test(f.name) || f.size > MAX) { skipped++; continue; }
+      const loose = [], badType = new Set(), big = [];
+      for (const f of $("folderPick").files) {
+        const parts = relParts(f);
+        if (parts.length < at + 2) loose.push(f.name); // root mode: right inside the chosen folder, no group
+        else if (!OK_TYPE.test(f.name)) badType.add((/\.[^.]+$/.exec(f.name) || ["(ไม่มีนามสกุล)"])[0].toLowerCase());
+        else if (f.size > MAX) big.push(f.name);
         // deeper folders = the subfolder (several levels are joined with " / ")
-        plan.push({ file: f, group: parts[1].trim(), subgroup: parts.slice(2, -1).join(" / ").slice(0, 100), title: baseName(f.name).slice(0, 200) });
+        else plan.push({ file: f, group: parts[at].trim(), subgroup: parts.slice(at + 1, -1).join(" / ").slice(0, 100), title: baseName(f.name).slice(0, 200) });
       }
+      const nType = [...$("folderPick").files].length - plan.length - loose.length - big.length;
+      const why = [nType && `ชนิดไม่รองรับ ${nType} (${[...badType].join(", ")})`, big.length && `ใหญ่เกิน 20 MB ${big.length}`,
+        loose.length && `อยู่นอกโฟลเดอร์กลุ่ม ${loose.length} (ถ้าโฟลเดอร์นี้คือกลุ่มเดียว เลือก "กลุ่มเดียว" ด้านบน)`].filter(Boolean);
       const groups = [...new Set(plan.map((p) => p.group))];
       $("folderPlan").replaceChildren(
-        el("p", { textContent: `พบ ${plan.length} ไฟล์ใน ${groups.length} กลุ่ม · ข้าม ${skipped} ไฟล์ (ชนิดไม่รองรับ / ใหญ่เกิน 20 MB / อยู่นอกโฟลเดอร์กลุ่ม)` }),
+        el("p", { textContent: `พบ ${plan.length} ไฟล์ใน ${groups.length} กลุ่ม` + (why.length ? ` · ข้าม: ${why.join(" · ")}` : "") }),
         el("ul", {}, ...groups.map((g) => {
           const inG = plan.filter((p) => p.group === g), subs = [...new Set(inG.map((p) => p.subgroup).filter(Boolean))];
           return el("li", { textContent: `${g} (${inG.length})${subs.length ? " · โฟลเดอร์ย่อย: " + subs.join(", ") : ""}` });
         })));
       $("folderGo").hidden = !plan.length;
       $("folderMsg").textContent = "";
-    };
+    }
     $("folderGo").onclick = async () => {
       const btn = $("folderGo");
       btn.disabled = true;
@@ -193,7 +210,7 @@
     $("uploadForm").onsubmit = async (e) => {
       e.preventDefault();
       const f = $("pdf").files[0];
-      if (!OK_TYPE.test(f.name)) return void ($("uploadMsg").textContent = "รองรับ PDF, Word (.doc/.docx) หรือรูป (.jpg/.png)");
+      if (!OK_TYPE.test(f.name)) return void ($("uploadMsg").textContent = "รองรับ PDF, Word (.doc/.docx), รูป (.jpg/.png) หรือ .zip/.rar");
       if (f.size > MAX) return void ($("uploadMsg").textContent = "ไฟล์ใหญ่เกิน 20 MB");
       const btn = e.submitter; btn.disabled = true;
       try {

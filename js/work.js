@@ -266,4 +266,4 @@ function docsBySubgroup(docs, rowFn) {
     }),
   ];
 }
-const fileType = (name) => (/\.docx?$/i.test(name) ? "Word" : /\.(jpe?g|png)$/i.test(name) ? "รูป" : "PDF");
+const fileType = (name) => (/\.docx?$/i.test(name) ? "Word" : /\.(jpe?g|png)$/i.test(name) ? "รูป" : /\.(zip|rar)$/i.test(name) ? "ไฟล์บีบอัด" : "PDF");
