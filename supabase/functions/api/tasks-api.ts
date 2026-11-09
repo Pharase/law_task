@@ -5,6 +5,7 @@ import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { notifyNewTasks } from "./notify-api.ts";
+import type { BubbleTask } from "./linebot.ts";
 import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
 
@@ -99,26 +100,34 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
 
     case "sendTask": {
       const id = taskId(body);
-      const task = taskIn(await loadSheet(), id);
-      if (!canSend(task, me.line_user_id)) throw new HttpError(403, "you can only send your own task while it is กำลังดำเนินการ (on process)");
-      // One locked batch: the flip and the send row land together; a double tap finds state != on_process and gets 409.
-      const r = await batch([
-        { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
-        { op: "append", tab: "Sends", rows: [{
-          task_id: String(id), sent_on: today(), sent_at: new Date().toISOString(), due_on: task.current_due_on, outcome: "pending",
-        }] },
-      ]);
-      if (!r) throw new HttpError(409, "already sent");
-      const fileIds = validFileIds(body.file_ids); // non-uuids dropped: a bad id must not 500 after the send is saved
-      if (fileIds.length) {
-        // Only the sender's own, still-unattached files move; anything else is silently ignored.
-        must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })
-          .in("id", fileIds).eq("owner", me.line_user_id).is("task_id", null));
-      }
+      await submitTask(id, me.line_user_id, validFileIds(body.file_ids)); // non-uuids dropped: a bad id must not 500 after the send is saved
       return one(id);
     }
   }
   return undefined;
+}
+
+/**
+ * ส่งงาน: the web app's button and the LINE bubble's button both land here. Throws 404 (no task),
+ * 403 (not this person's on-process task) or 409 (already sent). Returns the task as it was before sending.
+ */
+export async function submitTask(id: number, userId: string, fileIds: string[] = []): Promise<Task> {
+  const task = taskIn(await loadSheet(), id);
+  if (!canSend(task, userId)) throw new HttpError(403, "you can only send your own task while it is กำลังดำเนินการ (on process)");
+  // One locked batch: the flip and the send row land together; a double tap finds state != on_process and gets 409.
+  const r = await batch([
+    { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
+    { op: "append", tab: "Sends", rows: [{
+      task_id: String(id), sent_on: today(), sent_at: new Date().toISOString(), due_on: task.current_due_on, outcome: "pending",
+    }] },
+  ]);
+  if (!r) throw new HttpError(409, "already sent");
+  if (fileIds.length) {
+    // Only the sender's own, still-unattached files move; anything else is silently ignored.
+    must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })
+      .in("id", fileIds).eq("owner", userId).is("task_id", null));
+  }
+  return task;
 }
 
 /** Admin-only actions. Returns undefined for actions it doesn't own. */
@@ -196,11 +205,11 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         current_due_on: "", fix_round: 0, created_by: me.line_user_id, created_at, member_notified_at: null,
       })) }]))!; // all rows in one locked batch: all or nothing
       const ids = new Set(rows.map((r: Row) => Number(r.id)));
-      // instant LINE notice (08:30–17:30 only): one message per person; a LINE problem never undoes the assignment
+      // instant LINE bubble (08:30–17:30 only; otherwise pendingNotices sends it once working hours start): one push per person; a LINE problem never undoes the assignment
       try {
-        const byOwner = new Map<string, { id: number; title: string; building: string; due: string }[]>();
+        const byOwner = new Map<string, BubbleTask[]>();
         for (const r of rows as Row[]) {
-          byOwner.set(r.owner_id, [...(byOwner.get(r.owner_id) ?? []), { id: Number(r.id), title: r.title, building: r.building, due: r.due_on }]);
+          byOwner.set(r.owner_id, [...(byOwner.get(r.owner_id) ?? []), { id: Number(r.id), title: r.title, building: r.building, details: r.details || null, due: r.due_on }]);
         }
         const sent = await notifyNewTasks([...byOwner].map(([to, tasks]) => ({ to, tasks })));
         if (sent.length) {

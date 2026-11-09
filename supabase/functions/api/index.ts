@@ -5,7 +5,8 @@ import { bucket, db, found, HttpError, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
-import { adminNotifyActions, digest } from "./notify-api.ts";
+import { adminNotifyActions, digest, pendingNotices } from "./notify-api.ts";
+import { lineWebhook } from "./webhook-api.ts";
 import { pickProfile } from "./profile.ts";
 import { adminInvoiceActions, memberInvoiceActions } from "./invoices-api.ts";
 import { memberReportActions } from "./reports-api.ts";
@@ -56,6 +57,14 @@ async function liveProfile(accessToken: string | null) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  // LINE webhook (bubble "ส่งงาน" button): signed by LINE, checked against the raw body before anything else
+  const lineSig = req.headers.get("x-line-signature");
+  if (lineSig) {
+    try { return new Response(null, { status: await lineWebhook(await req.text(), lineSig) }); } catch (e) {
+      console.error("webhook", e);
+      return new Response(null, { status: 500 });
+    }
+  }
   try {
     const form = req.headers.get("content-type")?.startsWith("multipart/") ? await req.formData() : null;
     const body = form ? Object.fromEntries(form) : await req.json().catch(() => ({}));
@@ -64,6 +73,8 @@ Deno.serve(async (req) => {
     if (body.action === "cleanup") return json(await cleanup());
     // Public on purpose: runs at most once per Bangkok weekday after 09:00, otherwise does nothing.
     if (body.action === "digest") return json(await digest());
+    // Public on purpose: sends only new-task bubbles nobody got yet, during 08:30–17:30, and marks them.
+    if (body.action === "pendingNotices") return json(await pendingNotices());
 
     const line = await verifyLine(req.headers.get("x-line-id-token"));
     // Refresh name + picture from the live LINE profile once per page open ("me"), not on every action.

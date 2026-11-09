@@ -1,7 +1,8 @@
 // Daily LINE summary text (spec "Notifications"): one message per person per weekday, null when there's nothing to say.
-import { bangkokDate } from "./dates.ts";
+import { bangkokDate, daysBetween } from "./dates.ts";
 
 export type T = { title: string; building: string; due: string };
+export type Soon = T & { assigned: string; daysLeft: number };
 const MAX_ITEMS = 10;
 
 const thDate = (s: string) =>
@@ -17,12 +18,12 @@ function section(header: string, items: string[]): string | null {
 const line = (t: T) => `${t.title} (${t.building}) กำหนด ${thDate(t.due)}`;
 
 export function memberDigest(x: {
-  newTasks: T[]; dueToday: T[]; overdue: T[];
+  newTasks: T[]; dueSoon: Soon[]; overdue: T[];
   sentBack: (T & { note: string | null; reason: string })[]; approved: T[];
 }): string | null {
   const parts = [
     section("📌 งานใหม่", x.newTasks.map(line)),
-    section("⏰ ครบกำหนดวันนี้", x.dueToday.map(line)),
+    section("⏳ ใกล้ครบกำหนด (ภายใน 3 วัน) · ยังไม่ส่ง", x.dueSoon.map((t) => `${line(t)} · ${t.daysLeft ? `อีก ${t.daysLeft} วัน` : "วันนี้"}`)),
     section("‼️ เลยกำหนด", x.overdue.map(line)),
     section("↩️ ถูกส่งกลับ", x.sentBack.map((t) => `${line(t)} · ${t.reason}${t.note ? `: ${t.note}` : ""}`)),
     section("✅ อนุมัติแล้ว", x.approved.map((t) => `${t.title} (${t.building})`)),
@@ -49,7 +50,7 @@ export function shouldRunDigest(now: Date, lastRunDate: string | null): boolean 
   return lastRunDate !== bangkokDate(now);
 }
 
-/** Instant "new task" notices go out only between 08:30 and 17:30 Bangkok time; otherwise the morning summary covers them. */
+/** New-task bubbles go out only between 08:30 and 17:30 Bangkok time; otherwise pendingNotices sends them once this window opens. */
 export function isWorkingHours(now: Date): boolean {
   const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     .format(now).split(":").map(Number);
@@ -57,7 +58,11 @@ export function isWorkingHours(now: Date): boolean {
   return minutes >= 8 * 60 + 30 && minutes < 17 * 60 + 30;
 }
 
-/** The instant notice to one person: their new tasks, in the same style as the daily summary. */
-export function newTaskNotice(tasks: T[]): string {
-  return section(`📌 งานใหม่ ${tasks.length} งาน`, tasks.map(line))!;
+const SOON_DAYS = 3;
+
+/** Not-yet-sent tasks due today up to 3 days ahead: oldest assigned first, then the nearest due date. */
+export function dueSoon(tasks: (T & { assigned: string })[], today: string): Soon[] {
+  return tasks.map((t) => ({ ...t, daysLeft: daysBetween(today, t.due) }))
+    .filter((t) => t.daysLeft >= 0 && t.daysLeft <= SOON_DAYS)
+    .sort((a, b) => a.assigned.slice(0, 10).localeCompare(b.assigned.slice(0, 10)) || a.due.localeCompare(b.due));
 }

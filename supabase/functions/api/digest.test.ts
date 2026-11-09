@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { adminDigest, memberDigest, shouldRunDigest } from "./digest.ts";
 
 const t = (title: string) => ({ title, building: "อาคาร X", due: "2026-03-15" });
-const empty = { newTasks: [], dueToday: [], overdue: [], sentBack: [], approved: [] };
+const empty = { newTasks: [], dueSoon: [], overdue: [], sentBack: [], approved: [] };
 
 test("empty member digest -> null", () => assert.equal(memberDigest(empty), null));
 
@@ -48,10 +48,21 @@ test("instant notice only in working hours 08:30-17:30 Bangkok (UTC+7)", async (
   assert.equal(isWorkingHours(new Date("2026-11-09T15:00:00Z")), false); // 22:00
 });
 
-test("newTaskNotice lists the new tasks like the daily summary", async () => {
-  const { newTaskNotice } = await import("./digest.ts");
-  const text = newTaskNotice([{ title: "ตรวจสัญญา", building: "KL2", due: "2026-11-20" }, { title: "ร่างหนังสือ", building: "KL3", due: "2026-11-21" }]);
-  assert.match(text, /^📌 งานใหม่ 2 งาน/);
-  assert.match(text, /• ตรวจสัญญา \(KL2\) กำหนด/);
-  assert.match(text, /• ร่างหนังสือ \(KL3\)/);
+test("due within 3 days: not sent yet, oldest assigned first, then nearest due; days left shown", async () => {
+  const { dueSoon } = await import("./digest.ts");
+  const mk = (title: string, assigned: string, due: string) => ({ title, building: "B", due, assigned });
+  const list = dueSoon([
+    mk("late", "2026-03-01T01:00:00Z", "2026-03-09"),   // overdue: not here
+    mk("far", "2026-03-01T01:00:00Z", "2026-03-14"),    // 4 days: not here
+    mk("new-near", "2026-03-08T01:00:00Z", "2026-03-10"),
+    mk("old-far", "2026-03-02T01:00:00Z", "2026-03-13"),
+    mk("old-near", "2026-03-02T01:00:00Z", "2026-03-11"),
+    mk("today", "2026-03-05T01:00:00Z", "2026-03-10"),
+  ], "2026-03-10");
+  assert.deepEqual(list.map((t) => t.title), ["old-near", "old-far", "today", "new-near"]);
+  assert.deepEqual(list.map((t) => t.daysLeft), [1, 3, 0, 0]);
+  const text = memberDigest({ ...empty, dueSoon: list })!;
+  assert.match(text, /ใกล้ครบกำหนด/);
+  assert.match(text, /old-near \(B\) กำหนด .* · อีก 1 วัน/);
+  assert.match(text, /today \(B\) กำหนด .* · วันนี้/);
 });
