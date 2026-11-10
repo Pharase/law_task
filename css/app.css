@@ -33,8 +33,13 @@ body::before {
 }
 body::after {
   content: ""; position: fixed; z-index: -1; pointer-events: none; inset: 0;
-  background: url("../img/bg-mark.png") center 58% / min(88vw, 620px) auto no-repeat; opacity: .07;
+  background: url("../img/bg-mark.png") center 58% / min(88vw, 620px) auto no-repeat; opacity: .16;
+  /* gold glow around the line art; only opacity animates (cheap on phones), the glow itself is drawn once */
+  filter: drop-shadow(0 0 3px rgba(255, 214, 140, .9)) drop-shadow(0 0 14px rgba(226, 184, 102, .7)) drop-shadow(0 0 40px rgba(226, 184, 102, .45));
+  animation: mark-breathe 7s ease-in-out infinite;
 }
+@keyframes mark-breathe { 0%, 100% { opacity: .12; } 50% { opacity: .22; } }
+@media (prefers-reduced-motion: reduce) { body::after { animation: none; } }
 ::selection { background: rgba(2, 215, 244, .35); }
 
 h1 { margin: 0 0 12px; font-weight: 600; font-size: 28px; }
@@ -157,7 +162,7 @@ p.label { font-weight: 600; margin: 8px 0 4px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { border-bottom: 1px solid var(--line); padding: 9px 8px; text-align: left; }
 th { color: var(--ink-2); font-weight: 500; }
-caption { padding-bottom: 6px; }
+caption { padding-bottom: 6px; text-align: left; } /* centred, a wide scrolling table would push it off-screen on phones */
 .doc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding: 10px 0; }
 .doc-group { border-top: 1px solid var(--line); padding: 6px 0; }
 .doc-group > summary { cursor: pointer; padding: 6px 0; font-weight: 600; }
@@ -444,4 +449,17 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   .donut, .donut-empty { width: 140px; height: 140px; }
   .inv-amount { font-size: 15px; }
   dialog.modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
+  /* menu: logo + account on top, every page link on its own row below (nothing hidden off to the side) */
+  .navbar { flex-wrap: wrap; border-radius: 20px; padding: 6px; }
+  .nav-links { order: 3; flex: 1 0 100%; flex-wrap: wrap; justify-content: center; gap: 0 2px; overflow: visible; padding-top: 4px; border-top: 1px solid var(--line); }
+  .nav-links a { padding: 6px 6px; font-size: 12.5px; }
+  /* invoices: text gets the full width, the status track + price sit on their own row under it */
+  .inv-row { flex-wrap: wrap; gap: 6px; }
+  .inv-row > .grow { flex: 1 1 100%; }
+  .inv-side { flex: 1 1 100%; flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+  .inv-status { align-items: flex-start; }
+  .inv-row .small-note { margin-top: 0; } /* the date line was overlapping the building line */
+  /* performance: shorter header row (category names wrap less) */
+  #perfTable th, #perfTable td:nth-child(2) { white-space: nowrap; } /* one-line header and names; the table scrolls sideways */
+  #perfTable th { font-size: 11px; min-width: 0; }
 }

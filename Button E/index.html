@@ -137,14 +137,14 @@
       const rows = all.filter((r) => !q || r.building.includes(q))
         .sort((a, b) => b.over6 - a.over6 || b.todo - a.todo || a.building.localeCompare(b.building, "th"));
       const active = rows.filter((r) => !empty(r)), zero = rows.filter(empty);
-      $(kind).replaceChildren(
+      $(kind).replaceChildren(...[ // filter: replaceChildren would print a false as the text "false"
         tiles(kind, all),
         ...active.map((r) => building(kind, r)),
         !rows.length && h("p", { className: "muted", textContent: all.length ? "ไม่พบนิติบุคคลที่ค้นหา" : "ยังไม่มีข้อมูลในชีต" }),
         zero.length > 0 && h("details", { className: "lien-zero" },
           h("summary", { textContent: `··· ไม่มีรายการ ${zero.length} นิติ ▸` }),
           ...zero.map((r) => building(kind, r))),
-      );
+      ].filter(Boolean));
     }
     const fillAll = (s) => { data = s; fillKind("condo"); fillKind("village"); };
     $("search").oninput = () => data && fillAll(data);

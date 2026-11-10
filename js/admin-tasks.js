@@ -11,7 +11,7 @@ const checked = (name) => [...document.querySelectorAll(`input[name="${name}"]:c
 function adminTaskBody(t) {
   const files = t.files.map((f) => f.url
     ? el("li", {}, el("a", { href: f.url, target: "_blank", textContent: f.name }),
-      f.drive_url && f.drive_url !== f.url ? el("a", { href: f.drive_url, target: "_blank", textContent: " · 📂 Drive" }) : "")
+      ...(f.drive_url && f.drive_url !== f.url ? [" · ", el("a", { href: f.drive_url, target: "_blank", textContent: "📂 Drive" })] : []))
     : el("li", { className: "muted", textContent: f.name + " (ลบแล้ว)" }));
   return el("div", { className: "task-body" },
     el("p", { className: "muted", textContent: `${t.owner_name} · ${STATE_TEXT[t.state]} · เดิม ${thDate(t.due_on)} · ปัจจุบัน ${thDate(t.current_due_on)}` }),
