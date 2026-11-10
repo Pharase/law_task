@@ -18,6 +18,14 @@ function book() {
   return SpreadsheetApp.getActive() || SpreadsheetApp.openById(PROPS.getProperty("SHEET_ID"));
 }
 
+// Button E reads/edits these tabs where the team already works: the "รายชื่อผู้ค้างค่าส่วนกลางเกิน 6 เดือน" sheet
+// (its own สรุปการดำเนินงาน formulas keep working). Script property LIEN_SHEET_ID overrides the id.
+var OTHER_BOOK_TABS = ["รายชื่อค้างคสก (อช)", "รายชื่อค้างคสก (จส)"];
+function tabSheet(name) {
+  if (OTHER_BOOK_TABS.indexOf(name) < 0) return book().getSheetByName(name);
+  return SpreadsheetApp.openById(PROPS.getProperty("LIEN_SHEET_ID") || "1dVsaAj0s0k1SoKJjRZcPcTcXUtgHkSQdOQ7HofvKErA").getSheetByName(name);
+}
+
 function doPost(e) {
   var out;
   try {
@@ -59,7 +67,7 @@ function single(r, key) {
 function readTabs(names) {
   var out = {};
   names.forEach(function (name) {
-    var sh = book().getSheetByName(name);
+    var sh = tabSheet(name);
     out[name] = sh && sh.getLastRow() > 0 ? toObjects(sh.getDataRange().getValues()) : [];
   });
   return out;
@@ -82,7 +90,7 @@ function runBatch(steps) {
     var tables = {};
     steps.forEach(function (s) {
       if (tables[s.tab]) return;
-      var sh = book().getSheetByName(s.tab);
+      var sh = tabSheet(s.tab);
       if (!sh || sh.getLastRow() < 1) throw new Error("tab " + s.tab + " is missing; run setup");
       var values = sh.getDataRange().getValues();
       tables[s.tab] = { sheet: sh, headers: values[0].map(normCell), rows: toObjects(values) };
