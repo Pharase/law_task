@@ -2,8 +2,8 @@
 // sendLineFlex), the "ส่งงาน" postback data, the webhook signature check, and the reply wording.
 // Pure: no Deno or npm imports, so node tests run it.
 
-/** Picture at the top of every task bubble (the old script's hero image). */
-export const HERO_URL = "https://img5.pic.in.th/file/secure-sv1/Namelist---43ef5eb376324ab3d.png";
+/** Picture at the top of every task bubble (img/task-hero.png on the GitHub Pages site). */
+export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.png";
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
 export type BubbleTask = { id: number; title: string; building: string; details: string | null; due: string };
@@ -21,7 +21,7 @@ const row = (label: string, value: string, color: string) => ({
 export function taskBubble(t: BubbleTask) {
   return {
     type: "bubble",
-    hero: { type: "image", url: HERO_URL, size: "full", aspectMode: "cover", aspectRatio: "20:13" },
+    hero: { type: "image", url: HERO_URL, size: "full", aspectMode: "fit", aspectRatio: "241:167", backgroundColor: "#FFFFFF" }, // the picture's own shape, nothing cropped
     body: {
       type: "box", layout: "vertical", contents: [
         { type: "text", text: "งานใหม่: " + t.title, weight: "bold", size: "xl", wrap: true },
