@@ -1,6 +1,7 @@
 // Reports tab, "รายงานประจำเดือน": the files in a Google Drive folder, viewed and downloaded inside the app.
 // Each Drive file is copied to the private `reports` bucket once per version (path = id/modifiedMs.pdf),
 // so people always get the latest version without ever being sent to Google Drive.
+import { latestPerKind } from "./reports.ts";
 import { sheet } from "./sheet.ts";
 import { db, HttpError, type Me, must } from "./shared.ts";
 
@@ -18,9 +19,10 @@ const pdfName = (name: string) => name.replace(/\.pdf$/i, "") + ".pdf";
 export async function memberReportActions(action: string, body: any, _me: Me): Promise<unknown> {
   switch (action) {
     case "listReports": {
-      // only the newest report is shown in the app; older ones are opened in the Drive folder (folderUrl)
+      // the app shows the newest report of each kind (by file name); older ones are opened in the Drive folder (folderUrl)
       const { files, folderUrl } = await listFiles();
-      return { latest: files.slice(0, 1).map(({ id, name, modified }) => ({ id, name, modified })), count: files.length, folderUrl };
+      const latest = latestPerKind(files);
+      return { latest: latest.map(({ id, name, modified }) => ({ id, name, modified })), count: files.length, shown: latest.length, folderUrl };
     }
 
     case "reportUrl": {

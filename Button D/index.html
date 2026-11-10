@@ -28,7 +28,7 @@
     </section>
     <section class="card">
       <h2>รายงานประจำเดือน · Monthly reports</h2>
-      <p class="muted small-note">ฉบับล่าสุด ดูหรือดาวน์โหลดได้ในแอป · ฉบับก่อนๆ เปิดในโฟลเดอร์ Google Drive</p>
+      <p class="muted small-note">ฉบับล่าสุดของ ชั้นฟ้อง และ ชั้นบังคับคดี ดูหรือดาวน์โหลดได้ในแอป · ฉบับก่อนๆ เปิดในโฟลเดอร์ Google Drive</p>
       <div id="reportList"><p class="loading" role="status"></p></div>
       <p id="reportMsg" class="small-note" role="status"></p>
     </section>
@@ -71,7 +71,7 @@
       busy(btn, false);
     }
     async function loadMonthly() {
-      const { latest, count, folderUrl } = await api("listReports");
+      const { latest, count, shown = latest.length, folderUrl } = await api("listReports");
       const rows = latest.map((r) => {
         const view = el("button", { type: "button", className: "small", textContent: "ดู (Preview)" });
         const down = el("button", { type: "button", className: "small secondary", textContent: "ดาวน์โหลด" });
@@ -85,7 +85,7 @@
       });
       // older reports: opened in the Google Drive folder (the phone's browser / Drive app inside LINE)
       const older = folderUrl && el("button", { type: "button", className: "small secondary", onclick: () => openFile(folderUrl, true),
-        textContent: count > 1 ? `📂 รายงานเดือนก่อนๆ (${count - 1}) · เปิด Google Drive` : "📂 เปิดโฟลเดอร์ Google Drive" });
+        textContent: count > shown ? `📂 รายงานเดือนก่อนๆ (${count - shown}) · เปิด Google Drive` : "📂 เปิดโฟลเดอร์ Google Drive" });
       $("reportList").replaceChildren(...(rows.length ? rows : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]),
         ...(older ? [el("div", { className: "report-older" }, older)] : []));
     }
