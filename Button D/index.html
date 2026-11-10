@@ -32,8 +32,11 @@
       <div id="reportList"><p class="loading" role="status"></p></div>
       <p id="reportMsg" class="small-note" role="status"></p>
     </section>
-    <section class="card">
-      <h2>ผลงาน · Performance</h2>
+    <section class="card" id="perfCard">
+      <div class="row card-head">
+        <h2 class="grow">ผลงาน · Performance</h2>
+        <button type="button" class="small secondary no-print" id="perfPrint" title="พิมพ์ · Print" aria-label="พิมพ์ผลงาน · Print performance">🖨️</button>
+      </div>
       <p class="muted">หัวหน้างานเห็นเฉพาะผลงานของตัวเอง · แอดมินเห็นทั้งทีม (กรองที่เซิร์ฟเวอร์)</p>
       <div class="row filters">
         <select id="pKind" aria-label="Period"><option value="month">เดือน</option><option value="quarter">ไตรมาส</option></select>
@@ -89,6 +92,12 @@
       $("reportList").replaceChildren(...(rows.length ? rows : [el("p", { className: "muted", textContent: "ยังไม่มีรายงาน" })]),
         ...(older ? [el("div", { className: "report-older" }, older)] : []));
     }
+    // print only the Performance card (see .printing in css/app.css)
+    $("perfPrint").onclick = () => {
+      $("perfCard").classList.add("printing");
+      addEventListener("afterprint", () => $("perfCard").classList.remove("printing"), { once: true });
+      print();
+    };
     start("member").then((me) => {
       initReports();
       if (me.role === "admin") {

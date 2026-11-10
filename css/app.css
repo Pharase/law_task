@@ -411,3 +411,16 @@ caption { padding-bottom: 6px; }
 .doc-sub > summary { cursor: pointer; padding: 8px 0; font-weight: 500; color: var(--ink-2); }
 .doc-sub > summary .badge { margin-left: 8px; }
 .report-older { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+/* ---- Print one card (e.g. 🖨️ on Reports → Performance): only .printing goes on paper, dark ink on white ---- */
+@media print {
+  html:has(.printing), body:has(.printing) { background: #fff !important; }
+  body:has(.printing) * { visibility: hidden; }
+  body:has(.printing)::before, body:has(.printing)::after, .navbar { display: none !important; }
+  body:has(.printing) .printing, body:has(.printing) .printing * { visibility: visible; color: #000 !important; background: none !important; box-shadow: none !important; text-shadow: none !important; }
+  .printing { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; padding: 0; backdrop-filter: none; }
+  .printing::before, .printing .no-print { display: none !important; }
+  .printing .table-wrap { overflow: visible; }
+  .printing th, .printing td { border-bottom: 1px solid #999; }
+  .printing select { border: 0; appearance: none; }
+}
