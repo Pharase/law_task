@@ -55,33 +55,21 @@ function renderNav() {
 }
 document.addEventListener("DOMContentLoaded", renderNav);
 
-// ---- Loading: a small circuit board with signals running left to right (fills every empty .loading) ----
-const TRACE = "M0 24H34L46 12H94L106 24H146L158 36H198L210 24H240";
-let circuitN = 0;
+// ---- Loading: a balance scale tipping left, right, ever less, until level (fills every empty .loading; CSS animates it) ----
+const SCALE_SVG = `<svg class="scale" viewBox="0 0 120 72" aria-hidden="true">
+  <path d="M60 16V66M46 66H74"/>
+  <g class="beam"><path d="M22 16H98"/><g class="pan l"><path d="M26 16L15 44M26 16L37 44"/><path class="pan-dish" d="M11 44Q26 57 41 44Z"/></g><g class="pan r"><path d="M94 16L83 44M94 16L105 44"/><path class="pan-dish" d="M79 44Q94 57 109 44Z"/></g></g>
+  <circle class="pivot" cx="60" cy="16" r="3.5"/>
+</svg>`;
 function fillLoaders() {
   for (const box of document.querySelectorAll(".loading:empty")) {
-    const id = "cg" + ++circuitN; // unique gradient/filter ids per loader on the page
     box.setAttribute("aria-label", "Loading");
-    // constant markup, no user data
-    box.innerHTML = `<svg class="circuit" viewBox="0 0 240 48" aria-hidden="true">
-  <defs>
-    <linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="#02d7f4"/><stop offset="1" stop-color="#6b7cff"/></linearGradient>
-    <filter id="${id}f" x="-20%" y="-200%" width="140%" height="500%"><feGaussianBlur stdDeviation="2.2"/></filter>
-  </defs>
-  <g class="traces">
-    <path d="${TRACE}"/><path d="M34 24L46 36H84"/><path d="M146 24L158 12H186"/><path d="M106 24V40H126"/><path d="M198 36V44"/>
-  </g>
-  <g class="pads">
-    <circle cx="34" cy="24" r="2.6"/><circle cx="94" cy="12" r="2.6"/><circle cx="146" cy="24" r="2.6"/><circle cx="198" cy="36" r="2.6"/>
-    <circle cx="84" cy="36" r="2.2"/><circle cx="186" cy="12" r="2.2"/><circle cx="126" cy="40" r="2.2"/>
-  </g>
-  <path class="signal glow" d="${TRACE}" pathLength="300" stroke="url(#${id})" filter="url(#${id}f)"/>
-  <path class="signal" d="${TRACE}" pathLength="300" stroke="url(#${id})"/>
-  <path class="signal late" d="${TRACE}" pathLength="300" stroke="url(#${id})"/>
-</svg>`;
+    box.innerHTML = SCALE_SVG; // constant markup, no user data
   }
 }
 document.addEventListener("DOMContentLoaded", fillLoaders);
+// credit line at the bottom of every page
+document.addEventListener("DOMContentLoaded", () => document.body.append(Object.assign(document.createElement("footer"), { className: "site-foot", textContent: `© ${new Date().getFullYear()} law_task · Powered by Pharase` })));
 
 // ---- Right side of the navbar: (admins) members link with waiting count, who you are, Log out ----
 const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };
