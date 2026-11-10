@@ -7,39 +7,152 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js"></script>
   <link rel="stylesheet" href="../css/app.css">
+  <style>
+    .lien th, .lien td { text-align: center; white-space: nowrap; }
+    .lien th:first-child, .lien td:first-child { text-align: left; white-space: normal; min-width: 180px; }
+    .lien tr.total th { border-top: 1px solid var(--line-2); }
+    .lien button.link { background: none; border: 0; padding: 0; color: #8ff1ff; text-align: left; text-decoration: underline; cursor: pointer; font: inherit; box-shadow: none; border-radius: 0; min-height: 0; }
+    .lien-items td { vertical-align: top; text-align: left; white-space: normal; }
+    .lien-form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .lien-form label { display: flex; gap: 6px; align-items: center; }
+    .lien-form label.wide { grid-column: 1 / -1; flex-direction: column; align-items: stretch; }
+  </style>
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
   <div id="page" hidden>
-    <!-- counts come from the sheet tabs "รายชื่อค้างคสก (อช)" / "(จส)", same rules as the old สรุปการดำเนินงาน (supabase/functions/api/lien.ts) -->
+    <!-- computed by the app from the sheet tabs "รายชื่อค้างคสก (อช)" / "(จส)", same formulas as the old สรุปการดำเนินงาน (supabase/functions/api/lien.ts) -->
     <section class="card">
-      <h2>สรุปการอายัดหรือจดบุริมสิทธิ์ · อาคารชุด</h2>
-      <div class="table-wrap"><table id="condoTable"></table></div>
+      <h2>สรุปการดำเนินงาน · อาคารชุด</h2>
+      <p class="muted small-note admin-only" hidden>กดชื่อนิติบุคคลเพื่อดูรายชื่อและแก้สถานะ</p>
+      <div class="table-wrap"><table class="lien" id="condoTable"></table></div>
     </section>
     <section class="card">
-      <h2>สรุปการอายัด · หมู่บ้านจัดสรร</h2>
-      <div class="table-wrap"><table id="villageTable"></table></div>
+      <h2>สรุปการดำเนินงาน · หมู่บ้านจัดสรร</h2>
+      <div class="table-wrap"><table class="lien" id="villageTable"></table></div>
+    </section>
+    <!-- admins only: one building's list -->
+    <section class="card" id="detailCard" hidden>
+      <h2 id="detailTitle"></h2>
+      <p class="muted small-note">แก้ได้เฉพาะสถานะ · ข้อมูลอื่น (ชื่อ, เดือนที่ค้าง, ยอด, เข้าเงื่อนไขเสนอราคา) แก้ในชีต</p>
+      <p id="detailMsg" class="small-note" role="status"></p>
+      <div class="table-wrap" id="detailList"></div>
     </section>
   </div>
   <script>
-    function fill(table, rows, todoLabel) {
-      const tr = (cells, tag = "td") => {
-        const r = document.createElement("tr");
-        for (const c of cells) { const x = document.createElement(tag); x.textContent = c; r.append(x); }
-        return r;
+    const LABEL = {
+      mortgage: "จำนอง", unknown: "ไม่ทราบข้อมูล", eligible: "เข้าเงื่อนไขเสนอราคา", quoted: "เสนอราคาทนาย", approved: "อนุมัติ", delayed: "ชะลอ",
+      step: "ปัจจุบันดำเนินการถึงขั้นตอนไหน", note: "หมายเหตุ",
+    };
+    const KIND = {
+      condo: { table: "condoTable", todo: "ต้องดำเนินการอายัดหรือจดบุริมสิทธิ์", group: "สรุปการอายัดหรือจดบุริมสิทธิ์", date: "วันแจ้งบุริมสิทธิ์",
+        flags: ["mortgage", "unknown", "eligible", "quoted", "approved", "delayed"], edit: ["mortgage", "unknown", "quoted", "approved", "delayed"] },
+      village: { table: "villageTable", todo: "ต้องดำเนินการอายัด", group: "สรุปการอายัด", date: "วันแจ้งอายัด",
+        flags: ["eligible", "quoted", "approved", "delayed"], edit: ["quoted", "approved", "delayed"] },
+    };
+    const COLS = ["over6", "eligible", "notEligible", "quoted", "approved", "delayed", "waiting", "todo", "doing", "done"];
+    let isAdmin = false;
+    let open = null; // {kind, building}
+
+    const h = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+    const row = (cells, tag = "td") => h("tr", {}, ...cells.map((c) => c instanceof Node ? h(tag, {}, c) : h(tag, { textContent: c })));
+
+    function fillSummary(kind, rows) {
+      const k = KIND[kind];
+      const sum = (c) => rows.reduce((n, r) => n + r[c], 0);
+      const name = (b) => {
+        if (!isAdmin) return b;
+        const btn = h("button", { type: "button", className: "link", textContent: b });
+        btn.onclick = () => openBuilding(kind, b);
+        return btn;
       };
-      const sum = (k) => rows.reduce((n, r) => n + r[k], 0);
-      table.append(
-        tr(["ชื่อนิติบุคคล", todoLabel, "อยู่ระหว่างดำเนินการ", "ดำเนินการเรียบร้อยแล้ว"], "th"),
-        ...rows.map((r) => tr([r.building, r.todo, r.doing, r.done])),
-        tr(["รวม", sum("todo"), sum("doing"), sum("done")], "th"),
+      $(k.table).replaceChildren(
+        h("tr", {}, h("th", { textContent: "ข้อมูล", colSpan: 4 }), h("th", { textContent: "สรุปการเสนอดำเนินการทางกฎหมาย", colSpan: 4 }), h("th", { textContent: k.group, colSpan: 3 })),
+        row(["ชื่อนิติบุคคล", "ค้างชำระค่าส่วนกลางเกิน 6 เดือน", "เข้าเงื่อนไขเสนอฟ้อง", "ไม่เข้าเงื่อนไขเสนอฟ้อง", "ส่งใบเสนอราคา", "อนุมัติ", "ชะลอ",
+          "รออนุมัติจากกรรมการ", k.todo, "อยู่ระหว่างดำเนินการ", "ดำเนินการเรียบร้อยแล้ว"], "th"),
+        ...(rows.length ? rows.map((r) => row([name(r.building), ...COLS.map((c) => r[c])])) : [row(["ยังไม่มีข้อมูลในชีต"])]),
+        Object.assign(row(["รวม", ...COLS.map(sum)], "th"), { className: "total" }),
       );
-      if (!rows.length) table.replaceChildren(tr(["ยังไม่มีข้อมูลในชีต"]));
     }
-    start("member").then(async () => {
-      const { condo, village } = await api("lienSummary");
-      fill($("condoTable"), condo, "ต้องดำเนินการอายัดหรือจดบุริมสิทธิ์");
-      fill($("villageTable"), village, "ต้องดำเนินการอายัด");
+    const fillAll = (s) => { fillSummary("condo", s.condo); fillSummary("village", s.village); };
+
+    async function openBuilding(kind, building) {
+      open = { kind, building };
+      $("detailCard").hidden = false;
+      $("detailTitle").textContent = building;
+      $("detailMsg").textContent = "";
+      $("detailList").replaceChildren(h("p", { className: "loading", role: "status" }));
+      fillLoaders?.();
+      $("detailCard").scrollIntoView({ behavior: "smooth" });
+      try { showItems((await api("lienDetail", { kind, building })).items); }
+      catch (err) { $("detailList").replaceChildren(); $("detailMsg").textContent = "❌ " + err.message; }
+    }
+
+    function showItems(items) {
+      const k = KIND[open.kind];
+      const tbody = h("tbody");
+      for (const it of items) {
+        const status = h("td", {}, ...k.flags.map((f) => h("span", { className: "badge " + (it[f] ? "on" : "off"), textContent: (it[f] ? "✓ " : "") + LABEL[f] })), " ");
+        if (it.notifiedOn) status.append(h("span", { className: "tag", textContent: k.date + " " + it.notifiedOn }));
+        const edit = h("button", { type: "button", className: "small secondary", textContent: "แก้ไข" });
+        const tr = h("tr", {},
+          h("td", { textContent: it.unit || "-" }),
+          h("td", { textContent: it.name }),
+          h("td", { textContent: it.months }),
+          h("td", { textContent: it.owed }),
+          status,
+          h("td", { textContent: [it.step, it.note].filter(Boolean).join(" · ") }),
+          h("td", {}, edit));
+        edit.onclick = () => tr.replaceWith(editRow(it, tr));
+        tbody.append(tr);
+      }
+      $("detailList").replaceChildren(h("table", { className: "lien lien-items" },
+        h("thead", {}, row(["บ้านเลขที่", "รายชื่อ", "เดือนที่ค้าง", "ยอดที่ค้างชำระ", "สถานะ", "ขั้นตอน · หมายเหตุ", ""], "th")),
+        items.length ? tbody : h("tbody", {}, row(["ไม่มีรายชื่อ"]))));
+    }
+
+    function editRow(it, viewRow) {
+      const k = KIND[open.kind];
+      const inputs = {};
+      const form = h("div", { className: "lien-form" });
+      for (const f of k.edit) {
+        inputs[f] = h("input", { type: "checkbox", checked: !!it[f] });
+        form.append(h("label", {}, inputs[f], LABEL[f]));
+      }
+      // text, not a date picker: old rows hold dates like "27 ตค 68" and must not be lost
+      inputs.notifiedOn = h("input", { value: it.notifiedOn, placeholder: "เช่น 2026-11-10" });
+      inputs.step = h("input", { value: it.step });
+      inputs.note = h("textarea", { value: it.note, rows: 2 });
+      form.append(h("label", { className: "wide" }, k.date, inputs.notifiedOn), h("label", { className: "wide" }, LABEL.step, inputs.step),
+        h("label", { className: "wide" }, LABEL.note, inputs.note));
+      const save = h("button", { type: "button", className: "small", textContent: "บันทึก" });
+      const cancel = h("button", { type: "button", className: "small secondary", textContent: "ยกเลิก" });
+      const msg = h("span", { className: "small-note", role: "status" });
+      const tr = h("tr", {}, h("td", { colSpan: 7 }, h("strong", { textContent: `${it.unit} · ${it.name}` }), form, h("div", { className: "row" }, save, cancel, msg)));
+      cancel.onclick = () => tr.replaceWith(viewRow);
+      save.onclick = async () => {
+        const patch = {}; // only what changed, so untouched cells (e.g. real dates) stay as they are
+        for (const [f, input] of Object.entries(inputs)) {
+          const v = input.type === "checkbox" ? input.checked : input.value.trim();
+          if (v !== it[f]) patch[f] = v;
+        }
+        if (!Object.keys(patch).length) return tr.replaceWith(viewRow);
+        save.disabled = true;
+        msg.textContent = "กำลังบันทึก…";
+        try {
+          const r = await api("saveLien", { kind: open.kind, row: it.row, building: it.building, unit: it.unit, name: it.name, patch });
+          fillAll(r.summary);
+          showItems(r.items);
+          $("detailMsg").textContent = `✅ บันทึก ${it.unit} แล้ว`;
+        } catch (err) { msg.textContent = "❌ " + err.message; save.disabled = false; }
+      };
+      return tr;
+    }
+
+    start("member").then(async (me) => {
+      isAdmin = me.role === "admin";
+      document.querySelectorAll(".admin-only").forEach((e) => { e.hidden = !isAdmin; });
+      fillAll(await api("lienSummary"));
       $("status").hidden = true;
       $("page").hidden = false;
     }).catch((err) => {

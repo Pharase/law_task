@@ -26,7 +26,7 @@ export async function sheet(op: string, payload: object = {}, timeoutMs = 10_000
 
 export type Step =
   | { op: "append"; tab: string; rows: Record<string, string>[] }
-  | { op: "update"; tab: string; id: number | string; key?: string; patch: Record<string, string>; expect?: Record<string, string> }; // key: match column (default id)
+  | { op: "update"; tab: string; id: number | string; key?: string; patch: Record<string, string | boolean>; expect?: Record<string, string> }; // key: match column (default id)
 
 /** All steps or none, under one lock. null when an `expect` no longer holds (someone else got there first). */
 // deno-lint-ignore no-explicit-any

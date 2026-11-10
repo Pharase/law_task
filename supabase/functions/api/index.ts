@@ -11,11 +11,11 @@ import { pickProfile } from "./profile.ts";
 import { adminInvoiceActions, memberInvoiceActions } from "./invoices-api.ts";
 import { memberReportActions } from "./reports-api.ts";
 import { adminNewsActions, memberNewsActions } from "./news-api.ts";
-import { memberLienActions } from "./lien-api.ts";
+import { adminLienActions, memberLienActions } from "./lien-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions, memberInvoiceActions, memberReportActions, memberNewsActions, memberLienActions];
-const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions, adminNotifyActions];
+const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions, adminNotifyActions, adminLienActions];
 
 const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const MAX_WRONG_CODES = 5;

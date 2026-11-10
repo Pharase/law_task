@@ -99,8 +99,11 @@ function runBatch(steps) {
       var t = tables[w.tab];
       var cols = w.kind === "append" ? t.headers.filter(String) : w.cols;
       cols.forEach(function (h) {
+        var cell = t.sheet.getRange(w.row._row, t.headers.indexOf(h) + 1), v = w.row[h];
+        // Checkbox: a real TRUE/FALSE, so the sheet's formulas still count it.
+        if (typeof v === "boolean") return cell.setValue(v);
         // Plain text: otherwise Sheets turns "1/2" into a date, "007" into 7, "=..." or "- ..." into a formula.
-        t.sheet.getRange(w.row._row, t.headers.indexOf(h) + 1).setNumberFormat("@").setValue(w.row[h]);
+        cell.setNumberFormat("@").setValue(v);
       });
     });
     return { results: plan.results };

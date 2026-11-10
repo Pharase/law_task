@@ -58,6 +58,15 @@ test("expect ignores stray spaces typed into the sheet (the app reads cells trim
   assert.equal(r.results[0].owner_id, "U2");
 });
 
+test("update by sheet row keeps booleans (checkboxes) and checks expect", () => {
+  const t = { L: { headers: ["ชื่อ", "อนุมัติ"], rows: [{ "ชื่อ": "V", "อนุมัติ": "false", _row: 7 }] } };
+  const step = (who) => ({ op: "update", tab: "L", key: "_row", id: 7, patch: { "อนุมัติ": true, "ชื่อ": 5 }, expect: { "ชื่อ": who } });
+  const r = planBatch([step("V")], t, counter());
+  assert.equal(r.results[0]["อนุมัติ"], true);
+  assert.equal(r.results[0]["ชื่อ"], "5");
+  assert.deepEqual(planBatch([step("other")], t, counter()), { conflict: true });
+});
+
 test("update of a missing id -> not found", () =>
   assert.deepEqual(planBatch([{ op: "update", tab: "Tasks", id: 99, patch: { title: "x" } }], tables(), counter()), { error: "not found" }));
 

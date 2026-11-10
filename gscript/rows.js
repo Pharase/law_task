@@ -69,7 +69,8 @@ function planBatch(steps, tables, nextId) {
       // Trimmed like the app reads cells, so a stray space typed by hand can't cause a permanent conflict.
       for (var k in expect) if (normCell(found[k]).trim() !== normCell(expect[k]).trim()) return { conflict: true };
       var cols = Object.keys(step.patch || {}).filter(function (h) { return h !== "id" && tab.headers.indexOf(h) >= 0; });
-      cols.forEach(function (h) { found[h] = normCell(step.patch[h]); });
+      // booleans stay booleans: checkbox cells (the รายชื่อค้างคสก tabs) need a real TRUE/FALSE
+      cols.forEach(function (h) { var v = step.patch[h]; found[h] = typeof v === "boolean" ? v : normCell(v); });
       writes.push({ tab: step.tab, kind: "update", row: found, cols: cols }); // only patched cells are written
       results.push(found);
     } else {

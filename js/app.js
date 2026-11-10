@@ -12,7 +12,7 @@ const NAV = [
   ["", "Home"], // everyone starts on the Home dashboard; admins reach tracking from there
   ["Button%20C/", "Example Document", false, "admin/exdoc.html"],
   ["Button%20D/", "Reports"],
-  ["Button%20E/", "Property Right", true],
+  ["Button%20E/", "Property Right"],
   ["Button%20F/", "Invoice"],
 ];
 let navAdmin = false;
