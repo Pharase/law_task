@@ -86,6 +86,7 @@ a { color: var(--cyan); }
 .nav-icon:hover { border-color: var(--cyan); box-shadow: 0 0 14px rgba(2, 215, 244, .3); }
 .nav-dot { position: absolute; top: -5px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center; font-size: 11px; font-weight: 600; line-height: 1; color: #fff; background: #ff3b5c; box-shadow: 0 0 0 2px #0a0b0d, 0 0 10px rgba(255, 59, 92, .6); }
 .navbar button.nav-logout { margin: 0; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px; }
+.navbar .nav-toggle { display: none; } /* phones only (see the phone block at the end) */
 @media (max-width: 640px) {
   .nav-who, .nav-logout-text { display: none; } /* phones: avatar + icons only; name shows on hover/long-press via title */
   .navbar button.nav-logout { padding: 6px 10px; }
@@ -449,10 +450,16 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   .donut, .donut-empty { width: 140px; height: 140px; }
   .inv-amount { font-size: 15px; }
   dialog.modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
-  /* menu: logo + account on top, every page link on its own row below (nothing hidden off to the side) */
+  /* menu: logo, ☰, account on one row; ☰ opens the page links as a list under it */
   .navbar { flex-wrap: wrap; border-radius: 20px; padding: 6px; }
-  .nav-links { order: 3; flex: 1 0 100%; flex-wrap: wrap; justify-content: center; gap: 0 2px; overflow: visible; padding-top: 4px; border-top: 1px solid var(--line); }
-  .nav-links a { padding: 6px 6px; font-size: 12.5px; }
+  .navbar .nav-toggle { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; margin: 0; font-size: 18px; line-height: 1;
+    color: var(--ink); background: rgba(255, 255, 255, .06); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: none; }
+  .navbar.open .nav-toggle { border-color: var(--cyan); color: var(--cyan); }
+  .nav-links { display: none; order: 3; flex: 1 0 100%; flex-direction: column; align-items: stretch; gap: 2px; overflow: visible; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .navbar.open .nav-links { display: flex; }
+  .nav-links a { padding: 11px 12px; font-size: 15px; border-radius: 12px; }
+  .nav-links a[aria-current] { background: rgba(79, 99, 240, .14); }
+  .nav-links a[aria-current]::after { left: auto; right: 14px; bottom: auto; top: 50%; margin: -2.5px 0 0; }
   /* invoices: text gets the full width, the status track + price sit on their own row under it */
   .inv-row { flex-wrap: wrap; gap: 6px; }
   .inv-row > .grow { flex: 1 1 100%; }

@@ -51,9 +51,26 @@ function renderNav() {
     if (soon) a.append(Object.assign(document.createElement("small"), { className: "soon", textContent: " soon" }));
     return a;
   }));
-  nav.replaceChildren(brand, links, ...(navMe ? [navUser(navMe)] : []));
+  links.id = "navLinks";
+  // ☰ (phones only, see CSS): opens the page links as a list under the bar
+  const open = nav.classList.contains("open"); // renderNav runs again after login: keep the list as it was
+  const toggle = Object.assign(document.createElement("button"), { type: "button", className: "nav-toggle", textContent: open ? "✕" : "☰", ariaLabel: "เมนู · Menu" });
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-controls", "navLinks");
+  toggle.onclick = () => setNavOpen(!nav.classList.contains("open"));
+  nav.replaceChildren(brand, toggle, links, ...(navMe ? [navUser(navMe)] : []));
+}
+function setNavOpen(open) {
+  const nav = $("navbar"), toggle = nav?.querySelector(".nav-toggle");
+  if (!toggle) return;
+  nav.classList.toggle("open", open);
+  toggle.textContent = open ? "✕" : "☰";
+  toggle.setAttribute("aria-expanded", String(open));
 }
 document.addEventListener("DOMContentLoaded", renderNav);
+// a tap outside the bar or Esc closes the list
+document.addEventListener("click", (e) => { if (!$("navbar")?.contains(e.target)) setNavOpen(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setNavOpen(false); });
 
 // ---- Loading: a balance scale tipping left, right, ever less, until level (fills every empty .loading; CSS animates it) ----
 const SCALE_SVG = `<svg class="scale" viewBox="0 0 120 72" aria-hidden="true">
