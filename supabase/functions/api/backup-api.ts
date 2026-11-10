@@ -1,6 +1,8 @@
-// Backup-before-delete (spec "Retention"). Admins download due files as a ZIP in the browser, then mark them backed up;
-// the daily cleanup deletes only due + backed-up files and keeps the row (deleted_at) for task timelines.
+// Backup-before-delete (spec "Retention"). Sent files are copied to Google Drive (archive.ts), which counts as the backup;
+// the ZIP download here is only a fallback for due files Drive missed. Cleanup deletes only due + backed-up files, keeping the row.
+import { archiveFiles } from "./archive.ts";
 import { bangkokDate } from "./dates.ts";
+import { loadSheet } from "./sheet.ts";
 import { cutoff, graceCutoff, isDeletable } from "./retention.ts";
 import { bucket, db, type Me, must } from "./shared.ts";
 
@@ -45,7 +47,19 @@ export async function adminBackupActions(action: string, body: Row, me: Me): Pro
 /** Public, idempotent: deletes only files that are due AND were backed up more than BACKUP_GRACE_DAYS ago. */
 export async function cleanup() {
   const now = new Date();
-  let deleted = 0;
+  let deleted = 0, archived = 0;
+  try {
+    // Drive copies that failed at send time (or files never attached, after a day). shortcut: 20 per run keeps the
+    // function well under its time limit; a big backlog drains over several days.
+    const pending: Row[] = must(await db.from("files").select("id").is("backed_up_at", null).is("deleted_at", null)
+      .or(`task_id.not.is.null,created_at.lt.${new Date(now.getTime() - 864e5).toISOString()}`).order("created_at").limit(20));
+    if (pending.length) {
+      const { tasks } = await loadSheet();
+      archived = await archiveFiles(pending.map((f) => f.id), new Map(tasks.map((t) => [t.id, t])));
+    }
+  } catch (e) {
+    console.error("cleanup archive", e); // deletion below still runs; it only touches files that were archived
+  }
   for (;;) {
     const batch: Row[] = must(await db.from("files").select("id, path, created_at, backed_up_at, deleted_at")
       .is("deleted_at", null).lt("backed_up_at", graceCutoff(now).toISOString()).lt("created_at", cutoff(now).toISOString()).limit(100));
@@ -56,5 +70,5 @@ export async function cleanup() {
     deleted += doomed.length;
   }
   must(await db.from("invites").delete().is("used_at", null).lt("expires_at", now.toISOString()));
-  return { deleted };
+  return { deleted, archived };
 }

@@ -53,6 +53,7 @@ function dispatch(body) {
     case "deleteRows": return withLock(function () { return { deleted: deleteRows(body.tab, body.key, body.values || []) }; });
     case "listReports": return { files: listReports(), folderUrl: reportFolder().getUrl() }; // folderUrl: "older reports" button
     case "reportFile": return reportFile(String(body.id || ""));
+    case "saveUpload": return saveUpload(String(body.folder || "unknown"), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
   }
   return { error: "unknown op" };
 }
@@ -229,6 +230,27 @@ function reportFile(id) {
 /** Run once from the editor after setting REPORT_FOLDER_ID: grants Drive access and logs what the app will list. */
 function checkReports() {
   Logger.log(JSON.stringify(listReports(), null, 1));
+}
+
+// ---- ส่งงาน archive: every sent file is copied to <UPLOAD_FOLDER_ID>/<staff name>/ (Script Property) ----
+function uploadFolder() {
+  var id = PROPS.getProperty("UPLOAD_FOLDER_ID");
+  if (!id) throw new Error("UPLOAD_FOLDER_ID is not set");
+  return DriveApp.getFolderById(id);
+}
+
+function saveUpload(folderName, name, mime, base64) {
+  if (!base64) throw new Error("empty file");
+  var root = uploadFolder(), found = root.getFoldersByName(folderName);
+  // shortcut: no lock, two first-ever sends by one person at the same second could make two same-name folders; merge by hand if seen
+  var dir = found.hasNext() ? found.next() : root.createFolder(folderName);
+  var f = dir.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime || undefined, name));
+  return { id: f.getId(), url: f.getUrl() }; // not shared: only people with access to the folder can open it
+}
+
+/** Run once from the editor after setting UPLOAD_FOLDER_ID: grants Drive write access and logs the folder. */
+function checkUploads() {
+  Logger.log(uploadFolder().getName() + " " + uploadFolder().getUrl());
 }
 
 /** Deletes the rows whose `key` cell is one of `values` (used to remove demo data). Returns how many. */

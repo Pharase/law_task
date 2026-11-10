@@ -93,7 +93,7 @@ a { color: var(--cyan); }
   .navbar button.nav-logout { padding: 6px 10px; }
 }
 .navbar .brand { flex: none; display: flex; align-items: center; padding: 2px 8px 2px 4px; margin-right: 4px; border-radius: 999px; }
-.navbar .brand img { height: 38px; width: auto; display: block; filter: drop-shadow(0 0 8px rgba(226, 184, 102, .4)); } /* gold CI mark, 4:5 */
+.navbar .brand img { height: 38px; width: auto; display: block; filter: drop-shadow(0 0 8px rgba(226, 184, 102, .4)); } /* gold CI mark, square transparent PNG */
 .nav-links a { position: relative; color: var(--ink); opacity: .78; text-decoration: none; padding: 8px 12px; border-radius: 999px; white-space: nowrap; font-size: 14px; font-weight: 500; transition: opacity .2s, color .2s; }
 .nav-links a:hover { opacity: 1; }
 .nav-links a[aria-current] { color: var(--blue-hi); opacity: 1; }
@@ -169,6 +169,10 @@ caption { padding-bottom: 6px; }
 .doc-group { border-top: 1px solid var(--line); padding: 6px 0; }
 .doc-group > summary { cursor: pointer; padding: 6px 0; font-weight: 600; }
 .doc-group > summary .badge { margin-left: 8px; }
+.doc-group > summary button.small { padding: 3px 10px; margin-left: 6px; vertical-align: middle; }
+/* popup (Ex Doc 📤): the card look, centred, page dimmed behind */
+dialog.modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; margin: auto; color: var(--ink); background: #0c0e11; }
+dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 
 /* ---- Members page: approval list + organization ---- */
 .card-head { flex-wrap: wrap; margin-bottom: 4px; }

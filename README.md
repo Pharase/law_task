@@ -69,7 +69,8 @@ admin assigns ─▶ On Process ─▶ member sends (optional files) ─▶ Wait
 ## Uploads and backups
 
 - Pictures (JPG, PNG, WEBP) and PDFs, 10 MB max. Pictures are shrunk in the browser (≤1600 px, JPEG, about half the size). HEIC is rejected.
-- Files over **365 days** old are **due**. Admin pages then show a banner with **Download backup**, which builds a ZIP in the browser (parts of ≤200 MB) and records the backup. The daily cleanup deletes **only due files that have a recorded backup**, and keeps the row so task history shows "deleted after backup".
+- Every file sent with ส่งงาน is also copied to **Google Drive**: `<UPLOAD_FOLDER_ID>/<staff name>/<date> งาน#<task> <building> - <title> - <file>` (search Drive by task number, building or date). Admins see a **📂 Drive** link next to each file. If the copy fails, the daily cleanup retries it (20 files per run).
+- Files over **365 days** old are **due**. The Drive copy counts as the backup, so the daily cleanup deletes the Supabase copy and the app's link switches to the Drive file. Only due files that never reached Drive show the **Download backup** banner (ZIP built in the browser), as a fallback.
 
 ## Go-live checklist (owner, once)
 
@@ -99,6 +100,12 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 2. Put the monthly reports in one Google Drive folder (PDF, Google Docs, Sheets or Slides; Docs/Sheets/Slides are exported to PDF). In **Project Settings → Script properties** add `REPORT_FOLDER_ID` = the folder id from its URL (`/folders/<id>`).
 3. Run **`checkReports`** once: Google asks for Drive permission, and the log lists the files the app will show.
 4. **Deploy → Manage deployments → edit → New version** (the `/exec` URL stays the same).
+
+**ส่งงาน archive to Drive (added later; do once):**
+1. Nothing to do for the database: pushing to `main` applies the `drive_url` migration and deploys `api` (GitHub Actions). Until steps 2–4 are done, copies fail quietly and are retried daily.
+2. Make a Drive folder for sent work. In **Script properties** add `UPLOAD_FOLDER_ID` = its id (`/folders/<id>`). Files are **not** shared: share that folder with the admins who should open them.
+3. `cd gscript && npx @google/clasp push --force`, then run **`checkUploads`** once (Google asks for Drive write permission).
+4. **Deploy → Manage deployments → edit → New version.**
 
 **News (Home):** the same **`setup`** run also adds the **News** tab. Admins post, pin (📌, kept on top) and delete news on Home; deleting only fills `deleted_at`, the row stays in the sheet.
 

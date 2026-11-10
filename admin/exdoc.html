@@ -14,9 +14,35 @@
   <p id="status" class="loading" role="status"></p>
 
   <div id="page" hidden>
-    <form class="card" id="uploadForm">
-      <h2>อัปโหลดเอกสาร</h2>
-      <p class="muted">ตัวอย่างเอกสารฝ่ายกฎหมาย: สมาชิกดูและดาวน์โหลดได้อย่างเดียว · ไม่ถูกลบอัตโนมัติ</p>
+    <section class="card">
+      <div class="row card-head">
+        <h2 class="grow">เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
+        <button type="button" class="small secondary" id="uploadOpen" title="อัปโหลดเอกสาร" aria-label="อัปโหลดเอกสาร" aria-haspopup="dialog">📤</button>
+        <!-- locked by default so no document or group changes (or gets renamed/deleted) by accident -->
+        <button type="button" class="small secondary" id="docEdit" aria-pressed="false">✏️ แก้ไข</button>
+      </div>
+      <div id="groupTools" hidden>
+        <div class="row">
+          <input id="newGroup" maxlength="100" placeholder="ชื่อกลุ่มใหม่" aria-label="New group name">
+          <button type="button" class="small" id="addGroupBtn">➕ เพิ่มกลุ่ม</button>
+        </div>
+        <p class="muted small-note">ลบกลุ่มแล้ว เอกสารในกลุ่มจะย้ายไป "อื่นๆ · ไม่มีกลุ่ม" (ไม่ลบเอกสาร)</p>
+      </div>
+      <div id="docList"></div>
+    </section>
+  </div>
+
+  <dialog id="uploadDlg" class="card modal" aria-labelledby="uploadTitle">
+    <div class="row card-head">
+      <h2 class="grow" id="uploadTitle">อัปโหลดเอกสาร</h2>
+      <button type="button" class="small secondary" id="uploadClose" aria-label="ปิด">✕</button>
+    </div>
+    <p class="muted small-note">ตัวอย่างเอกสารฝ่ายกฎหมาย: สมาชิกดูและดาวน์โหลดได้อย่างเดียว · ไม่ถูกลบอัตโนมัติ</p>
+    <div class="row" id="uploadPick">
+      <button type="button" class="small secondary" data-pick="uploadForm" aria-pressed="false">📄 ทีละไฟล์</button>
+      <button type="button" class="small secondary" data-pick="folderPanel" aria-pressed="false">📁 ทั้งโฟลเดอร์ (กลุ่ม)</button>
+    </div>
+    <form id="uploadForm" hidden>
       <label for="pdf">ไฟล์ PDF, Word (.doc/.docx), รูป (.jpg/.png) หรือไฟล์บีบอัด (.zip/.rar) ไม่เกิน 20 MB</label>
       <input type="file" id="pdf" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.rar" required>
       <label for="docTitle">ชื่อเอกสาร · Title</label>
@@ -30,8 +56,7 @@
       <p id="uploadMsg" role="status"></p>
     </form>
     <!-- Upload a whole folder: each top folder = a group (created if missing); files right in the chosen folder are skipped -->
-    <section class="card">
-      <h2>อัปโหลดทั้งโฟลเดอร์ · Upload a folder</h2>
+    <div id="folderPanel" hidden>
       <p class="muted small-note">เลือกโฟลเดอร์หลัก (เช่น src: โฟลเดอร์ย่อยชั้นแรก = ชื่อกลุ่ม) หรือเลือกโฟลเดอร์กลุ่มเดียว · โฟลเดอร์ที่ลึกลงไป = โฟลเดอร์ย่อย · ข้ามไฟล์ที่อัปโหลดแล้ว (ชื่อเดียวกันในกลุ่มเดียวกัน) · รองรับ PDF / Word / รูป / .zip / .rar</p>
       <input type="file" id="folderPick" webkitdirectory multiple aria-label="เลือกโฟลเดอร์">
       <label for="folderMode">โฟลเดอร์ที่เลือกคือ</label>
@@ -42,25 +67,8 @@
       <div id="folderPlan" class="muted small-note"></div>
       <button type="button" class="small" id="folderGo" hidden>อัปโหลดทั้งหมด</button>
       <p id="folderMsg" role="status"></p>
-    </section>
-    <section class="card">
-      <h2>กลุ่มเอกสาร · Groups</h2>
-      <p class="muted">ลบกลุ่มแล้ว เอกสารในกลุ่มจะย้ายไป "อื่นๆ · ไม่มีกลุ่ม" (ไม่ลบเอกสาร)</p>
-      <div class="row">
-        <input id="newGroup" maxlength="100" placeholder="ชื่อกลุ่มใหม่" aria-label="New group name">
-        <button type="button" class="small" id="addGroupBtn">เพิ่มกลุ่ม</button>
-      </div>
-      <div id="groupList"></div>
-    </section>
-    <section class="card">
-      <div class="row card-head">
-        <h2 class="grow">เอกสารทั้งหมด <span id="docCount" class="badge"></span></h2>
-        <!-- locked by default so no document changes group (or gets renamed/deleted) by accident -->
-        <button type="button" class="small secondary" id="docEdit" aria-pressed="false">✏️ แก้ไข</button>
-      </div>
-      <div id="docList"></div>
-    </section>
-  </div>
+    </div>
+  </dialog>
 
   <script>
     const MAX = 20 * 1024 * 1024;
@@ -73,22 +81,21 @@
     };
     const run = async (fn) => { try { await fn(); loadDocs(); } catch (e) { alert(e.message); } };
 
-    function renderGroups(groups, docs) {
-      const keep = $("docGroup").value;
-      $("docGroup").replaceWith(Object.assign(groupSelect(groups, keep), { id: "docGroup" }));
-      $("groupList").replaceChildren(...(groups.length ? groups.map((g) => {
-        const rename = el("button", { type: "button", className: "small secondary", textContent: "เปลี่ยนชื่อ" });
-        rename.onclick = () => {
+    /** Edit mode: ✏️ rename / 🗑️ delete on a group's header (not on "no group"). */
+    function groupButtons(g) {
+      if (!editing || g.id === null) return [];
+      // buttons sit inside <summary>: stop the click from also opening/closing the group
+      const btn = (text, label, cls, fn) => el("button", { type: "button", className: "small " + cls, textContent: text, ariaLabel: label,
+        onclick: (e) => { e.preventDefault(); fn(); } });
+      return [
+        btn("✏️", `เปลี่ยนชื่อกลุ่ม ${g.name}`, "secondary", () => {
           const name = prompt("ชื่อกลุ่มใหม่", g.name);
-          if (name && name !== g.name) run(() => api("exdocGroupSave", { id: g.id, name }));
-        };
-        const del = el("button", { type: "button", className: "small danger", textContent: "ลบกลุ่ม" });
-        del.onclick = () => { if (confirm(`ลบกลุ่ม "${g.name}"? เอกสารจะย้ายไป "${NO_GROUP}"`)) run(() => api("exdocGroupDelete", { id: g.id })); };
-        return el("div", { className: "doc-row" },
-          el("div", { className: "grow" }, el("strong", { textContent: g.name }),
-            el("span", { className: "muted", textContent: ` · ${docs.filter((d) => d.group_id === g.id).length} เอกสาร` })),
-          rename, del);
-      }) : [el("p", { className: "muted", textContent: "ยังไม่มีกลุ่ม" })]));
+          if (name && name.trim() !== g.name) run(() => api("exdocGroupSave", { id: g.id, name }));
+        }),
+        btn("🗑️", `ลบกลุ่ม ${g.name}`, "danger", () => {
+          if (confirm(`ลบกลุ่ม "${g.name}"? เอกสารจะย้ายไป "${NO_GROUP}"`)) run(() => api("exdocGroupDelete", { id: g.id }));
+        }),
+      ];
     }
 
     $("addGroupBtn").onclick = () => {
@@ -102,12 +109,27 @@
       $("docEdit").textContent = editing ? "✓ เสร็จสิ้น" : "✏️ แก้ไข";
       $("docEdit").className = "small " + (editing ? "" : "secondary");
       $("docEdit").setAttribute("aria-pressed", String(editing));
+      $("groupTools").hidden = !editing;
       loadDocs().catch((e) => alert(e.message));
     };
 
+    // ---- 📤 popup: pick "one file" or "whole folder", then that form shows ----
+    $("uploadOpen").onclick = () => $("uploadDlg").showModal();
+    $("uploadClose").onclick = () => $("uploadDlg").close();
+    for (const b of $("uploadPick").querySelectorAll("button")) {
+      b.onclick = () => {
+        for (const o of $("uploadPick").querySelectorAll("button")) {
+          const on = o === b;
+          $(o.dataset.pick).hidden = !on;
+          o.className = "small " + (on ? "" : "secondary");
+          o.setAttribute("aria-pressed", String(on));
+        }
+      };
+    }
+
     async function loadDocs() {
       const { groups, docs } = await api("listExDocs");
-      renderGroups(groups, docs);
+      $("docGroup").replaceWith(Object.assign(groupSelect(groups, $("docGroup").value), { id: "docGroup" }));
       $("docCount").textContent = docs.length;
       const row = (d) => {
         const rename = el("button", { type: "button", className: "small secondary", textContent: "เปลี่ยนชื่อ" });
@@ -133,9 +155,11 @@
             el("div", { className: "muted", textContent: `${fileType(d.name)} · ${d.name} · ${kb(d.size)} · ${thDate(d.created_at.slice(0, 10))}` })),
           ...(editing ? [move, sub, rename, del] : []));
       };
-      $("docList").replaceChildren(...(docs.length ? groupDocs(groups, docs).map((s) =>
+      const sections = groupDocs(groups, docs, editing); // edit mode also lists empty groups, so they can be renamed/deleted
+      $("docList").replaceChildren(...(sections.length ? sections.map((s) =>
         el("details", { className: "doc-group", open: true },
-          el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
+          el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length }),
+            ...groupButtons(s)),
           ...docsBySubgroup(s.docs, row)))
         : [el("p", { className: "muted", textContent: "ยังไม่มีเอกสาร" })]));
     }

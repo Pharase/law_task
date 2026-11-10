@@ -4,6 +4,7 @@ import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds
 import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
+import { archiveFiles } from "./archive.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
 import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
@@ -20,7 +21,7 @@ async function loadTasks(pred: (t: Task) => boolean, data?: SheetData): Promise<
   const { tasks, sends } = data ?? await loadSheet();
   const picked = tasks.filter(pred).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
   if (!picked.length) return [];
-  const files: Row[] = must(await db.from("files").select("id, task_id, send_id, name, mime, size, path, deleted_at")
+  const files: Row[] = must(await db.from("files").select("id, task_id, send_id, name, mime, size, path, deleted_at, drive_url")
     .in("task_id", picked.map((t) => t.id)));
   const live = files.filter((f) => !f.deleted_at);
   const urls = live.length ? must(await bucket.createSignedUrls(live.map((f) => f.path), 3600)) : [];
@@ -29,7 +30,7 @@ async function loadTasks(pred: (t: Task) => boolean, data?: SheetData): Promise<
     ...t,
     sends: sends.filter((s) => s.task_id === t.id).sort((a, b) => a.id - b.id),
     files: files.filter((f) => f.task_id === t.id)
-      .map(({ path: _p, ...f }) => (f.deleted_at ? f : { ...f, url: urlOf.get(f.id) })),
+      .map(({ path: _p, ...f }) => (f.deleted_at ? { ...f, url: f.drive_url } : { ...f, url: urlOf.get(f.id) })),
   }));
 }
 
@@ -124,8 +125,10 @@ export async function submitTask(id: number, userId: string, fileIds: string[] =
   if (!r) throw new HttpError(409, "already sent");
   if (fileIds.length) {
     // Only the sender's own, still-unattached files move; anything else is silently ignored.
-    must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })
-      .in("id", fileIds).eq("owner", userId).is("task_id", null));
+    const moved: Row[] = must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })
+      .in("id", fileIds).eq("owner", userId).is("task_id", null).select("id"));
+    // Awaited (the function may stop once it replies); a Drive hiccup never fails the send, the daily cleanup retries.
+    await archiveFiles(moved.map((f) => f.id), new Map([[id, task]])).catch((e) => console.error("archive", e));
   }
   return task;
 }
