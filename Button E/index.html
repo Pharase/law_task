@@ -10,12 +10,36 @@
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
-  <div class="card" id="page" hidden>
-    <h2>อายัดและแจ้งบุริมสิทธิ</h2>
-    <p class="muted">Coming soon.</p>
+  <div id="page" hidden>
+    <!-- counts come from the sheet tabs "รายชื่อค้างคสก (อช)" / "(จส)", same rules as the old สรุปการดำเนินงาน (supabase/functions/api/lien.ts) -->
+    <section class="card">
+      <h2>สรุปการอายัดหรือจดบุริมสิทธิ์ · อาคารชุด</h2>
+      <div class="table-wrap"><table id="condoTable"></table></div>
+    </section>
+    <section class="card">
+      <h2>สรุปการอายัด · หมู่บ้านจัดสรร</h2>
+      <div class="table-wrap"><table id="villageTable"></table></div>
+    </section>
   </div>
   <script>
-    start("member").then(() => {
+    function fill(table, rows, todoLabel) {
+      const tr = (cells, tag = "td") => {
+        const r = document.createElement("tr");
+        for (const c of cells) { const x = document.createElement(tag); x.textContent = c; r.append(x); }
+        return r;
+      };
+      const sum = (k) => rows.reduce((n, r) => n + r[k], 0);
+      table.append(
+        tr(["ชื่อนิติบุคคล", todoLabel, "อยู่ระหว่างดำเนินการ", "ดำเนินการเรียบร้อยแล้ว"], "th"),
+        ...rows.map((r) => tr([r.building, r.todo, r.doing, r.done])),
+        tr(["รวม", sum("todo"), sum("doing"), sum("done")], "th"),
+      );
+      if (!rows.length) table.replaceChildren(tr(["ยังไม่มีข้อมูลในชีต"]));
+    }
+    start("member").then(async () => {
+      const { condo, village } = await api("lienSummary");
+      fill($("condoTable"), condo, "ต้องดำเนินการอายัดหรือจดบุริมสิทธิ์");
+      fill($("villageTable"), village, "ต้องดำเนินการอายัด");
       $("status").hidden = true;
       $("page").hidden = false;
     }).catch((err) => {
