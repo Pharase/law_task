@@ -104,6 +104,7 @@
     };
 
     let editing = false;
+    const openGroups = new Set(); // ids of the groups the admin has opened
     $("docEdit").onclick = () => {
       editing = !editing;
       $("docEdit").textContent = editing ? "✓ เสร็จสิ้น" : "✏️ แก้ไข";
@@ -157,7 +158,8 @@
       };
       const sections = groupDocs(groups, docs, editing); // edit mode also lists empty groups, so they can be renamed/deleted
       $("docList").replaceChildren(...(sections.length ? sections.map((s) =>
-        el("details", { className: "doc-group", open: true },
+        // closed by default; a group the admin opened stays open across reloads (after each rename/move/delete)
+        el("details", { className: "doc-group", open: openGroups.has(s.id), ontoggle: (e) => openGroups[e.target.open ? "add" : "delete"](s.id) },
           el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length }),
             ...groupButtons(s)),
           ...docsBySubgroup(s.docs, row)))

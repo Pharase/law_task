@@ -28,9 +28,9 @@
     function render() {
       const q = $("q").value.trim().toLowerCase();
       const shown = docs.filter((d) => d.title.toLowerCase().includes(q));
-      // One open section per group; a search opens every matching group.
+      // Groups start closed (tap to see the files); a search opens every matching group.
       $("docList").replaceChildren(...(shown.length ? groupDocs(groups, shown).map((s) =>
-        el("details", { className: "doc-group", open: true },
+        el("details", { className: "doc-group", open: !!q },
           el("summary", {}, el("strong", { textContent: s.name }), el("span", { className: "badge", textContent: s.docs.length })),
           ...docsBySubgroup(s.docs, docRow)))
         : [el("p", { className: "muted", textContent: docs.length ? "ไม่พบเอกสาร" : "ยังไม่มีเอกสาร" })]));
