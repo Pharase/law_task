@@ -25,3 +25,7 @@ old-system/
 
 # local Ex Doc source files (team documents, uploaded via admin page; never commit)
 src/
+
+# graphify: machine-local interpreter and scan-root paths
+graphify-out/.graphify_python
+graphify-out/.graphify_root
