@@ -5,7 +5,7 @@
 /** The LIFF app (home page = Work dashboard). */
 export const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
 /** Picture at the top of every task bubble. */
-export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.png?v=2"; // copy of src/logo-a.png; ?v= makes LINE fetch it fresh
+export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.jpg"; // src/logo-a.png at 512px, JPEG on white (44 KB); ?v= makes LINE fetch it fresh
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
 export type BubbleTask = { id: number; title: string; building: string; details: string | null; due: string };
