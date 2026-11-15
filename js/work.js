@@ -1,6 +1,8 @@
 // Member Work dashboard (spec "Member view"). Needs js/app.js (api, uploadFile, $).
 const OUTCOME_TEXT = { pending: "รอตรวจ", approved: "อนุมัติ", void: "กดผิด", fix: "มีปรับแก้" };
-const bkkToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+// ส่งงาน: staff upload work files to this shared Drive folder themselves (the app no longer takes files)
+const DRIVE_UPLOAD_URL = "https://drive.google.com/drive/folders/1UXYNWyUOuidepj3FpLMbYaGXPF8p2NCK";
+const bkkToday =() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 // dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
 const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
 
@@ -54,29 +56,28 @@ function taskItem(task, today, onChange, opts = {}) {
   }
 
   if (task.state === "on_process" && !opts.admin) {
-    const input = el("input", { type: "file", multiple: true, accept: "image/*,application/pdf" });
     const msg = el("p", { role: "status" });
     const btn = el("button", { type: "button", textContent: "ส่งงาน (Send)" });
     btn.onclick = async () => {
       btn.disabled = true;
       try {
-        const ids = [];
-        for (const [i, f] of [...input.files].entries()) {
-          msg.textContent = `กำลังอัปโหลด ${i + 1}/${input.files.length}…`;
-          ids.push((await uploadFile(f)).id);
-        }
         msg.textContent = "กำลังส่ง…";
-        await api("sendTask", { task_id: task.id, file_ids: ids });
+        await api("sendTask", { task_id: task.id, file_ids: [] });
         onChange();
       } catch (err) {
         msg.textContent = "Error: " + err.message;
         btn.disabled = false;
       }
     };
-    body.append(el("label", { textContent: "แนบไฟล์ (ไม่บังคับ)" }), input, btn, msg);
+    // files go to the shared Drive folder by hand; opened outside LINE's browser so the Drive app / login works
+    const drive = el("a", { href: DRIVE_UPLOAD_URL, textContent: "📂 เปิด Google Drive เพื่ออัปโหลดไฟล์" });
+    drive.onclick = (e) => { e.preventDefault(); openFile(DRIVE_UPLOAD_URL, true); };
+    body.append(el("p", { className: "label", textContent: "แนบไฟล์: อัปโหลดไฟล์งานที่ Google Drive ก่อน แล้วกดส่งงาน" }), el("p", {}, drive), btn, msg);
   }
 
-  return el("details", { className: "task" + (overdue ? " overdue" : "") }, summary, body);
+  const item = el("details", { className: "task" + (overdue ? " overdue" : "") }, summary, body);
+  item.dataset.task = task.id;
+  return item;
 }
 
 
@@ -138,6 +139,10 @@ function donut(parts, total, onPick) {
   return { svg, center };
 }
 
+// ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
+// turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
+let linkUsed = false;
+
 async function renderHome(me) {
   const today = bkkToday(), month = today.slice(0, 7);
   const isAdmin = me.role === "admin";
@@ -190,6 +195,18 @@ async function renderHome(me) {
 
   // Open the list people most likely need: work to fix or do first, then waiting review, then the backlog.
   pick([parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
+
+  const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
+  linkUsed = true;
+  if (linkedId) history.replaceState(null, "", location.pathname);
+  const linked = linkedId && all.find((t) => t.id === linkedId);
+  const group = linked && [...parts, backlog].find((p) => p.tasks.includes(linked));
+  if (group) {
+    pick(group);
+    const item = $("dashList").querySelector(`[data-task="${linked.id}"]`);
+    item.open = true;
+    item.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 // ---- Ex Doc groups (Button C and admin/exdoc.html) ----

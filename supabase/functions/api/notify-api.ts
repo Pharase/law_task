@@ -1,12 +1,10 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
 import { adminDigest, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
-import { type BubbleTask, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
+import { type BubbleTask, LIFF_URL, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
 import { db, must } from "./shared.ts";
-
-const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -35,7 +33,7 @@ async function pushMessages(to: string, messages: unknown[], token: string): Pro
   return r.ok ? null : `push ${r.status}: ${(await r.text()).slice(0, 200)}`;
 }
 const push = (to: string, text: string, link: string, token: string) =>
-  pushMessages(to, [{ type: "text", text: `${text}\n\n${link}`.slice(0, 5000) }], token);
+  pushMessages(to, [linkMessage(text, link)], token);
 
 const asT = (t: Row): T => ({ title: t.title, building: t.building, due: t.current_due_on });
 // oldest assigned first, then the nearest due date (the same order as "ใกล้ครบกำหนด")

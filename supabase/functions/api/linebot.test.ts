@@ -1,17 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { HERO_URL, postbackReply, sendIdOf, taskBubble, taskMessages, validSignature } from "./linebot.ts";
+import { HERO_URL, LIFF_URL, linkMessage, postbackReply, sendIdOf, taskBubble, taskMessages, validSignature } from "./linebot.ts";
 
 const task = { id: 7, title: "ร่างหนังสือทวงถาม", building: "อาคาร A", details: "แนบสำเนา", due: "2026-11-20" };
 
-test("bubble: same look as the old script (hero picture, title, กำหนดส่ง / ชื่อนิติ / รายละเอียด) + ส่งงาน postback", () => {
+test("bubble: same look as the old script (hero picture, title, กำหนดส่ง / ชื่อนิติ / รายละเอียด) + ส่งงาน opens the task in LIFF", () => {
   const b = taskBubble(task);
   assert.equal(b.type, "bubble");
   assert.equal(b.hero.url, HERO_URL);
   const text = JSON.stringify(b.body);
   for (const s of ["งานใหม่: ร่างหนังสือทวงถาม", "กำหนดส่ง", "20/11/2569", "ชื่อนิติ", "อาคาร A", "รายละเอียด", "แนบสำเนา"]) assert.ok(text.includes(s), s);
-  assert.deepEqual(b.footer.contents[0].action, { type: "postback", label: "ส่งงาน", data: "send=7", displayText: "ส่งงาน ร่างหนังสือทวงถาม" });
+  assert.deepEqual(b.footer.contents[0].action, { type: "uri", label: "ส่งงาน", uri: `${LIFF_URL}?task=7` });
   assert.ok(JSON.stringify(taskBubble({ ...task, details: null }).body).includes('"-"'));
 });
 
@@ -50,4 +50,12 @@ test("reply wording follows the old script", () => {
   assert.equal(postbackReply(t("approved"), false), "✅ งาน งาน A อนุมัติแล้ว");
   assert.equal(postbackReply(t("cancelled"), false), "งาน งาน A ถูกยกเลิกแล้ว");
   assert.equal(postbackReply(null, false), "❌ ไม่พบข้อมูลงานในระบบ");
+});
+
+test("linkMessage: text in the bubble, ดูรายการงานทั้งหมดที่นี่ button opens the link", () => {
+  const m = linkMessage("สรุปงานวันนี้\n\nงานใหม่ 2", LIFF_URL);
+  assert.equal(m.type, "flex");
+  assert.equal(m.altText, "สรุปงานวันนี้\n\nงานใหม่ 2");
+  assert.equal(m.contents.body.contents[0].text, "สรุปงานวันนี้\n\nงานใหม่ 2");
+  assert.deepEqual(m.contents.footer.contents[0].action, { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: LIFF_URL });
 });

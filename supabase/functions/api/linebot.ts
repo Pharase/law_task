@@ -2,8 +2,10 @@
 // sendLineFlex), the "ส่งงาน" postback data, the webhook signature check, and the reply wording.
 // Pure: no Deno or npm imports, so node tests run it.
 
-/** Picture at the top of every task bubble (img/task-hero.png on the GitHub Pages site). */
-export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.png";
+/** The LIFF app (home page = Work dashboard). */
+export const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
+/** Picture at the top of every task bubble. */
+export const HERO_URL = "https://img5.pic.in.th/file/secure-sv1/Namelist---3.png";
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
 export type BubbleTask = { id: number; title: string; building: string; details: string | null; due: string };
@@ -35,8 +37,8 @@ export function taskBubble(t: BubbleTask) {
     footer: {
       type: "box", layout: "vertical", spacing: "sm", flex: 0, contents: [{
         type: "button", style: "primary", height: "sm",
-        // same as pressing ส่งงาน in the web app; displayText shows in the chat so the person sees what they pressed
-        action: { type: "postback", label: "ส่งงาน", data: `send=${t.id}`, displayText: `ส่งงาน ${t.title}`.slice(0, 300) },
+        // opens the LIFF app on this task (attach files + send there); bubbles sent earlier still use the send= postback below
+        action: { type: "uri", label: "ส่งงาน", uri: `${LIFF_URL}?task=${t.id}` },
       }],
     },
     styles: { body: { separator: true } },
@@ -54,6 +56,20 @@ export function taskMessages(tasks: BubbleTask[]) {
   return out;
 }
 export const MAX_TASKS_PER_PUSH = PER_CAROUSEL * MAX_MESSAGES;
+
+/** Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link. */
+export function linkMessage(text: string, link: string) {
+  return {
+    type: "flex", altText: text.slice(0, 400),
+    contents: {
+      type: "bubble",
+      body: { type: "box", layout: "vertical", contents: [{ type: "text", text: text.slice(0, 2000), wrap: true, size: "sm" }] },
+      footer: { type: "box", layout: "vertical", contents: [
+        { type: "button", style: "primary", height: "sm", action: { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: link } },
+      ] },
+    },
+  };
+}
 
 /** Task id from the button's postback data ("send=12"); null for anything else. */
 export function sendIdOf(data: unknown): number | null {
