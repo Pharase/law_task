@@ -118,9 +118,15 @@
         (tab === "all" || (tab === "none" ? !i.type : i.type === tab)) &&
         (!q || i.subject.toLowerCase().includes(q) || i.building.toLowerCase().includes(q)));
       $("invCount").textContent = data.invoices.length;
-      $("invList").replaceChildren(...(shown.length ? shown.map(invoiceRow)
-        : [el("p", { className: "muted", textContent: data.invoices.length ? "ไม่พบรายการ" : "ยังไม่มีรายการเบิก" })]));
       const open = shown.filter((i) => i.status !== STATUS[STATUS.length - 1]); // outstanding = not at the last step
+      const done = shown.filter((i) => !open.includes(i));
+      // finished invoices sit in one closed group at the bottom; a search opens it so matches show
+      const doneGroup = done.length && el("details", { className: "doc-group", open: !!q },
+        el("summary", {}, `✅ ${STATUS[STATUS.length - 1]}`, el("span", { className: "badge", textContent: done.length }),
+          el("span", { className: "muted", textContent: ` ฿${baht(done.reduce((s, i) => s + i.amount, 0))}` })),
+        ...done.map(invoiceRow));
+      $("invList").replaceChildren(...(shown.length ? [...open.map(invoiceRow), doneGroup].filter(Boolean)
+        : [el("p", { className: "muted", textContent: data.invoices.length ? "ไม่พบรายการ" : "ยังไม่มีรายการเบิก" })]));
       $("invTotal").textContent = shown.length
         ? `รวม ${shown.length} รายการ ฿${baht(shown.reduce((s, i) => s + i.amount, 0))} · ค้าง ${open.length} รายการ ฿${baht(open.reduce((s, i) => s + i.amount, 0))}`
         : "";
