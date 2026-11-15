@@ -29,7 +29,12 @@
     </div>
 
     <section class="card">
-      <h2>งานทั้งหมด · All tasks</h2>
+      <div class="row card-head">
+        <h2 class="grow">งานทั้งหมด · All tasks</h2>
+        <!-- the shared Drive folder staff upload sent work to (DRIVE_UPLOAD_URL in js/work.js) -->
+        <button type="button" class="icon-btn" title="เปิดโฟลเดอร์ Google Drive ที่พนักงานอัปโหลดไฟล์งาน" aria-label="เปิดโฟลเดอร์ Google Drive ที่พนักงานอัปโหลดไฟล์งาน"
+          onclick="openFile(DRIVE_UPLOAD_URL, true)">📂</button>
+      </div>
       <div class="row filters">
         <select id="fOwner" aria-label="Member"><option value="">ทุกคน</option></select>
         <select id="fBuilding" aria-label="Building"><option value="">นิติบุคคล: ไม่กรอง · Any building</option></select>
