@@ -16,11 +16,14 @@ async function lineGet(path: string, token: string) {
 }
 
 /** Messages left this month; Infinity on unlimited plans. */
+/** This month's push quota: limit (Infinity = no limit) and messages used so far. */
+async function quotaInfo(token: string): Promise<{ limit: number; used: number }> {
+  const [quota, used] = await Promise.all([lineGet("/v2/bot/message/quota", token), lineGet("/v2/bot/message/quota/consumption", token)]);
+  return { limit: quota.type === "limited" ? quota.value : Infinity, used: used.totalUsage };
+}
 async function remainingQuota(token: string): Promise<number> {
-  const quota = await lineGet("/v2/bot/message/quota", token);
-  if (quota.type !== "limited") return Infinity;
-  const used = await lineGet("/v2/bot/message/quota/consumption", token);
-  return quota.value - used.totalUsage;
+  const { limit, used } = await quotaInfo(token);
+  return limit - used;
 }
 
 /** One push (= 1 message of the monthly quota, however many bubbles it holds). null = sent, else the error. */
@@ -188,9 +191,14 @@ function sampleMessages() {
  */
 // deno-lint-ignore no-explicit-any
 export async function adminNotifyActions(action: string, _body: any, me: { line_user_id: string; role: string }): Promise<unknown> {
-  if (action !== "testLine" && action !== "testLineAll") return undefined;
+  if (action !== "testLine" && action !== "testLineAll" && action !== "lineQuota") return undefined;
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
   if (!token) return { ok: false, error: "LINE_MESSAGING_TOKEN is not set in Supabase (Edge Functions → Secrets)" };
+  if (action === "lineQuota") {
+    // members page badge; null limit = no monthly limit (JSON has no Infinity)
+    const { limit, used } = await quotaInfo(token);
+    return { ok: true, limit: limit === Infinity ? null : limit, used, left: limit === Infinity ? null : limit - used };
+  }
   const quotaLeft = await remainingQuota(token).catch(() => null);
   const messages = action === "testLineAll" ? sampleMessages()
     : [linkMessage("✅ ทดสอบการแจ้งเตือนจาก law_task\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", LIFF_URL)];

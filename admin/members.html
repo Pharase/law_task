@@ -8,7 +8,7 @@
   <script src="../js/app.js?v=20261111"></script>
   <script src="../js/work.js?v=20261111"></script>
   <script src="../js/backup.js?v=20261111"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261111">
+  <link rel="stylesheet" href="../css/app.css?v=20261115">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -38,7 +38,12 @@
 
     <!-- 3. Check that LINE notices work: sends one test message to the admin pressing it -->
     <section class="card">
-      <h2>การแจ้งเตือน LINE · LINE notices</h2>
+      <div class="row card-head">
+        <h2 class="grow">การแจ้งเตือน LINE · LINE notices</h2>
+        <!-- LINE push quota left this month (when it runs out, messages are not sent); tap for details -->
+        <button type="button" class="badge" id="quotaBadge" aria-expanded="false" aria-controls="quotaInfo">…</button>
+      </div>
+      <p class="muted small-note" id="quotaInfo" hidden></p>
       <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้ · "ทดสอบทุกรูปแบบข้อความ" ส่งตัวอย่างการ์ดงานใหม่ สรุปงานวันนี้ และสรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง ไม่ใช่งานจริง)</p>
       <div class="row tools">
         <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
@@ -143,6 +148,32 @@
           : "❌ ส่งไม่สำเร็จ: " + r.error + (/push 400/.test(r.error || "") ? " (ตรวจว่าเพิ่มบัญชี LINE OA เป็นเพื่อนแล้ว)" : "");
       } catch (err) { msg.className = "error"; msg.textContent = "Error: " + err.message; }
       btn.disabled = false;
+      loadQuota();
+    };
+
+    async function loadQuota() {
+      const b = $("quotaBadge"), info = $("quotaInfo");
+      try {
+        const r = await api("lineQuota");
+        if (!r.ok) throw new Error(r.error);
+        const low = r.left !== null && r.left <= Math.max(20, r.limit * 0.1);
+        b.textContent = r.left ?? "∞";
+        b.className = "badge " + (low ? "late" : "on");
+        info.textContent = r.left === null
+          ? `โควตาข้อความ LINE: ไม่จำกัด · ใช้ไปเดือนนี้ ${r.used}`
+          : `โควตาคงเหลือเดือนนี้: ${r.left} (ใช้ไป ${r.used} จาก ${r.limit})` +
+            (low ? " · ⚠️ ใกล้หมด: เมื่อหมดโควตา ระบบจะส่งข้อความ LINE ไม่ได้จนถึงต้นเดือนหน้า" : " · เมื่อหมดโควตา ระบบจะส่งข้อความ LINE ไม่ได้จนถึงต้นเดือนหน้า");
+      } catch (err) {
+        b.textContent = "?";
+        b.className = "badge late";
+        info.textContent = "อ่านโควตาไม่ได้: " + err.message;
+      }
+      b.title = info.textContent;
+    }
+    $("quotaBadge").onclick = () => {
+      const info = $("quotaInfo");
+      info.hidden = !info.hidden;
+      $("quotaBadge").setAttribute("aria-expanded", String(!info.hidden));
     };
     $("testLineBtn").onclick = testLine("testLine", $("testLineBtn"));
     $("testLineAllBtn").onclick = testLine("testLineAll", $("testLineAllBtn"));
@@ -158,6 +189,7 @@
       myId = me.line_user_id;
       $("status").hidden = true;
       $("page").hidden = false;
+      loadQuota();
       await loadUsers();
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
