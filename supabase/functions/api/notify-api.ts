@@ -168,15 +168,33 @@ export async function replyText(replyToken: string, text: string, token: string)
   if (!r.ok) console.error("LINE reply", r.status, (await r.text()).slice(0, 200));
 }
 
-/** Admin "test LINE to me": one message to the admin's own LINE, any time. Says exactly what went wrong if it fails. */
+/** Sample of every pushed message type (made-up data), in one push: task bubble, member summary, admin summary. */
+function sampleMessages() {
+  const today = bangkokDate(new Date());
+  const t = { title: "ตัวอย่าง: ร่างหนังสือทวงถาม", building: "นิติบุคคลตัวอย่าง", due: today };
+  return [
+    ...taskMessages([{ id: 0, title: t.title, building: t.building, details: "ข้อความทดสอบ ไม่ใช่งานจริง", due: today }]),
+    linkMessage(memberDigest({
+      newTasks: [t], dueSoon: [{ ...t, assigned: today, daysLeft: 0 }], overdue: [t],
+      sentBack: [{ ...t, reason: "มีปรับแก้", note: "ตัวอย่างสิ่งที่ต้องแก้" }], approved: [t],
+    })!, LIFF_URL),
+    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${LIFF_URL}/admin/tasks.html`),
+  ];
+}
+
+/**
+ * Admin tests, only to the admin's own LINE, any time. testLine: one short message. testLineAll: a sample of every
+ * message type (still 1 push of the monthly quota). Says exactly what went wrong if it fails.
+ */
 // deno-lint-ignore no-explicit-any
 export async function adminNotifyActions(action: string, _body: any, me: { line_user_id: string; role: string }): Promise<unknown> {
-  if (action !== "testLine") return undefined;
+  if (action !== "testLine" && action !== "testLineAll") return undefined;
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
   if (!token) return { ok: false, error: "LINE_MESSAGING_TOKEN is not set in Supabase (Edge Functions → Secrets)" };
   const quotaLeft = await remainingQuota(token).catch(() => null);
-  const error = await push(me.line_user_id, "✅ ทดสอบการแจ้งเตือนจาก law_task\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", LIFF_URL, token)
-    .catch((e) => String(e));
+  const messages = action === "testLineAll" ? sampleMessages()
+    : [linkMessage("✅ ทดสอบการแจ้งเตือนจาก law_task\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", LIFF_URL)];
+  const error = await pushMessages(me.line_user_id, messages, token).catch((e) => String(e));
   await db.from("notify_log").insert({ run_date: bangkokDate(new Date()), line_user_id: me.line_user_id, ok: !error, error: error ? "test: " + error : null });
   return { ok: !error, error, quotaLeft: quotaLeft === Infinity ? "unlimited" : quotaLeft };
 }

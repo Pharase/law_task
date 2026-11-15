@@ -39,8 +39,11 @@
     <!-- 3. Check that LINE notices work: sends one test message to the admin pressing it -->
     <section class="card">
       <h2>การแจ้งเตือน LINE · LINE notices</h2>
-      <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้</p>
-      <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
+      <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้ · "ทดสอบทุกรูปแบบข้อความ" ส่งตัวอย่างการ์ดงานใหม่ สรุปงานวันนี้ และสรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง ไม่ใช่งานจริง)</p>
+      <div class="row tools">
+        <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
+        <button type="button" class="small secondary" id="testLineAllBtn" title="การ์ดงานใหม่ + สรุปงานวันนี้ + สรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง, ใช้โควตา 1 ข้อความ)">ทดสอบทุกรูปแบบข้อความ</button>
+      </div>
       <p id="testLineMsg" role="status"></p>
     </section>
   </div>
@@ -127,13 +130,13 @@
       $("orgList").replaceChildren(...org.map(orgRow));
     }
 
-    $("testLineBtn").onclick = async () => {
-      const btn = $("testLineBtn"), msg = $("testLineMsg");
+    const testLine = (action, btn) => async () => {
+      const msg = $("testLineMsg");
       btn.disabled = true;
       msg.className = "muted";
       msg.textContent = "กำลังส่ง…";
       try {
-        const r = await api("testLine");
+        const r = await api(action);
         msg.className = r.ok ? "" : "error";
         msg.textContent = r.ok
           ? `✅ ส่งแล้ว ลองเปิด LINE ดู · โควตาคงเหลือเดือนนี้: ${r.quotaLeft ?? "ไม่ทราบ"}`
@@ -141,6 +144,8 @@
       } catch (err) { msg.className = "error"; msg.textContent = "Error: " + err.message; }
       btn.disabled = false;
     };
+    $("testLineBtn").onclick = testLine("testLine", $("testLineBtn"));
+    $("testLineAllBtn").onclick = testLine("testLineAll", $("testLineAllBtn"));
     $("newInviteBtn").onclick = () => { $("newInvite").hidden = !$("newInvite").hidden; };
     $("newInvite").onsubmit = (e) => {
       e.preventDefault();
