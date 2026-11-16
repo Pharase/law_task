@@ -3,7 +3,7 @@
 
 /** Days are JS weekdays: 0 = Sunday … 6 = Saturday. Times are "HH:MM" Bangkok. */
 export type Settings = {
-  instant: { on: boolean; start: string; end: string; days: number[] }; // new-task bubbles
+  instant: { on: boolean; start: string; end: string; days: number[] }; // new-task bubbles; start = end: all day, end < start: past midnight
   digest: { on: boolean; time: string; days: number[] };                // daily สรุปงานวันนี้ / สรุปสิ่งที่ต้องทำ
   taskHero: string | null;  // picture on new-task bubbles; null = the built-in one
   adminHero: string | null; // picture on the admin summary; null = the built-in one
@@ -43,7 +43,6 @@ export function normalizeSettings(input: any, base: Settings = DEFAULT_SETTINGS)
     taskHero: url(input && "taskHero" in input ? input.taskHero : base.taskHero),
     adminHero: url(input && "adminHero" in input ? input.adminHero : base.adminHero),
   };
-  if (out.instant.start >= out.instant.end) throw new Error("เวลาเริ่มแจ้งงานใหม่ต้องก่อนเวลาหยุด");
   return out;
 }
 

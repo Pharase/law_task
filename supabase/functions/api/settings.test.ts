@@ -11,7 +11,6 @@ test("partial edit keeps the rest; days deduped and sorted", () => {
 
 test("bad input is refused", () => {
   assert.throws(() => normalizeSettings({ digest: { time: "25:00" } }));
-  assert.throws(() => normalizeSettings({ instant: { start: "18:00", end: "09:00" } }));
   assert.throws(() => normalizeSettings({ instant: { days: [7] } }));
   assert.throws(() => normalizeSettings({ taskHero: "http://x/y.jpg" }));
 });
@@ -35,4 +34,13 @@ test("custom digest: Saturday 13:30 once, off switch stops it", () => {
   assert.equal(shouldRunDigest(new Date("2026-03-07T06:35:00Z"), null, d), true);  // Sat 13:35
   assert.equal(shouldRunDigest(new Date("2026-03-07T06:35:00Z"), "2026-03-07", d), false);
   assert.equal(shouldRunDigest(new Date("2026-03-07T06:35:00Z"), null, { ...d, on: false }), false);
+});
+
+test("start = end is all day; end before start runs past midnight", () => {
+  const all = { on: true, start: "00:00", end: "00:00", days: [1] };
+  assert.equal(isWorkingHours(new Date("2026-11-09T15:00:00Z"), all), true); // Mon 22:00
+  const night = { on: true, start: "22:00", end: "06:00", days: [1, 2] };
+  assert.equal(isWorkingHours(new Date("2026-11-09T15:30:00Z"), night), true);  // Mon 22:30
+  assert.equal(isWorkingHours(new Date("2026-11-09T22:00:00Z"), night), true);  // Tue 05:00
+  assert.equal(isWorkingHours(new Date("2026-11-10T05:00:00Z"), night), false); // Tue 12:00
 });

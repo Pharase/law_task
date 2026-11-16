@@ -58,7 +58,9 @@ export function shouldRunDigest(now: Date, lastRunDate: string | null, d: Settin
 /** New-task bubbles go out only inside the chosen window (default 08:30–17:30 every day); otherwise pendingNotices sends them once it opens. */
 export function isWorkingHours(now: Date, w: Settings["instant"] = DEFAULT_SETTINGS.instant): boolean {
   const { day, hm } = bkkNow(now);
-  return w.on && w.days.includes(day) && hm >= w.start && hm < w.end;
+  // start = end: all day; end before start: the window runs past midnight (days = the day it is now)
+  const inside = w.start === w.end || (w.start < w.end ? hm >= w.start && hm < w.end : hm >= w.start || hm < w.end);
+  return w.on && w.days.includes(day) && inside;
 }
 
 const SOON_DAYS = 3;
