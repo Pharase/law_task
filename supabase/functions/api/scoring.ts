@@ -72,8 +72,9 @@ export function memberScores(tasks: ScoredTask[]) {
     const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
     m.n++;
     m.onTime.push(sc.onTime / 10);
-    // tag score = the task score (on time + every round); ความถูกต้อง = fix rounds only
-    for (const tag of t.tags) (m.tags[tag] ??= []).push((tag === ACCURACY_TAG ? fixScore(t.sends) : sc.task) / 10);
+    // each tag the task carries gets a score: ความถูกต้อง = fix rounds only; the others = the mean day score of
+    // every send against its own due date (10 on/before it, minus 1 per 3 days late, floor 0)
+    for (const tag of t.tags) (m.tags[tag] ??= []).push((tag === ACCURACY_TAG ? fixScore(t.sends) : sc.accuracy) / 10);
   }
   const out: Record<string, { overall: number; onTime: number; byTag: Record<string, number>; tasks: number }> = {};
   for (const [owner, m] of Object.entries(acc)) {

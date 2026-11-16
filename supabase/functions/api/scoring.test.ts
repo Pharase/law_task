@@ -138,5 +138,5 @@ test("ความถูกต้อง: 10 with no fix round, −2 per มี�
   const m = memberScores([{ owner: "U1", tags: ["ความถูกต้อง", "การประสานงาน"],
     sends: [s("2026-01-10", "2026-01-10", "fix"), s("2026-01-18", "2026-01-15", "approved")] }]).U1;
   near(m.byTag["ความถูกต้อง"], 0.8);   // one fix round
-  near(m.byTag["การประสานงาน"], 0.925); // unchanged: on time + every round
+  near(m.byTag["การประสานงาน"], 0.95);  // mean of each send vs its due date: (10 + 9) / 2
 });
