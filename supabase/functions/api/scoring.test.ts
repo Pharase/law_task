@@ -99,11 +99,13 @@ test("overall = mean of คะแนนตรงเวลา and each tag score 
   near(m.U1.overall, 0.9111); // (0.9333 + 0.9333 + 0.8667) / 3
 });
 
-test("periodCount: approval month counts in full; unapproved late tasks count late from the next month", async () => {
+test("periodCount: approval month counts in full; unapproved overdue tasks count late in every period until approved", async () => {
   const { periodCount } = await import("./scoring.ts");
   const t = { state: "on_process", createdOn: "2001-01-01", currentDue: "2001-01-10", approvedOn: null, sends: [] as Send[] };
   const today = "2001-12-31";
-  assert.equal(periodCount(t, "2001-01-01", "2001-01-31", today), null);       // assigned this month: not yet
+  near((periodCount(t, "2001-01-01", "2001-01-31", today) as { lateOnly: number }).lateOnly, 3); // overdue in its own month: 21 days late
+  assert.equal(periodCount(t, "2001-01-01", "2001-01-31", "2001-01-09"), null); // not due yet: not counted
+  assert.equal(periodCount({ ...t, createdOn: "2001-02-03" }, "2001-01-01", "2001-01-31", today), null); // assigned after the period
   near((periodCount(t, "2001-02-01", "2001-02-28", today) as { lateOnly: number }).lateOnly, 0); // 49 days late as of 28 Feb
   const done = { ...t, state: "approved", approvedOn: "2001-03-01", sends: [s("2001-03-01", "2001-01-10", "approved")] };
   assert.equal(periodCount(done, "2001-03-01", "2001-03-31", today), "full");  // approved in March: full, late by dates

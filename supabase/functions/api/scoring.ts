@@ -28,9 +28,9 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
 /**
  * How a task counts in the period from..to (YYYY-MM-DD; today caps an unfinished period):
  * - "full": approved inside the period -> on time + tag scores, from its real dates.
- * - { lateOnly }: assigned BEFORE the period, still not approved by its end, and late by then (sent after the
- *   due date, or not sent and the due date passed) -> คะแนนตรงเวลา only. It counts again in each later period until approved.
- * - null: not counted (cancelled, approved in another period, assigned in this period and not done yet, or not late).
+ * - { lateOnly }: assigned by the period's end, still not approved by then, and late (sent after the due date, or
+ *   not sent / sent back and the due date passed) -> คะแนนตรงเวลา only. It counts again in each later period until approved.
+ * - null: not counted (cancelled, approved in another period, assigned after the period, or not late yet).
  */
 export function periodCount(
   t: { state: string; createdOn: string; currentDue: string; approvedOn: string | null; sends: Send[] },
@@ -40,7 +40,7 @@ export function periodCount(
   if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return "full";
   if (t.approvedOn && t.approvedOn < from) return null;
   const asOf = to < today ? to : today;
-  if (t.createdOn >= from || asOf < from) return null;
+  if (t.createdOn > asOf || asOf < from) return null;
   const last = t.sends.filter((s) => s.outcome !== "void" && s.sentOn <= asOf).at(-1);
   // delivered and waiting for review (or approved later): judged by that send; otherwise not delivered as of asOf
   // shortcut: a fix given after asOf still uses today's due date; only matters when re-scoring an old period
