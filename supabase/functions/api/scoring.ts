@@ -6,6 +6,12 @@ export type Send = { sentOn: string; dueOn: string; outcome: "pending" | "approv
 // lateOnly (0–10): a late task the admin has not approved yet; it counts in คะแนนตรงเวลา only, never in the tag scores
 export type ScoredTask = { owner: string; tags: string[]; sends: Send[]; lateOnly?: number };
 
+// ความถูกต้อง scores how often the work came back for fixes, not lateness: 10 with no มีปรับแก้ round, −2 per round
+// (0 at 5 rounds, where the app flags "เกิน 5 รอบแก้ไข"); กดผิด sends never count.
+export const ACCURACY_TAG = "ความถูกต้อง";
+const FIX_PENALTY = 2;
+export const fixScore = (sends: Send[]) => Math.max(0, 10 - FIX_PENALTY * sends.filter((s) => s.outcome === "fix").length);
+
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 /** 10 when on time, minus 1 per 3 days late, never below 0. No rounding. */
@@ -66,7 +72,8 @@ export function memberScores(tasks: ScoredTask[]) {
     const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
     m.n++;
     m.onTime.push(sc.onTime / 10);
-    for (const tag of t.tags) (m.tags[tag] ??= []).push(sc.task / 10); // tag score = the task score (on time + every round)
+    // tag score = the task score (on time + every round); ความถูกต้อง = fix rounds only
+    for (const tag of t.tags) (m.tags[tag] ??= []).push((tag === ACCURACY_TAG ? fixScore(t.sends) : sc.task) / 10);
   }
   const out: Record<string, { overall: number; onTime: number; byTag: Record<string, number>; tasks: number }> = {};
   for (const [owner, m] of Object.entries(acc)) {

@@ -40,8 +40,9 @@ test("memberScores averages task scores / 10 and per tag", () => {
     { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
     { owner: "U1", tags: ["ความถูกต้อง"], sends: [s("2026-01-14", "2026-01-10", "approved")] },
   ]);
-  near(m.U1.overall, 0.9333);
+  near(m.U1.overall, 0.9778); // ตรงเวลา 0.9333, การประสานงาน 1, ความถูกต้อง 1 (late, but never sent back)
   assert.equal(m.U1.byTag["การประสานงาน"], 1);
+  assert.equal(m.U1.byTag["ความถูกต้อง"], 1);
   assert.equal(m.U1.tasks, 2);
 });
 
@@ -95,8 +96,8 @@ test("overall = mean of คะแนนตรงเวลา and each tag score 
   ]);
   near(m.U1.onTime, 0.9333);
   near(m.U1.byTag["การประสานงาน"], 0.9333);
-  near(m.U1.byTag["ความถูกต้อง"], 0.8667);
-  near(m.U1.overall, 0.9111); // (0.9333 + 0.9333 + 0.8667) / 3
+  near(m.U1.byTag["ความถูกต้อง"], 1); // late, but never sent back for fixes
+  near(m.U1.overall, 0.9556); // (0.9333 + 0.9333 + 1) / 3
 });
 
 test("periodCount: approval month counts in full; unapproved overdue tasks count late in every period until approved", async () => {
@@ -127,4 +128,15 @@ test("lateOnly tasks feed คะแนนตรงเวลา but no tag score"
   near(m.onTime, 0.7);
   assert.deepEqual(Object.keys(m.byTag), ["การประสานงาน"]);
   assert.equal(m.tasks, 1); // งาน = approved tasks only
+});
+
+test("ความถูกต้อง: 10 with no fix round, −2 per มีปรับแก้, กดผิด ignored, floor 0", async () => {
+  const { fixScore } = await import("./scoring.ts");
+  assert.equal(fixScore([s("2026-01-20", "2026-01-10", "approved")]), 10);
+  assert.equal(fixScore([s("2026-01-09", "2026-01-10", "fix"), s("2026-01-09", "2026-01-10", "void"), s("2026-01-12", "2026-01-15", "approved")]), 8);
+  assert.equal(fixScore(Array.from({ length: 6 }, () => s("2026-01-09", "2026-01-10", "fix"))), 0);
+  const m = memberScores([{ owner: "U1", tags: ["ความถูกต้อง", "การประสานงาน"],
+    sends: [s("2026-01-10", "2026-01-10", "fix"), s("2026-01-18", "2026-01-15", "approved")] }]).U1;
+  near(m.byTag["ความถูกต้อง"], 0.8);   // one fix round
+  near(m.byTag["การประสานงาน"], 0.925); // unchanged: on time + every round
 });
