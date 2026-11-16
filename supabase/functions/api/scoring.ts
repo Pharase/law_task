@@ -3,7 +3,8 @@
 import { daysBetween } from "./dates.ts";
 
 export type Send = { sentOn: string; dueOn: string; outcome: "pending" | "approved" | "fix" | "void" };
-export type ScoredTask = { owner: string; tags: string[]; sends: Send[] };
+// lateOnly (0–10): a late task the admin has not approved yet; it counts in คะแนนตรงเวลา only, never in the tag scores
+export type ScoredTask = { owner: string; tags: string[]; sends: Send[]; lateOnly?: number };
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
@@ -25,12 +26,42 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
 }
 
 /**
+ * How a task counts in the period from..to (YYYY-MM-DD; today caps an unfinished period):
+ * - "full": approved inside the period -> on time + tag scores, from its real dates.
+ * - { lateOnly }: assigned BEFORE the period, still not approved by its end, and late by then (sent after the
+ *   due date, or not sent and the due date passed) -> คะแนนตรงเวลา only. It counts again in each later period until approved.
+ * - null: not counted (cancelled, approved in another period, assigned in this period and not done yet, or not late).
+ */
+export function periodCount(
+  t: { state: string; createdOn: string; currentDue: string; approvedOn: string | null; sends: Send[] },
+  from: string, to: string, today: string,
+): "full" | { lateOnly: number } | null {
+  if (t.state === "cancelled") return null;
+  if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return "full";
+  if (t.approvedOn && t.approvedOn < from) return null;
+  const asOf = to < today ? to : today;
+  if (t.createdOn >= from || asOf < from) return null;
+  const last = t.sends.filter((s) => s.outcome !== "void" && s.sentOn <= asOf).at(-1);
+  // delivered and waiting for review (or approved later): judged by that send; otherwise not delivered as of asOf
+  // shortcut: a fix given after asOf still uses today's due date; only matters when re-scoring an old period
+  const delivered = last && (last.outcome === "pending" || last.outcome === "approved");
+  const sentOn = delivered ? last.sentOn : asOf, due = delivered ? last.dueOn : t.currentDue;
+  return sentOn > due ? { lateOnly: dayScore(sentOn, due) } : null;
+}
+
+/**
  * Per owner (0–1, i.e. score / 10): คะแนนตรงเวลา, one score per tag (หมวดหมู่), and คะแนนรวม = the mean of
  * คะแนนตรงเวลา and the tag scores the member has work in. Unapproved tasks are skipped.
  */
 export function memberScores(tasks: ScoredTask[]) {
   const acc: Record<string, { n: number; onTime: number[]; tags: Record<string, number[]> }> = {};
   for (const t of tasks) {
+    if (t.lateOnly !== undefined) {
+      const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
+      m.n++;
+      m.onTime.push(t.lateOnly / 10);
+      continue;
+    }
     const sc = taskScore(t.sends);
     if (!sc) continue;
     const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });

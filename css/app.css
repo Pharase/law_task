@@ -486,3 +486,6 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 /* task detail: the due date in pink neon; label + date never split across lines */
 .nowrap { white-space: nowrap; }
 .due-neon { color: #ff4fd8; font-weight: 600; text-shadow: 0 0 6px rgba(255, 79, 216, .75), 0 0 14px rgba(255, 79, 216, .45); }
+.hero-preview.none { display: grid; place-items: center; background: none; border: 1px dashed var(--line-2); color: var(--ink-3); font-size: 12px; }
+details[open] > summary .due-head { display: none; }
+.due-neon.old { color: #ff4d5e; text-shadow: 0 0 6px rgba(255, 77, 94, .75), 0 0 14px rgba(255, 77, 94, .45); }

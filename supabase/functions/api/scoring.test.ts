@@ -98,3 +98,31 @@ test("overall = mean of คะแนนตรงเวลา and each tag score 
   near(m.U1.byTag["ความถูกต้อง"], 0.8667);
   near(m.U1.overall, 0.9111); // (0.9333 + 0.9333 + 0.8667) / 3
 });
+
+test("periodCount: approval month counts in full; unapproved late tasks count late from the next month", async () => {
+  const { periodCount } = await import("./scoring.ts");
+  const t = { state: "on_process", createdOn: "2001-01-01", currentDue: "2001-01-10", approvedOn: null, sends: [] as Send[] };
+  const today = "2001-12-31";
+  assert.equal(periodCount(t, "2001-01-01", "2001-01-31", today), null);       // assigned this month: not yet
+  near((periodCount(t, "2001-02-01", "2001-02-28", today) as { lateOnly: number }).lateOnly, 0); // 49 days late as of 28 Feb
+  const done = { ...t, state: "approved", approvedOn: "2001-03-01", sends: [s("2001-03-01", "2001-01-10", "approved")] };
+  assert.equal(periodCount(done, "2001-03-01", "2001-03-31", today), "full");  // approved in March: full, late by dates
+  assert.equal(periodCount(done, "2001-01-01", "2001-03-31", today), "full");  // quarter 1: counted normally
+  assert.equal(periodCount(done, "2001-04-01", "2001-04-30", today), null);    // approved earlier
+  // sent on time, waiting for review across the month end: not late, not counted
+  const waiting = { ...t, createdOn: "2001-01-25", currentDue: "2001-02-15", sends: [s("2001-02-10", "2001-02-15", "pending")] };
+  assert.equal(periodCount(waiting, "2001-02-01", "2001-02-28", today), null);
+  // sent 3 days late, not approved yet: late only
+  const lateSent = { ...waiting, sends: [s("2001-02-18", "2001-02-15", "pending")] };
+  assert.equal((periodCount(lateSent, "2001-02-01", "2001-02-28", today) as { lateOnly: number }).lateOnly, 9);
+});
+
+test("lateOnly tasks feed คะแนนตรงเวลา but no tag score", () => {
+  const m = memberScores([
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
+    { owner: "U1", tags: ["ความถูกต้อง"], sends: [], lateOnly: 4 },
+  ]).U1;
+  near(m.onTime, 0.7);
+  assert.deepEqual(Object.keys(m.byTag), ["การประสานงาน"]);
+  assert.equal(m.tasks, 2);
+});

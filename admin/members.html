@@ -6,9 +6,9 @@
   <title>Members – admin</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261111"></script>
-  <script src="../js/work.js?v=20261117"></script>
+  <script src="../js/work.js?v=20261118"></script>
   <script src="../js/backup.js?v=20261111"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261117">
+  <link rel="stylesheet" href="../css/app.css?v=20261118">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -218,7 +218,6 @@
     }
     // ---- Settings: notice times, bubble pictures, link check, broadcast ----
     const DAY_OF = [1, 2, 3, 4, 5, 6, 0]; // TH_WEEK is Monday-first; the server uses JS weekdays (0 = Sunday)
-    let builtIn = {};
     const say = (id, ok, text) => { $(id).className = ok ? "" : "error"; $(id).textContent = text; };
     const fail = (id) => (err) => say(id, false, "❌ " + err.message);
 
@@ -232,14 +231,14 @@
         form.append("file", await shrinkImage(file.files[0]));
         api("uploadHero", form).then((r) => { showSettings(r.settings); say("heroMsg", true, "✅ เปลี่ยนรูปแล้ว"); }).catch(fail("heroMsg"));
       };
-      const reset = s[key] && el("button", { type: "button", className: "small secondary", textContent: "ใช้รูปเดิมของระบบ" });
+      const reset = s[key] && el("button", { type: "button", className: "small secondary", textContent: "ไม่ใช้รูป" });
       if (reset) reset.onclick = () => api("saveSettings", { settings: { [key]: null } })
-        .then((r) => { showSettings(r.settings); say("heroMsg", true, "✅ กลับไปใช้รูปเดิมแล้ว"); }).catch(fail("heroMsg"));
+        .then((r) => { showSettings(r.settings); say("heroMsg", true, "✅ เอารูปออกแล้ว"); }).catch(fail("heroMsg"));
       return el("div", { className: "person" },
         el("div", { className: "person-id" },
-          el("img", { className: "hero-preview", src: s[key] || builtIn[key], alt: "รูป " + label }),
+          s[key] ? el("img", { className: "hero-preview", src: s[key], alt: "รูป " + label }) : el("span", { className: "hero-preview none", textContent: "ไม่มีรูป" }),
           el("div", { className: "grow" }, el("strong", { textContent: label }),
-            el("div", { className: "muted", textContent: s[key] ? "รูปที่อัปโหลด" : "รูปเดิมของระบบ" }))),
+            el("div", { className: "muted", textContent: s[key] ? "ส่งพร้อมรูปนี้" : "ส่งแบบไม่มีรูป · เลือกไฟล์เพื่อเพิ่มรูป" }))),
         el("div", { className: "person-actions" }, file, reset || ""));
     }
 
@@ -266,7 +265,6 @@
     async function loadSettings() {
       try {
         const r = await api("getSettings");
-        builtIn = r.builtIn;
         showSettings(r.settings);
       } catch (err) { say("timesMsg", false, "อ่านการตั้งค่าไม่ได้: " + err.message); }
     }

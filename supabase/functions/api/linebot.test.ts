@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { HERO_URL, LIFF_URL, linkMessage, postbackReply, sendIdOf, taskBubble, taskMessages, validSignature } from "./linebot.ts";
+import { LIFF_URL, linkMessage, postbackReply, sendIdOf, taskBubble, taskMessages, validSignature } from "./linebot.ts";
 
 const task = { id: 7, title: "ร่างหนังสือทวงถาม", building: "อาคาร A", details: "แนบสำเนา", due: "2026-11-20" };
 
 test("bubble: same look as the old script (hero picture, title, กำหนดส่ง / ชื่อนิติ / รายละเอียด) + ส่งงาน opens the task in LIFF", () => {
   const b = taskBubble(task);
   assert.equal(b.type, "bubble");
-  assert.equal(b.hero.url, HERO_URL);
+  assert.equal("hero" in b, false); // no picture unless an admin adds one
+  assert.equal(taskBubble(task, "https://x/p.jpg").hero?.url, "https://x/p.jpg");
   const text = JSON.stringify(b.body);
   for (const s of ["งานใหม่: ร่างหนังสือทวงถาม", "กำหนดส่ง", "20/11/2569", "ชื่อนิติ", "อาคาร A", "รายละเอียด", "แนบสำเนา"]) assert.ok(text.includes(s), s);
   assert.deepEqual(b.footer.contents[0].action, { type: "uri", label: "ส่งงาน", uri: `${LIFF_URL}?task=7` });
@@ -62,5 +63,5 @@ test("linkMessage: text in the bubble, ดูรายการงานทั�
 
 test("linkMessage: hero picture only when given", () => {
   assert.equal("hero" in linkMessage("x", LIFF_URL).contents, false);
-  assert.equal((linkMessage("x", LIFF_URL, HERO_URL).contents as { hero: { url: string } }).hero.url, HERO_URL);
+  assert.equal((linkMessage("x", LIFF_URL, "https://x/p.jpg").contents as { hero: { url: string } }).hero.url, "https://x/p.jpg");
 });

@@ -121,7 +121,7 @@ async function loadPerformance() {
     score(r.overall5, r.overall), score(r.onTime5, r.onTime),
     ...TAG_LIST.map((tag) => (r.byTag[tag] ? score(r.byTag[tag].scaled, r.byTag[tag].raw) : el("td", { className: "muted", textContent: "-" })))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 5 : 4) + TAG_LIST.length, textContent: "ยังไม่มีงานที่อนุมัติในช่วงนี้" }))]));
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 5 : 4) + TAG_LIST.length, textContent: "ยังไม่มีงานที่นับคะแนนในช่วงนี้" }))]));
 }
 
 async function loadWarnings() {
@@ -272,7 +272,7 @@ function initReports() {
     $("pN").value = n;
   };
   const reload = () => loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
-  fillN(m);
+  fillN(Math.ceil(m / 3)); // quarter is the default period
   // changing any dropdown reloads straight away, so the table never shows a different period than the picks
   $("pKind").onchange = () => { fillN($("pKind").value === "month" ? m : Math.ceil(m / 3)); reload(); };
   $("pYear").onchange = $("pN").onchange = reload;

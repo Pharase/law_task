@@ -24,7 +24,9 @@ function taskItem(task, today, onChange, opts = {}) {
   const fix = task.state === "on_process" ? lastFix(task) : null;
   const summary = el("summary", {},
     el("strong", { textContent: task.title }),
-    el("span", { className: "muted", textContent: ` · ${task.building}${opts.admin ? " · " + task.owner_name : ""} · กำหนดส่ง ${thDate(task.current_due_on)}` }),
+    el("span", { className: "muted", textContent: ` · ${task.building}${opts.admin ? " · " + task.owner_name : ""}` }),
+    // hidden once the card is open: the detail shows the due date under the tags instead
+    el("span", { className: "muted nowrap due-head", textContent: ` · กำหนดส่ง ${thDate(task.current_due_on)}` }),
     opts.status && el("span", { className: "badge", textContent: opts.status }),
     overdue && el("span", { className: "badge late", textContent: "เลยกำหนด" }),
     task.fix_round > 0 && el("span", { className: "badge", textContent: `รอบแก้ ${task.fix_round}` }),
@@ -37,7 +39,7 @@ function taskItem(task, today, onChange, opts = {}) {
     // due date glows; the original date shows only after a send-back moved it (มีปรับแก้). nowrap: a label never splits from its date
     el("p", { className: "due-line" },
       el("span", { className: "nowrap" }, "กำหนดส่ง ", el("span", { className: "due-neon", textContent: thDate(task.current_due_on) })),
-      task.current_due_on !== task.due_on && el("span", { className: "nowrap muted", textContent: ` · กำหนดส่งเดิม ${thDate(task.due_on)}` })),
+      task.current_due_on !== task.due_on && el("span", { className: "nowrap" }, " · กำหนดส่งเดิม ", el("span", { className: "due-neon old", textContent: thDate(task.due_on) }))),
     fix && el("div", { className: "fix-note" },
       el("strong", { textContent: "สิ่งที่ต้องแก้ไข: " }), el("span", { className: "pre", textContent: fix.fix_note ?? "" })),
   );

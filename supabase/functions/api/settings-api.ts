@@ -1,6 +1,5 @@
 // Members page → ตั้งค่า: notice times, bubble pictures, and a "do the Sheet / Drive links still work" check.
 import { TABS } from "./lien.ts";
-import { ADMIN_HERO_URL, HERO_URL } from "./linebot.ts";
 import { normalizeSettings, readSettings, type Settings } from "./settings.ts";
 import { sheet } from "./sheet.ts";
 import { db, HttpError, type Me, must } from "./shared.ts";
@@ -61,7 +60,7 @@ async function checkLinks(): Promise<Check[]> {
 export async function adminSettingsActions(action: string, body: any, me: Me): Promise<unknown> {
   switch (action) {
     case "getSettings":
-      return { settings: await loadSettings(), builtIn: { taskHero: HERO_URL, adminHero: ADMIN_HERO_URL } };
+      return { settings: await loadSettings() };
 
     case "saveSettings":
       return { settings: await save(body.settings, me) };

@@ -1,7 +1,7 @@
 // Task actions (spec "Button A"). Data lives in the Google Sheet (sheet.ts); rules live in review.ts / scoring.ts / sheetRows.ts.
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
-import { performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
+import { periodCount, performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { archiveFiles } from "./archive.ts";
@@ -85,13 +85,19 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       const { from, to } = periodRange(kind, year, n);
       const data = await loadSheet();
       const role = new Map(data.people.map((p) => [p.line_user_id, p]));
-      // Approved tasks whose ORIGINAL due date is in the period. Revoked people still count; admins never own tasks.
-      const tasks = data.tasks.filter((t) => t.state === "approved" && t.due_on >= from && t.due_on <= to &&
-        role.has(t.owner) && role.get(t.owner)!.role !== "admin");
-      const scored: ScoredTask[] = tasks.map((t) => ({
-        owner: t.owner, tags: t.tags, sends: scoredSends(t, data.sends.filter((s) => s.task_id === t.id)),
-      }));
-      const names = Object.fromEntries(tasks.map((t) => [t.owner, role.get(t.owner)!.name]));
+      // Approved in the period -> full score; older tasks still not approved and late -> คะแนนตรงเวลา only (periodCount).
+      // Revoked people still count; admins never own tasks.
+      const scored: ScoredTask[] = [];
+      for (const t of data.tasks) {
+        if (!role.has(t.owner) || role.get(t.owner)!.role === "admin") continue;
+        const rows = data.sends.filter((s) => s.task_id === t.id);
+        const sends = scoredSends(t, rows);
+        const ok = rows.filter((s) => s.outcome === "approved").at(-1);
+        const approvedOn = t.state === "approved" ? String(ok?.reviewed_at || ok?.sent_on || t.current_due_on).slice(0, 10) : null;
+        const c = periodCount({ state: t.state, createdOn: String(t.created_at).slice(0, 10), currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
+        if (c) scored.push({ owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) });
+      }
+      const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
       const rows = performanceRows(scored, names); // scaled against everyone, then trimmed for members
       return { from, to, rows: visibleRows(rows, me) }; // members: their own row only, filtered here on the server
     }

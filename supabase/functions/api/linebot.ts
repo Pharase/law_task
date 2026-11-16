@@ -4,10 +4,7 @@
 
 /** The LIFF app (home page = Work dashboard). */
 export const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
-/** Picture at the top of every task bubble. */
-export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.jpg"; // src/logo-a.png at 512px, JPEG on white (44 KB); new filename, so LINE fetches it fresh
-/** Picture at the top of the admin daily summary. */
-export const ADMIN_HERO_URL = "https://pharase.github.io/law_task/img/admin-hero.jpg"; // copy of src/logo-a.jpg
+// No picture on bubbles unless an admin adds one in ตั้งค่า (settings.taskHero / adminHero).
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
 export type BubbleTask = { id: number; title: string; building: string; details: string | null; due: string };
@@ -22,10 +19,10 @@ const row = (label: string, value: string, color: string) => ({
   ],
 });
 
-export function taskBubble(t: BubbleTask, hero = HERO_URL) {
+export function taskBubble(t: BubbleTask, hero?: string | null) {
   return {
     type: "bubble",
-    hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" }, // the picture's own shape, nothing cropped
+    ...(hero && { hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" } }), // the picture's own shape, nothing cropped
     body: {
       type: "box", layout: "vertical", contents: [
         { type: "text", text: "งานใหม่: " + t.title, weight: "bold", size: "xl", wrap: true },
@@ -48,7 +45,7 @@ export function taskBubble(t: BubbleTask, hero = HERO_URL) {
 }
 
 /** Flex messages for one push: a single bubble, or carousels of 12. Tasks past 60 are left out (caller keeps them unmarked). */
-export function taskMessages(tasks: BubbleTask[], hero = HERO_URL) {
+export function taskMessages(tasks: BubbleTask[], hero?: string | null) {
   const altText = `มีงานใหม่รอดำเนินการ ${tasks.length} งาน`;
   if (tasks.length === 1) return [{ type: "flex", altText, contents: taskBubble(tasks[0], hero) }];
   const out = [];
@@ -60,7 +57,7 @@ export function taskMessages(tasks: BubbleTask[], hero = HERO_URL) {
 export const MAX_TASKS_PER_PUSH = PER_CAROUSEL * MAX_MESSAGES;
 
 /** Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link. */
-export function linkMessage(text: string, link: string, hero?: string) {
+export function linkMessage(text: string, link: string, hero?: string | null) {
   return {
     type: "flex", altText: text.slice(0, 400),
     contents: {

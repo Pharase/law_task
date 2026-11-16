@@ -5,8 +5,8 @@
 export type Settings = {
   instant: { on: boolean; start: string; end: string; days: number[] }; // new-task bubbles; on = only in this window, off = any time; start = end: all day, end < start: past midnight
   digest: { on: boolean; time: string; days: number[] };                // daily สรุปงานวันนี้ / สรุปสิ่งที่ต้องทำ
-  taskHero: string | null;  // picture on new-task bubbles; null = the built-in one
-  adminHero: string | null; // picture on the admin summary; null = the built-in one
+  taskHero: string | null;  // picture on new-task bubbles; null = no picture
+  adminHero: string | null; // picture on the admin summary; null = no picture
 };
 
 // The behaviour before settings existed: bubbles 08:30–17:30 every day, summary 09:00 Mon–Fri.
