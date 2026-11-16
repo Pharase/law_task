@@ -1,10 +1,11 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
 import { adminDigest, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
-import { ADMIN_HERO_URL, type BubbleTask, LIFF_URL, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
+import { ADMIN_HERO_URL, type BubbleTask, HERO_URL, LIFF_URL, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
-import { db, must } from "./shared.ts";
+import { loadSettings } from "./settings-api.ts";
+import { db, HttpError, must } from "./shared.ts";
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -48,7 +49,8 @@ export async function digest() {
   const today = bangkokDate(now);
   const last = must(await db.from("notify_log").select("run_date").is("line_user_id", null)
     .order("run_date", { ascending: false }).limit(1))[0]?.run_date ?? null;
-  if (!shouldRunDigest(now, last)) return { skipped: "not now" };
+  const settings = await loadSettings();
+  if (!shouldRunDigest(now, last, settings.digest)) return { skipped: "not now" };
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
   if (!token) return { skipped: "no token" }; // not logged, so it runs as soon as the token is set
   // Read everything BEFORE claiming the day: if Google is down this throws and the next cron run retries.
@@ -88,7 +90,7 @@ export async function digest() {
     return text && { to: p.line_user_id, text, link: LIFF_URL, taskIds: newTasks.map((t) => t.id), sendIds: sends.map((s) => s.id) };
   }).filter(Boolean) as typeof outbox;
   const adminText = adminDigest({ waiting, backupDue: backupDue ?? 0, quotaLow: remaining < admins.length + memberMsgs.length });
-  if (adminText) for (const a of admins) outbox.push({ to: a.line_user_id, text: adminText, link: `${LIFF_URL}/admin/tasks.html`, hero: ADMIN_HERO_URL, taskIds: [], sendIds: [] });
+  if (adminText) for (const a of admins) outbox.push({ to: a.line_user_id, text: adminText, link: `${LIFF_URL}/admin/tasks.html`, hero: settings.adminHero ?? ADMIN_HERO_URL, taskIds: [], sendIds: [] });
   outbox.push(...memberMsgs);
 
   let sent = 0, quotaSkipped = 0;
@@ -121,12 +123,14 @@ export async function digest() {
  */
 export async function notifyNewTasks(groups: { to: string; tasks: BubbleTask[] }[]): Promise<number[]> {
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
-  if (!token || !groups.length || !isWorkingHours(new Date())) return [];
+  if (!token || !groups.length) return [];
+  const settings = await loadSettings();
+  if (!isWorkingHours(new Date(), settings.instant)) return [];
   const today = bangkokDate(new Date());
   const done: number[] = [];
   for (const g of groups) {
     const tasks = g.tasks.slice(0, MAX_TASKS_PER_PUSH); // the rest stay unmarked and go in the next catch-up run
-    const error = await pushMessages(g.to, taskMessages(tasks), token).catch((e) => String(e));
+    const error = await pushMessages(g.to, taskMessages(tasks, settings.taskHero ?? HERO_URL), token).catch((e) => String(e));
     await db.from("notify_log").insert({ run_date: today, line_user_id: g.to, ok: !error, error: error ? "instant: " + error : null });
     if (!error) done.push(...tasks.map((t) => t.id));
   }
@@ -141,7 +145,7 @@ const CATCH_UP_DAYS = 4; // a task assigned Friday evening still gets its bubble
  * was told about yet. Public + safe: it only sends what is due and marks it, so a second call sends nothing.
  */
 export async function pendingNotices() {
-  if (!isWorkingHours(new Date())) return { skipped: "outside working hours" };
+  if (!isWorkingHours(new Date(), (await loadSettings()).instant)) return { skipped: "outside working hours" };
   const since = bangkokDate(new Date(Date.now() - CATCH_UP_DAYS * 86400_000));
   const { tasks } = await loadSheet();
   // created_at can come back as a date only (the sheet formats it), so compare dates
@@ -172,16 +176,16 @@ export async function replyText(replyToken: string, text: string, token: string)
 }
 
 /** Sample of every pushed message type (made-up data), in one push: task bubble, member summary, admin summary. */
-function sampleMessages() {
+function sampleMessages(heroes: { taskHero: string | null; adminHero: string | null }) {
   const today = bangkokDate(new Date());
   const t = { title: "ตัวอย่าง: ร่างหนังสือทวงถาม", building: "นิติบุคคลตัวอย่าง", due: today };
   return [
-    ...taskMessages([{ id: 0, title: t.title, building: t.building, details: "ข้อความทดสอบ ไม่ใช่งานจริง", due: today }]),
+    ...taskMessages([{ id: 0, title: t.title, building: t.building, details: "ข้อความทดสอบ ไม่ใช่งานจริง", due: today }], heroes.taskHero ?? HERO_URL),
     linkMessage(memberDigest({
       newTasks: [t], dueSoon: [{ ...t, assigned: today, daysLeft: 0 }], overdue: [t],
       sentBack: [{ ...t, reason: "มีปรับแก้", note: "ตัวอย่างสิ่งที่ต้องแก้" }], approved: [t],
     })!, LIFF_URL),
-    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${LIFF_URL}/admin/tasks.html`, ADMIN_HERO_URL),
+    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${LIFF_URL}/admin/tasks.html`, heroes.adminHero ?? ADMIN_HERO_URL),
   ];
 }
 
@@ -190,8 +194,8 @@ function sampleMessages() {
  * message type (still 1 push of the monthly quota). Says exactly what went wrong if it fails.
  */
 // deno-lint-ignore no-explicit-any
-export async function adminNotifyActions(action: string, _body: any, me: { line_user_id: string; role: string }): Promise<unknown> {
-  if (action !== "testLine" && action !== "testLineAll" && action !== "lineQuota") return undefined;
+export async function adminNotifyActions(action: string, body: any, me: { line_user_id: string; role: string }): Promise<unknown> {
+  if (!["testLine", "testLineAll", "lineQuota", "broadcast"].includes(action)) return undefined;
   const token = Deno.env.get("LINE_MESSAGING_TOKEN");
   if (!token) return { ok: false, error: "LINE_MESSAGING_TOKEN is not set in Supabase (Edge Functions → Secrets)" };
   if (action === "lineQuota") {
@@ -199,10 +203,44 @@ export async function adminNotifyActions(action: string, _body: any, me: { line_
     const { limit, used } = await quotaInfo(token);
     return { ok: true, limit: limit === Infinity ? null : limit, used, left: limit === Infinity ? null : limit - used };
   }
+  if (action === "broadcast") return await broadcast(body, me, token);
   const quotaLeft = await remainingQuota(token).catch(() => null);
-  const messages = action === "testLineAll" ? sampleMessages()
+  const messages = action === "testLineAll" ? sampleMessages(await loadSettings())
     : [linkMessage("✅ ทดสอบการแจ้งเตือนจาก law_task\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", LIFF_URL)];
   const error = await pushMessages(me.line_user_id, messages, token).catch((e) => String(e));
   await db.from("notify_log").insert({ run_date: bangkokDate(new Date()), line_user_id: me.line_user_id, ok: !error, error: error ? "test: " + error : null });
   return { ok: !error, error, quotaLeft: quotaLeft === Infinity ? "unlimited" : quotaLeft };
+}
+
+const BROADCAST_ROLES: Record<string, string[]> = { all: ["member", "admin"], member: ["member"], admin: ["admin"] };
+
+/**
+ * Admin announcement to the team's own LINE accounts (approved people only, not every friend of the OA).
+ * Costs 1 message of the monthly quota per person, so it refuses up front when the quota can't cover everyone.
+ */
+// deno-lint-ignore no-explicit-any
+async function broadcast(body: any, me: { line_user_id: string }, token: string) {
+  const text = String(body.text ?? "").trim();
+  const roles = BROADCAST_ROLES[body.to];
+  if (!text || text.length > 2000) throw new HttpError(400, "ข้อความต้องมี 1–2000 ตัวอักษร");
+  if (!roles) throw new HttpError(400, "to must be all, member or admin");
+  const ids: string[] = must(await db.from("profiles").select("line_user_id").in("role", roles)).map((p: { line_user_id: string }) => p.line_user_id);
+  if (!ids.length) return { ok: false, error: "ไม่มีผู้รับ" };
+  const left = await remainingQuota(token).catch(() => Infinity);
+  if (left < ids.length) return { ok: false, error: `โควตาเหลือ ${left} แต่มีผู้รับ ${ids.length} คน` };
+  const today = bangkokDate(new Date());
+  let sent = 0, error: string | null = null;
+  for (let i = 0; i < ids.length; i += 500) { // LINE multicast: 500 people per call
+    const to = ids.slice(i, i + 500);
+    const r = await fetch("https://api.line.me/v2/bot/message/multicast", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ to, messages: [linkMessage("📢 ประกาศ\n\n" + text, LIFF_URL)] }),
+    }).catch((e) => e as Error);
+    error = r instanceof Error ? String(r) : r.ok ? null : `multicast ${r.status}: ${(await r.text()).slice(0, 200)}`;
+    if (error) break;
+    sent += to.length;
+  }
+  await db.from("notify_log").insert({ run_date: today, line_user_id: me.line_user_id, ok: !error, error: `broadcast to ${sent}/${ids.length}` + (error ? ": " + error : "") });
+  return { ok: !error, error, sent, total: ids.length };
 }

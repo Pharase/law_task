@@ -474,3 +474,11 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   #perfTable th, #perfTable td:nth-child(2) { white-space: nowrap; } /* one-line header and names; the table scrolls sideways */
   #perfTable th { font-size: 11px; min-width: 0; }
 }
+
+/* members page → ตั้งค่า (Settings) card */
+.settings h3 { margin: 22px 0 8px; font-weight: 600; font-size: 15px; color: var(--cyan); }
+.settings .card-head h3 { margin: 0; }
+.settings .days { margin-top: 4px; }
+.hero-preview { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; flex: none; }
+.check-list { margin: 8px 0 0; padding-left: 18px; }
+.check-list li { margin-bottom: 6px; overflow-wrap: anywhere; }

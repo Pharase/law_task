@@ -1,5 +1,6 @@
 // Daily LINE summary text (spec "Notifications"): one message per person per weekday, null when there's nothing to say.
 import { bangkokDate, daysBetween } from "./dates.ts";
+import { DEFAULT_SETTINGS, type Settings } from "./settings.ts";
 
 export type T = { title: string; building: string; due: string };
 export type Soon = T & { assigned: string; daysLeft: number };
@@ -40,22 +41,24 @@ export function adminDigest(x: { waiting: (T & { owner: string })[]; backupDue: 
   return parts.length ? ["สรุปสิ่งที่ต้องทำ", ...parts].join("\n\n") : null;
 }
 
-const bkkParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", weekday: "short", hour: "numeric", hourCycle: "h23" });
-
-/** Runs at most once per Bangkok weekday, at or after 09:00 Bangkok. */
-export function shouldRunDigest(now: Date, lastRunDate: string | null): boolean {
-  const p = Object.fromEntries(bkkParts.formatToParts(now).map((x) => [x.type, x.value]));
-  if (p.weekday === "Sat" || p.weekday === "Sun") return false;
-  if (Number(p.hour) < 9) return false;
-  return lastRunDate !== bangkokDate(now);
+/** Bangkok weekday (0 = Sunday) and "HH:MM" right now. */
+function bkkNow(now: Date): { day: number; hm: string } {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map((x) => [x.type, x.value]));
+  return { day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday), hm: `${p.hour}:${p.minute}` };
 }
 
-/** New-task bubbles go out only between 08:30 and 17:30 Bangkok time; otherwise pendingNotices sends them once this window opens. */
-export function isWorkingHours(now: Date): boolean {
-  const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-    .format(now).split(":").map(Number);
-  const minutes = h * 60 + m;
-  return minutes >= 8 * 60 + 30 && minutes < 17 * 60 + 30;
+/** Runs at most once per Bangkok day, on a chosen weekday, at or after the chosen time (default 09:00 Mon–Fri). */
+export function shouldRunDigest(now: Date, lastRunDate: string | null, d: Settings["digest"] = DEFAULT_SETTINGS.digest): boolean {
+  const { day, hm } = bkkNow(now);
+  return d.on && d.days.includes(day) && hm >= d.time && lastRunDate !== bangkokDate(now);
+}
+
+/** New-task bubbles go out only inside the chosen window (default 08:30–17:30 every day); otherwise pendingNotices sends them once it opens. */
+export function isWorkingHours(now: Date, w: Settings["instant"] = DEFAULT_SETTINGS.instant): boolean {
+  const { day, hm } = bkkNow(now);
+  return w.on && w.days.includes(day) && hm >= w.start && hm < w.end;
 }
 
 const SOON_DAYS = 3;

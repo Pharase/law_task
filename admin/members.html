@@ -8,7 +8,7 @@
   <script src="../js/app.js?v=20261111"></script>
   <script src="../js/work.js?v=20261111"></script>
   <script src="../js/backup.js?v=20261111"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261115">
+  <link rel="stylesheet" href="../css/app.css?v=20261116">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -36,10 +36,12 @@
       <div id="orgList"></div>
     </section>
 
-    <!-- 3. Check that LINE notices work: sends one test message to the admin pressing it -->
-    <section class="card">
+    <!-- 3. Settings: LINE tests, notice times, bubble pictures, Sheet/Drive check, team announcement -->
+    <section class="card settings">
+      <h2>ตั้งค่า · Settings</h2>
+
       <div class="row card-head">
-        <h2 class="grow">การแจ้งเตือน LINE · LINE notices</h2>
+        <h3 class="grow">การแจ้งเตือน LINE · LINE notification</h3>
         <!-- LINE push quota left this month (when it runs out, messages are not sent); tap for details -->
         <button type="button" class="badge" id="quotaBadge" aria-expanded="false" aria-controls="quotaInfo">…</button>
       </div>
@@ -50,6 +52,50 @@
         <button type="button" class="small secondary" id="testLineAllBtn" title="การ์ดงานใหม่ + สรุปงานวันนี้ + สรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง, ใช้โควตา 1 ข้อความ)">ทดสอบทุกรูปแบบข้อความ</button>
       </div>
       <p id="testLineMsg" role="status"></p>
+
+      <h3>เวลาแจ้งเตือน · Notification times</h3>
+      <form id="timesForm">
+        <fieldset>
+          <label class="inline"><input type="checkbox" role="switch" name="instantOn"> แจ้งงานใหม่ทันที (การ์ดงานใหม่)</label>
+          <div data-when="instantOn">
+            <label class="inline">ตั้งแต่ <input type="time" name="instantStart" required></label>
+            <label class="inline">ถึง <input type="time" name="instantEnd" required></label>
+            <div class="days" data-days="instant" role="group" aria-label="วันที่แจ้งงานใหม่"></div>
+          </div>
+        </fieldset>
+        <fieldset>
+          <label class="inline"><input type="checkbox" role="switch" name="digestOn"> สรุปงานประจำวัน (สมาชิก + แอดมิน)</label>
+          <div data-when="digestOn">
+            <label class="inline">เวลา <input type="time" name="digestTime" required></label>
+            <div class="days" data-days="digest" role="group" aria-label="วันที่ส่งสรุป"></div>
+          </div>
+        </fieldset>
+        <p class="muted small-note">ปิด = ไม่ส่ง · งานใหม่ที่แจ้งไม่ได้ (นอกเวลา/ปิดอยู่) จะอยู่ในสรุปประจำวันแทน · สรุปส่งภายใน 30 นาทีหลังเวลาที่ตั้ง</p>
+        <div class="row tools"><button class="small">บันทึกเวลา</button></div>
+        <p id="timesMsg" role="status"></p>
+      </form>
+
+      <h3>รูปในข้อความ LINE · Bubble pictures</h3>
+      <div id="heroList"></div>
+      <p class="muted small-note">JPG หรือ PNG ไม่เกิน 1 MB (รูปสี่เหลี่ยมจัตุรัสดูดีที่สุด) · ข้อความที่ส่งไปแล้วยังใช้รูปเดิม</p>
+      <p id="heroMsg" role="status"></p>
+
+      <h3>ตรวจการเชื่อมต่อ · Google Sheet / Drive</h3>
+      <div class="row tools"><button type="button" class="small secondary" id="checkLinksBtn">ตรวจลิงก์ Google Sheet และ Drive</button></div>
+      <ul id="checkList" class="check-list" role="status"></ul>
+
+      <h3>ประกาศถึงทีม · Broadcast</h3>
+      <form id="broadcastForm">
+        <select name="to" aria-label="ผู้รับ">
+          <option value="all">ทุกคน (สมาชิก + แอดมิน)</option>
+          <option value="member">สมาชิกเท่านั้น</option>
+          <option value="admin">แอดมินเท่านั้น</option>
+        </select>
+        <textarea name="text" rows="4" maxlength="2000" required placeholder="ข้อความประกาศ" aria-label="ข้อความประกาศ"></textarea>
+        <p class="muted small-note">ส่งถึง LINE ของทุกคนที่ได้รับอนุมัติ · ใช้โควตา 1 ข้อความต่อคน</p>
+        <div class="row tools"><button class="small">ส่งประกาศ</button></div>
+        <p id="broadcastMsg" role="status"></p>
+      </form>
     </section>
   </div>
 
@@ -170,6 +216,99 @@
       }
       b.title = info.textContent;
     }
+    // ---- Settings: notice times, bubble pictures, link check, broadcast ----
+    const DAY_OF = [1, 2, 3, 4, 5, 6, 0]; // TH_WEEK is Monday-first; the server uses JS weekdays (0 = Sunday)
+    let builtIn = {};
+    const say = (id, ok, text) => { $(id).className = ok ? "" : "error"; $(id).textContent = text; };
+    const fail = (id) => (err) => say(id, false, "❌ " + err.message);
+
+    function heroRow([kind, key, label], s) {
+      const file = el("input", { type: "file", accept: "image/jpeg,image/png", ariaLabel: "เปลี่ยนรูป " + label });
+      file.onchange = async () => {
+        if (!file.files[0]) return;
+        say("heroMsg", true, "กำลังอัปโหลด…");
+        const form = new FormData();
+        form.append("kind", kind);
+        form.append("file", await shrinkImage(file.files[0]));
+        api("uploadHero", form).then((r) => { showSettings(r.settings); say("heroMsg", true, "✅ เปลี่ยนรูปแล้ว"); }).catch(fail("heroMsg"));
+      };
+      const reset = s[key] && el("button", { type: "button", className: "small secondary", textContent: "ใช้รูปเดิมของระบบ" });
+      if (reset) reset.onclick = () => api("saveSettings", { settings: { [key]: null } })
+        .then((r) => { showSettings(r.settings); say("heroMsg", true, "✅ กลับไปใช้รูปเดิมแล้ว"); }).catch(fail("heroMsg"));
+      return el("div", { className: "person" },
+        el("div", { className: "person-id" },
+          el("img", { className: "hero-preview", src: s[key] || builtIn[key], alt: "รูป " + label }),
+          el("div", { className: "grow" }, el("strong", { textContent: label }),
+            el("div", { className: "muted", textContent: s[key] ? "รูปที่อัปโหลด" : "รูปเดิมของระบบ" }))),
+        el("div", { className: "person-actions" }, file, reset || ""));
+    }
+
+    function showSettings(s) {
+      const f = $("timesForm");
+      f.instantOn.checked = s.instant.on;
+      f.instantStart.value = s.instant.start;
+      f.instantEnd.value = s.instant.end;
+      f.digestOn.checked = s.digest.on;
+      f.digestTime.value = s.digest.time;
+      for (const box of f.querySelectorAll("[data-days]")) {
+        const on = s[box.dataset.days].days;
+        box.replaceChildren(...TH_WEEK.map((name, i) => el("label", { className: "inline" },
+          el("input", { type: "checkbox", value: DAY_OF[i], checked: on.includes(DAY_OF[i]) }), name)));
+      }
+      syncSwitches();
+      $("heroList").replaceChildren(heroRow(["task", "taskHero", "การ์ดงานใหม่"], s), heroRow(["admin", "adminHero", "สรุปสำหรับแอดมิน"], s));
+    }
+    // the time and day fields show only while their switch is on
+    function syncSwitches() {
+      const f = $("timesForm");
+      for (const box of f.querySelectorAll("[data-when]")) box.hidden = !f[box.dataset.when].checked;
+    }
+    async function loadSettings() {
+      try {
+        const r = await api("getSettings");
+        builtIn = r.builtIn;
+        showSettings(r.settings);
+      } catch (err) { say("timesMsg", false, "อ่านการตั้งค่าไม่ได้: " + err.message); }
+    }
+    $("timesForm").onchange = syncSwitches;
+    $("timesForm").onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const days = (k) => [...f.querySelectorAll(`[data-days=${k}] input:checked`)].map((x) => Number(x.value));
+      api("saveSettings", { settings: {
+        instant: { on: f.instantOn.checked, start: f.instantStart.value, end: f.instantEnd.value, days: days("instant") },
+        digest: { on: f.digestOn.checked, time: f.digestTime.value, days: days("digest") },
+      } }).then((r) => { showSettings(r.settings); say("timesMsg", true, "✅ บันทึกแล้ว"); }).catch(fail("timesMsg"));
+    };
+
+    $("checkLinksBtn").onclick = async () => {
+      const btn = $("checkLinksBtn"), list = $("checkList");
+      btn.disabled = true;
+      list.replaceChildren(el("li", { className: "muted", textContent: "กำลังตรวจ… (อาจใช้เวลาถึง 30 วินาที)" }));
+      try {
+        const { checks } = await api("checkLinks");
+        list.replaceChildren(...checks.map((c) => el("li", { className: c.ok ? "" : "error" },
+          el("strong", { textContent: (c.ok ? "✅ " : "❌ ") + c.name }), " · ",
+          c.url ? el("a", { href: c.url, target: "_blank", rel: "noopener", textContent: c.detail }) : c.detail)));
+      } catch (err) { list.replaceChildren(el("li", { className: "error", textContent: "❌ " + err.message })); }
+      btn.disabled = false;
+    };
+
+    $("broadcastForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = f.querySelector("button");
+      if (!confirm(`ส่งประกาศถึง "${f.to.selectedOptions[0].textContent}" ทาง LINE?`)) return;
+      btn.disabled = true;
+      say("broadcastMsg", true, "กำลังส่ง…");
+      try {
+        const r = await api("broadcast", { to: f.to.value, text: f.text.value });
+        if (r.ok) f.text.value = "";
+        say("broadcastMsg", r.ok, r.ok ? `✅ ส่งแล้ว ${r.sent} คน` : `❌ ส่งไม่สำเร็จ: ${r.error}` + (r.sent ? ` (ส่งได้ ${r.sent}/${r.total} คน)` : ""));
+      } catch (err) { say("broadcastMsg", false, "❌ " + err.message); }
+      btn.disabled = false;
+      loadQuota();
+    };
+
     $("quotaBadge").onclick = () => {
       const info = $("quotaInfo");
       info.hidden = !info.hidden;
@@ -190,6 +329,7 @@
       $("status").hidden = true;
       $("page").hidden = false;
       loadQuota();
+      loadSettings();
       await loadUsers();
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;

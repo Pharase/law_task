@@ -22,10 +22,10 @@ const row = (label: string, value: string, color: string) => ({
   ],
 });
 
-export function taskBubble(t: BubbleTask) {
+export function taskBubble(t: BubbleTask, hero = HERO_URL) {
   return {
     type: "bubble",
-    hero: { type: "image", url: HERO_URL, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" }, // the picture's own shape, nothing cropped
+    hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" }, // the picture's own shape, nothing cropped
     body: {
       type: "box", layout: "vertical", contents: [
         { type: "text", text: "งานใหม่: " + t.title, weight: "bold", size: "xl", wrap: true },
@@ -48,12 +48,12 @@ export function taskBubble(t: BubbleTask) {
 }
 
 /** Flex messages for one push: a single bubble, or carousels of 12. Tasks past 60 are left out (caller keeps them unmarked). */
-export function taskMessages(tasks: BubbleTask[]) {
+export function taskMessages(tasks: BubbleTask[], hero = HERO_URL) {
   const altText = `มีงานใหม่รอดำเนินการ ${tasks.length} งาน`;
-  if (tasks.length === 1) return [{ type: "flex", altText, contents: taskBubble(tasks[0]) }];
+  if (tasks.length === 1) return [{ type: "flex", altText, contents: taskBubble(tasks[0], hero) }];
   const out = [];
   for (let i = 0; i < tasks.length && out.length < MAX_MESSAGES; i += PER_CAROUSEL) {
-    out.push({ type: "flex", altText, contents: { type: "carousel", contents: tasks.slice(i, i + PER_CAROUSEL).map(taskBubble) } });
+    out.push({ type: "flex", altText, contents: { type: "carousel", contents: tasks.slice(i, i + PER_CAROUSEL).map((t) => taskBubble(t, hero)) } });
   }
   return out;
 }
