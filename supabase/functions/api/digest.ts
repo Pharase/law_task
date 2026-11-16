@@ -55,12 +55,12 @@ export function shouldRunDigest(now: Date, lastRunDate: string | null, d: Settin
   return d.on && d.days.includes(day) && hm >= d.time && lastRunDate !== bangkokDate(now);
 }
 
-/** New-task bubbles go out only inside the chosen window (default 08:30–17:30 every day); otherwise pendingNotices sends them once it opens. */
+/** New-task bubbles: any time when the limit switch is off; else only inside the window (default 08:30–17:30 every day), pendingNotices sends the rest once it opens. */
 export function isWorkingHours(now: Date, w: Settings["instant"] = DEFAULT_SETTINGS.instant): boolean {
   const { day, hm } = bkkNow(now);
   // start = end: all day; end before start: the window runs past midnight (days = the day it is now)
   const inside = w.start === w.end || (w.start < w.end ? hm >= w.start && hm < w.end : hm >= w.start || hm < w.end);
-  return w.on && w.days.includes(day) && inside;
+  return !w.on || (w.days.includes(day) && inside);
 }
 
 const SOON_DAYS = 3;

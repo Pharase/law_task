@@ -20,12 +20,12 @@ test("unreadable stored row falls back to defaults", () => {
   assert.deepEqual(readSettings({ digest: { time: "nope" } }), DEFAULT_SETTINGS);
 });
 
-test("custom window: days, start/end, and the off switch", () => {
+test("custom window: days, start/end; switch off = any time", () => {
   const w = { on: true, start: "07:00", end: "12:00", days: [1] };
   assert.equal(isWorkingHours(new Date("2026-11-09T00:00:00Z"), w), true);  // Mon 07:00
   assert.equal(isWorkingHours(new Date("2026-11-09T05:00:00Z"), w), false); // Mon 12:00
   assert.equal(isWorkingHours(new Date("2026-11-10T01:00:00Z"), w), false); // Tue
-  assert.equal(isWorkingHours(new Date("2026-11-09T01:00:00Z"), { ...w, on: false }), false);
+  assert.equal(isWorkingHours(new Date("2026-11-10T15:00:00Z"), { ...w, on: false }), true); // Tue 22:00
 });
 
 test("custom digest: Saturday 13:30 once, off switch stops it", () => {

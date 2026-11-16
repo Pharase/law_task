@@ -56,7 +56,7 @@
       <h3>เวลาแจ้งเตือน · Notification times</h3>
       <form id="timesForm">
         <fieldset>
-          <label class="inline"><input type="checkbox" role="switch" name="instantOn"> แจ้งงานใหม่ทันที (การ์ดงานใหม่)</label>
+          <label class="inline"><input type="checkbox" role="switch" name="instantOn"> จำกัดเวลาแจ้งงานใหม่ (การ์ดงานใหม่) · ไม่ติ๊ก = แจ้งทันทีทุกเวลา</label>
           <div data-when="instantOn">
             <label class="inline">ตั้งแต่ <input type="time" name="instantStart" required></label>
             <label class="inline">ถึง <input type="time" name="instantEnd" required></label>
@@ -70,7 +70,7 @@
             <div class="days" data-days="digest" role="group" aria-label="วันที่ส่งสรุป"></div>
           </div>
         </fieldset>
-        <p class="muted small-note">ปิด = ไม่ส่ง · งานใหม่ที่แจ้งไม่ได้ (นอกเวลา/ปิดอยู่) จะอยู่ในสรุปประจำวันแทน · สรุปส่งภายใน 30 นาทีหลังเวลาที่ตั้ง วันละครั้ง (ถ้าวันนี้ส่งไปแล้ว เวลาใหม่เริ่มพรุ่งนี้) · ช่วงเวลาแจ้งงานใหม่ใช้ตอนมอบหมายงาน ไม่ได้ส่งข้อความเอง · 12:00 AM = เที่ยงคืน, 12:00 PM = เที่ยงวัน · เริ่ม = หยุด คือทั้งวัน · หยุดก่อนเริ่ม คือข้ามเที่ยงคืน (เช่น 22:00–06:00)</p>
+        <p class="muted small-note">สรุปประจำวัน: ไม่ติ๊ก = ไม่ส่ง · งานใหม่ที่มอบหมายนอกช่วงเวลา จะแจ้งเมื่อถึงช่วงเวลา หรืออยู่ในสรุปประจำวัน · สรุปส่งภายใน 30 นาทีหลังเวลาที่ตั้ง วันละครั้ง (ถ้าวันนี้ส่งไปแล้ว เวลาใหม่เริ่มพรุ่งนี้) · ช่วงเวลาแจ้งงานใหม่ใช้ตอนมอบหมายงาน ไม่ได้ส่งข้อความเอง · 12:00 AM = เที่ยงคืน, 12:00 PM = เที่ยงวัน · เริ่ม = หยุด คือทั้งวัน · หยุดก่อนเริ่ม คือข้ามเที่ยงคืน (เช่น 22:00–06:00)</p>
         <div class="row tools"><button class="small">บันทึกเวลา</button></div>
         <p id="timesMsg" role="status"></p>
       </form>

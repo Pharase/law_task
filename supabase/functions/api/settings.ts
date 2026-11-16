@@ -3,7 +3,7 @@
 
 /** Days are JS weekdays: 0 = Sunday … 6 = Saturday. Times are "HH:MM" Bangkok. */
 export type Settings = {
-  instant: { on: boolean; start: string; end: string; days: number[] }; // new-task bubbles; start = end: all day, end < start: past midnight
+  instant: { on: boolean; start: string; end: string; days: number[] }; // new-task bubbles; on = only in this window, off = any time; start = end: all day, end < start: past midnight
   digest: { on: boolean; time: string; days: number[] };                // daily สรุปงานวันนี้ / สรุปสิ่งที่ต้องทำ
   taskHero: string | null;  // picture on new-task bubbles; null = the built-in one
   adminHero: string | null; // picture on the admin summary; null = the built-in one
