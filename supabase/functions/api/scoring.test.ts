@@ -124,5 +124,5 @@ test("lateOnly tasks feed คะแนนตรงเวลา but no tag score"
   ]).U1;
   near(m.onTime, 0.7);
   assert.deepEqual(Object.keys(m.byTag), ["การประสานงาน"]);
-  assert.equal(m.tasks, 2);
+  assert.equal(m.tasks, 1); // งาน = approved tasks only
 });

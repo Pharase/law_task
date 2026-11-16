@@ -58,8 +58,7 @@ export function memberScores(tasks: ScoredTask[]) {
   for (const t of tasks) {
     if (t.lateOnly !== undefined) {
       const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
-      m.n++;
-      m.onTime.push(t.lateOnly / 10);
+      m.onTime.push(t.lateOnly / 10); // not in n: งาน counts approved tasks only
       continue;
     }
     const sc = taskScore(t.sends);

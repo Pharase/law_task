@@ -110,6 +110,8 @@ async function loadList() {
 
 // performance columns: emoji + one short word (fits phones); tap for the full name and how it is scored
 const PERF_COLS = {
+  assigned: ["📥", "มอบหมาย", "งานที่มอบหมาย", "จำนวนงานที่มอบหมายในช่วงนี้ (ไม่นับงานที่ยกเลิก)"],
+  tasks: ["🗂️", "งาน", "งานที่อนุมัติ", "จำนวนงานที่แอดมินอนุมัติในช่วงนี้ ใช้คิดคะแนนทุกหมวด · งานล่าช้าที่ยังไม่อนุมัติไม่นับในช่องนี้ (นับเฉพาะคะแนนตรงเวลา)"],
   overall: ["⭐", "รวม", "คะแนนรวม", "ค่าเฉลี่ยของคะแนนตรงเวลา และคะแนนทุกหมวดที่มีงาน (หมวดที่เป็น \"-\" ไม่นับ)"],
   onTime: ["⏰", "ตรงเวลา", "คะแนนตรงเวลา", "ส่งตรงตามกำหนด เช่น ทุกต้นเดือน, รอบที่วาง หรือกดส่งงานภายในวันที่กำหนด · ส่งช้า 3 วัน หัก 1 คะแนน (เต็ม 10)"],
   "ความถูกต้อง": ["✅", "ถูกต้อง", "คะแนนความถูกต้อง", "เตรียมเอกสารประกอบครบ เช่น หนังสือแจ้งเตือน, รายการยอดค้าง · นับทุกรอบแก้ไข"],
@@ -138,14 +140,14 @@ async function loadPerformance() {
   const score = (scaled, raw) => el("td", { className: "perf-score" },
     el("strong", { textContent: scaled.toFixed(2) }), el("span", { className: "muted", textContent: pct(raw) }));
   const rank = navAdmin; // members only get their own row, so a rank would always read 1
-  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน"].map((h) => el("th", { textContent: h })),
-    ...["overall", "onTime", ...TAG_LIST].map(perfHead));
+  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ"].map((h) => el("th", { textContent: h })),
+    ...["assigned", "tasks", "overall", "onTime", ...TAG_LIST].map(perfHead));
   const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r, i) => el("tr", {},
-    rank && el("td", { className: "muted", textContent: i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.tasks }),
+    rank && el("td", { className: "muted", textContent: i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.assigned }), el("td", { textContent: r.tasks }),
     score(r.overall5, r.overall), score(r.onTime5, r.onTime),
     ...TAG_LIST.map((tag) => (r.byTag[tag] ? score(r.byTag[tag].scaled, r.byTag[tag].raw) : el("td", { className: "muted", textContent: "-" })))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
-    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 5 : 4) + TAG_LIST.length, textContent: "ยังไม่มีงานที่นับคะแนนในช่วงนี้" }))]));
+    ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: (rank ? 6 : 5) + TAG_LIST.length, textContent: "ยังไม่มีงานที่นับคะแนนในช่วงนี้" }))]));
 }
 
 async function loadWarnings() {

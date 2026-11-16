@@ -98,7 +98,13 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         if (c) scored.push({ owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) });
       }
       const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
-      const rows = performanceRows(scored, names); // scaled against everyone, then trimmed for members
+      // มอบหมาย: tasks assigned in the period (cancelled left out), shown next to งาน (approved, scored in full)
+      const assigned = new Map<string, number>();
+      for (const t of data.tasks) {
+        const on = String(t.created_at).slice(0, 10);
+        if (t.state !== "cancelled" && on >= from && on <= to) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
+      }
+      const rows = performanceRows(scored, names).map((r) => ({ ...r, assigned: assigned.get(r.line_user_id) ?? 0 })); // scaled against everyone, then trimmed for members
       return { from, to, rows: visibleRows(rows, me) }; // members: their own row only, filtered here on the server
     }
 
