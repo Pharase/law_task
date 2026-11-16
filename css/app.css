@@ -354,7 +354,7 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 /* ---- Reports: performance table ---- */
 #perfTable td.perf-score strong { display: block; font-size: 16px; font-weight: 600; }
 #perfTable td.perf-score span { font-size: 12px; }
-#perfTable th { white-space: normal; min-width: 64px; vertical-align: bottom; }
+#perfTable th { white-space: nowrap; vertical-align: bottom; }
 .perf-note { margin-top: 12px; padding: 12px 14px; border-radius: 14px; font-size: 13px; color: var(--ink-2); background: rgba(255, 255, 255, .03); border: 1px solid var(--line); }
 .perf-note p { margin: 0 0 6px; }
 .perf-note ul { margin: 0; padding-left: 18px; }
@@ -471,8 +471,6 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   .inv-status { align-items: flex-start; }
   .inv-row .small-note { margin-top: 0; } /* the date line was overlapping the building line */
   /* performance: shorter header row (category names wrap less) */
-  #perfTable th, #perfTable td:nth-child(2) { white-space: nowrap; } /* one-line header and names; the table scrolls sideways */
-  #perfTable th { font-size: 11px; min-width: 0; }
 }
 
 /* members page → ตั้งค่า (Settings) card */
@@ -489,3 +487,12 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .hero-preview.none { display: grid; place-items: center; background: none; border: 1px dashed var(--line-2); color: var(--ink-3); font-size: 12px; }
 details[open] > summary .due-head { display: none; }
 .due-neon.old { color: #ff4d5e; text-shadow: 0 0 6px rgba(255, 77, 94, .75), 0 0 14px rgba(255, 77, 94, .45); }
+
+/* performance: emoji column heads (tap = meaning under the table), space between the period picks and the date range */
+#perfTable caption { padding-top: 20px; }
+.perf-col { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; margin: 0; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; font-size: 12px; white-space: nowrap; cursor: help; width: auto; box-shadow: none; }
+.perf-col:hover, .perf-col:focus-visible { background: rgba(255, 255, 255, .06); box-shadow: none; }
+.perf-emoji { font-size: 20px; line-height: 1; }
+.perf-info { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: rgba(2, 215, 244, .08); border: 1px solid rgba(2, 215, 244, .3); }
+.perf-hint { margin-top: 8px; }
+#perfTable td:nth-child(2) { white-space: nowrap; }

@@ -7,8 +7,8 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261111"></script>
   <script src="../js/work.js?v=20261118"></script>
-  <script src="../js/admin-tasks.js?v=20261119"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261118">
+  <script src="../js/admin-tasks.js?v=20261120"></script>
+  <link rel="stylesheet" href="../css/app.css?v=20261120">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -44,15 +44,18 @@
         <select id="pN" aria-label="เดือนหรือไตรมาส · Month or quarter"></select>
       </div>
       <div class="table-wrap"><table id="perfTable"></table></div>
+      <p id="perfInfo" class="perf-info" role="status" hidden></p>
+      <p class="muted small-note perf-hint">แตะหัวคอลัมน์ (⭐ ⏰ ✅ ⚡ 🔎 🤝) เพื่อดูความหมายและวิธีคิดคะแนน</p>
       <!-- how the numbers are made (same rules as supabase/functions/api/scoring.ts) -->
       <div class="perf-note">
         <p><strong>คะแนน 1–5</strong> · คำนวณมาจากการหาค่าคะแนนเฉลี่ยแบบกลุ่ม: คนที่คะแนนเฉลี่ยสูงสุดได้ 5, ต่ำสุดได้ 1, คนอื่นไล่ตามสัดส่วน (ถ้ามีคนเดียวหรือเท่ากันหมด = 5)</p>
         <p><strong>เกณฑ์การให้คะแนน</strong> · คะแนนสะท้อนถึงความสามารถในการทำงานของหัวหน้างานและทีมงาน โดยพิจารณาจาก:</p>
+        <p><strong>งานที่นับ</strong> = งานที่แอดมินอนุมัติในช่วงนี้ (นับทุกคะแนน) · งานที่มอบหมายก่อนช่วงนี้ ยังไม่อนุมัติ และเลยกำหนดส่ง จะนับเป็นงานล่าช้าใน <strong>คะแนนตรงเวลา</strong> เท่านั้น (นับทุกช่วงจนกว่าจะอนุมัติ)</p>
         <ul>
           <li><strong>ความตรงเวลา</strong> : ประเมินจากการจัดส่งเอกสารให้ฝ่ายนิติกรคือ ส่งตรงตามกำหนด เช่น ทุกต้นเดือน, รอบที่วาง หรือกดส่งงานภายในวันที่กำหนด</li>
           <li><strong>ความถูกต้อง</strong> : ประเมินจากการเตรียมเอกสารประกอบครบ เช่น หนังสือแจ้งเตือน, รายการยอดค้าง</li>
-          <li><strong>ความรวดเร็ว</strong> : ประเมินจากการนำข้อมูลเข้าเสนอกรรมการได้เร็ว และสรุปมติเป็นขั้นตอน</li>
-          <li><strong>การติดตาม</strong> : ประเมินจากการติดตามคดีอย่างต่อเนื่อง มีการอัปเดตสถานะ</li>
+          <li><strong>เสนออนุมัติ/ลงนามกรรมการ</strong> : ประเมินจากการนำข้อมูลเข้าเสนอกรรมการได้เร็ว และสรุปมติเป็นขั้นตอน</li>
+          <li><strong>ติดตามความคืบหน้าคดี</strong> : ประเมินจากการติดตามคดีอย่างต่อเนื่อง มีการอัปเดตสถานะ</li>
           <li><strong>การประสานงาน</strong> : ประเมินจากการตอบสนองไว ประสานงานเป็นระบบ</li>
         </ul>
       </div>

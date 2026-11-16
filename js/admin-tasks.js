@@ -108,6 +108,29 @@ async function loadList() {
     : [el("p", { className: "muted", textContent: "ไม่พบงาน" })]));
 }
 
+// performance columns: emoji + one short word (fits phones); tap for the full name and how it is scored
+const PERF_COLS = {
+  overall: ["⭐", "รวม", "คะแนนรวม", "ค่าเฉลี่ยของคะแนนตรงเวลา และคะแนนทุกหมวดที่มีงาน (หมวดที่เป็น \"-\" ไม่นับ)"],
+  onTime: ["⏰", "ตรงเวลา", "คะแนนตรงเวลา", "ส่งตรงตามกำหนด เช่น ทุกต้นเดือน, รอบที่วาง หรือกดส่งงานภายในวันที่กำหนด · ส่งช้า 3 วัน หัก 1 คะแนน (เต็ม 10)"],
+  "ความถูกต้อง": ["✅", "ถูกต้อง", "คะแนนความถูกต้อง", "เตรียมเอกสารประกอบครบ เช่น หนังสือแจ้งเตือน, รายการยอดค้าง · นับทุกรอบแก้ไข"],
+  "เสนออนุมัติ/ลงนามกรรมการ": ["⚡", "รวดเร็ว", "คะแนนเสนออนุมัติ/ลงนามกรรมการ", "นำข้อมูลเข้าเสนอกรรมการได้เร็ว และสรุปมติเป็นขั้นตอน"],
+  "ติดตามความคืบหน้าคดี": ["🔎", "ติดตาม", "คะแนนติดตามความคืบหน้าคดี", "ติดตามคดีอย่างต่อเนื่อง มีการอัปเดตสถานะ"],
+  "การประสานงาน": ["🤝", "ประสานงาน", "คะแนนการประสานงาน", "ตอบสนองไว ประสานงานเป็นระบบ"],
+};
+
+function perfHead(key) {
+  const [emoji, short, full, how] = PERF_COLS[key];
+  const b = el("button", { type: "button", className: "perf-col", title: `${full}: ${how}`, ariaLabel: full },
+    el("span", { className: "perf-emoji", textContent: emoji, ariaHidden: "true" }), el("span", { textContent: short }));
+  b.onclick = () => {
+    const info = $("perfInfo"), same = !info.hidden && info.dataset.key === key;
+    info.hidden = same;
+    info.dataset.key = key;
+    info.replaceChildren(el("strong", { textContent: `${emoji} ${full}` }), " · " + how);
+  };
+  return el("th", {}, b);
+}
+
 async function loadPerformance() {
   const res = await api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
   const pct = (x) => (x * 100).toFixed(1) + "%"; // raw score: average task score / 10
@@ -115,7 +138,8 @@ async function loadPerformance() {
   const score = (scaled, raw) => el("td", { className: "perf-score" },
     el("strong", { textContent: scaled.toFixed(2) }), el("span", { className: "muted", textContent: pct(raw) }));
   const rank = navAdmin; // members only get their own row, so a rank would always read 1
-  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน", "คะแนนรวม", "คะแนนตรงเวลา", ...TAG_LIST.map((t) => "คะแนน" + t)].map((h) => el("th", { textContent: h })));
+  const head = el("tr", {}, ...[...(rank ? ["#"] : []), "ชื่อ", "งาน"].map((h) => el("th", { textContent: h })),
+    ...["overall", "onTime", ...TAG_LIST].map(perfHead));
   const rows = res.rows.sort((a, b) => b.overall5 - a.overall5).map((r, i) => el("tr", {},
     rank && el("td", { className: "muted", textContent: i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.tasks }),
     score(r.overall5, r.overall), score(r.onTime5, r.onTime),
