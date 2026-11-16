@@ -134,7 +134,56 @@ function perfHead(key) {
   return el("th", {}, b);
 }
 
+// tap a name: the tasks behind that person's scores in the chosen period, one row each
+const STATUS_TEXT = (t) => (t.state === "approved" ? "✅ เสร็จแล้ว" : t.state === "submitted" ? "⏳ รอตรวจ"
+  : t.state === "cancelled" ? "ยกเลิก" : t.fix_round > 0 ? "↩️ ส่งกลับแก้ไข" : "ยังไม่ส่ง");
+
+function perfName(r, res) {
+  const b = el("button", { type: "button", className: "perf-name", textContent: r.name, title: "ดูงานที่ใช้คิดคะแนน" });
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = () => {
+    const box = $("perfDetail"), same = !box.hidden && box.dataset.who === r.line_user_id;
+    document.querySelectorAll(".perf-name").forEach((x) => x.setAttribute("aria-expanded", "false"));
+    box.hidden = same;
+    box.dataset.who = r.line_user_id;
+    if (same) return;
+    b.setAttribute("aria-expanded", "true");
+    showPerfDetail(r, res);
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+  return b;
+}
+
+function showPerfDetail(r, res) {
+  const pct = (v) => (v === undefined ? "-" : (v * 10).toFixed(1) + "%"); // a task's score is out of 10
+  const cols = ["onTime", ...TAG_LIST];
+  const head = el("tr", {}, ...["งาน", "สถานะ", "กำหนดส่งเดิม", "กำหนดส่งล่าสุด", "วันส่งงานล่าสุด", "แก้ไข (ครั้ง)", "เกินกำหนด (วัน)"]
+    .map((h) => el("th", { textContent: h })),
+    ...cols.map((k) => el("th", { title: PERF_COLS[k][2] }, el("span", { className: "perf-short", textContent: `${PERF_COLS[k][0]} ${PERF_COLS[k][1]}` }),
+      el("span", { className: "perf-full", textContent: PERF_COLS[k][2] }))));
+  const items = [...r.items].sort((a, b) => b.approved - a.approved || a.current_due_on.localeCompare(b.current_due_on));
+  const rows = items.map((t) => el("tr", { className: t.approved ? "" : "late-only" },
+    el("td", {}, el("strong", { textContent: t.title }), el("div", { className: "muted", textContent: t.building })),
+    el("td", { className: "nowrap", textContent: STATUS_TEXT(t) + (t.approved ? "" : " · นับเฉพาะตรงเวลา") }),
+    el("td", { className: "nowrap", textContent: thDate(t.due_on) }),
+    el("td", { className: "nowrap", textContent: thDate(t.current_due_on) }),
+    el("td", { className: "nowrap", textContent: t.last_sent_on ? thDate(t.last_sent_on) : "-" }),
+    el("td", { textContent: t.fixes }),
+    el("td", { className: t.daysLate ? "error" : "", textContent: t.daysLate }),
+    el("td", { textContent: pct(t.onTime) }),
+    ...TAG_LIST.map((tag) => el("td", { className: tag in t.byTag ? "" : "muted", textContent: pct(t.byTag[tag]) }))));
+  const close = el("button", { type: "button", className: "small secondary no-print", textContent: "ปิด" });
+  close.onclick = () => { $("perfDetail").hidden = true; };
+  $("perfDetail").replaceChildren(
+    el("div", { className: "row card-head" },
+      el("h3", { className: "grow", textContent: `งานที่ใช้คิดคะแนน · ${r.name} (${thDate(res.from)} – ${thDate(res.to)})` }), close),
+    el("div", { className: "table-wrap" }, el("table", { className: "perf-detail-table" }, head,
+      ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 7 + cols.length, className: "muted", textContent: "ยังไม่มีงานที่ใช้คิดคะแนนในช่วงนี้" }))]))),
+    el("p", { className: "muted small-note", textContent: 'คะแนนต่องานเต็ม 10 แสดงเป็น % · "-" = งานนี้ไม่ได้ติดหมวดนั้น · งานที่ยังไม่อนุมัติแต่เลยกำหนด นับเฉพาะคะแนนตรงเวลา' }));
+}
+
 async function loadPerformance() {
+  $("perfDetail").hidden = true; // a new period: the open list would be stale
   const res = await api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
   const pct = (x) => (x * 100).toFixed(1) + "%"; // raw score: average task score / 10
   // one cell = the 1–5 score (big) over the raw % (small); how both are made is explained under the table
@@ -145,7 +194,7 @@ async function loadPerformance() {
     ...["assigned", "tasks", "overall", "onTime", ...TAG_LIST].map(perfHead));
   // scored people by คะแนนรวม, then people with assigned work but no score yet (no rank)
   const rows = res.rows.sort((a, b) => (b.overall5 ?? -1) - (a.overall5 ?? -1) || a.name.localeCompare(b.name, "th")).map((r, i) => el("tr", {},
-    rank && el("td", { className: "muted", textContent: r.overall5 === null ? "-" : i + 1 }), el("td", { textContent: r.name }), el("td", { textContent: r.assigned }), el("td", { textContent: r.tasks }),
+    rank && el("td", { className: "muted", textContent: r.overall5 === null ? "-" : i + 1 }), el("td", {}, perfName(r, res)), el("td", { textContent: r.assigned }), el("td", { textContent: r.tasks }),
     score(r.overall5, r.overall), score(r.onTime5, r.onTime),
     ...TAG_LIST.map((tag) => (r.byTag[tag] ? score(r.byTag[tag].scaled, r.byTag[tag].raw) : el("td", { className: "muted", textContent: "-" })))));
   $("perfTable").replaceChildren(el("caption", { className: "muted", textContent: `${thDate(res.from)} – ${thDate(res.to)}` }), head,
@@ -284,26 +333,37 @@ async function initTracking() {
 }
 
 /** Reports page: performance by month or quarter (members get only their own row from the server). */
+/**
+ * Month / quarter picker from three selects `${p}Kind`, `${p}Year`, `${p}N` (quarter first = default, this period
+ * selected). Years shown in พ.ศ. (value stays ค.ศ.). Any change calls onChange. Returns () => { from, to } (YYYY-MM-DD).
+ */
+function periodPicker(p, onChange) {
+  const [y, m] = bkkToday().split("-").map(Number);
+  const kind = $(p + "Kind"), year = $(p + "Year"), n = $(p + "N");
+  year.replaceChildren(...Array.from({ length: y - 2020 + 1 }, (_, i) => y - i).map((yy) => option(yy, String(yy + 543)))); // back to 2020 (2563)
+  const fillN = () => {
+    const month = kind.value === "month";
+    n.replaceChildren(...(month
+      ? TH_MONTHS.map((name, i) => option(i + 1, name))
+      : [1, 2, 3, 4].map((q) => option(q, `ไตรมาส ${q} (${TH_SHORT[q * 3 - 3]}–${TH_SHORT[q * 3 - 1]})`))));
+    n.value = month ? m : Math.ceil(m / 3);
+  };
+  fillN();
+  // changing any dropdown reloads straight away, so nothing shows a different period than the picks
+  kind.onchange = () => { fillN(); onChange(); };
+  year.onchange = n.onchange = onChange;
+  return () => {
+    const yy = Number(year.value), first = kind.value === "month" ? Number(n.value) : (Number(n.value) - 1) * 3 + 1;
+    const iso = (mm, d) => new Date(Date.UTC(yy, mm - 1, d)).toISOString().slice(0, 10);
+    return { from: iso(first, 1), to: iso(first + (kind.value === "month" ? 1 : 3), 0) }; // day 0 = last day of the month before
+  };
+}
+
 function initReports() {
   $("status").hidden = true;
   $("page").hidden = false;
-  const [y, m] = bkkToday().split("-").map(Number);
-  // dropdowns: years shown in พ.ศ. (value stays ค.ศ. for the server), Thai month names, quarters with their months
-  const SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  $("pYear").replaceChildren(...Array.from({ length: y - 2020 + 1 }, (_, i) => y - i) // this year (selected) back to 2020 (2563)
-    .map((yy) => option(yy, String(yy + 543))));
-  const fillN = (n) => {
-    const month = $("pKind").value === "month";
-    $("pN").replaceChildren(...(month
-      ? TH_MONTHS.map((name, i) => option(i + 1, name))
-      : [1, 2, 3, 4].map((q) => option(q, `ไตรมาส ${q} (${SHORT[q * 3 - 3]}–${SHORT[q * 3 - 1]})`))));
-    $("pN").value = n;
-  };
   const reload = () => loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
-  fillN(Math.ceil(m / 3)); // quarter is the default period
-  // changing any dropdown reloads straight away, so the table never shows a different period than the picks
-  $("pKind").onchange = () => { fillN($("pKind").value === "month" ? m : Math.ceil(m / 3)); reload(); };
-  $("pYear").onchange = $("pN").onchange = reload;
+  periodPicker("p", reload);
   reload();
 }
 
@@ -405,12 +465,12 @@ const AC_SERIES = [{ key: "a", label: "มอบหมาย · Assigned", color
 const bkkDay = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)) : "");
 const TH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
-/** Bin keys oldest -> newest: days "YYYY-MM-DD" (30 / 90) or months "YYYY-MM" (12m), ending today (Bangkok). */
-function activityBins(range) {
-  const [y, m, d] = bkkToday().split("-").map(Number);
-  if (range === "12m") return Array.from({ length: 12 }, (_, i) => new Date(Date.UTC(y, m - 12 + i, 1)).toISOString().slice(0, 7));
-  const n = Number(range);
-  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - 1, d - (n - 1) + i)).toISOString().slice(0, 10));
+/** Day keys "YYYY-MM-DD" of the chosen month / quarter, stopping at today while it is still running (Bangkok). */
+function activityBins({ from, to }) {
+  const today = bkkToday(), end = from <= today && today < to ? today : to;
+  const out = [];
+  for (let d = new Date(from + "T00:00:00Z"); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
 }
 const binLabel = (k) => (k.length === 7 ? `${TH_SHORT[Number(k.slice(5)) - 1]} ${String(Number(k.slice(0, 4)) + 543).slice(2)}` : `${k.slice(8)}/${k.slice(5, 7)}`);
 const binTitle = (k) => (k.length === 7 ? `${TH_MONTHS[Number(k.slice(5)) - 1]} ${Number(k.slice(0, 4)) + 543}` : dateText(k));
@@ -420,15 +480,16 @@ async function initActivityChart() {
   // people who own tasks (incl. revoked), so their history still shows
   const owners = [...new Map(tasks.map((t) => [t.owner, t.owner_name])).entries()].sort((a, b) => a[1].localeCompare(b[1], "th"));
   $("acPerson").replaceChildren(option("", "ทั้งหมด · Everyone"), ...owners.map(([id, name]) => option(id, name)));
-  const draw = () => drawActivity(tasks, $("acPerson").value, $("acRange").value);
-  $("acPerson").onchange = $("acRange").onchange = draw;
+  const period = periodPicker("ac", () => draw());
+  const draw = () => drawActivity(tasks, $("acPerson").value, period());
+  $("acPerson").onchange = draw;
   let lastWidth = 0;
   new ResizeObserver(() => { const w = $("acChart").clientWidth; if (w && w !== lastWidth) { lastWidth = w; draw(); } }).observe($("acChart"));
   draw();
 }
 
 function drawActivity(tasks, person, range) {
-  const keys = activityBins(range), at = new Map(keys.map((k, i) => [k, i])), cut = (d) => (range === "12m" ? d.slice(0, 7) : d);
+  const keys = activityBins(range), at = new Map(keys.map((k, i) => [k, i])), cut = (d) => d;
   const a = keys.map(() => 0), s = keys.map(() => 0);
   for (const t of tasks) {
     if (person && t.owner !== person) continue;
@@ -486,6 +547,6 @@ function drawActivity(tasks, person, range) {
 
   // the same numbers as a table (accessibility + exact values)
   $("acTable").replaceChildren(el("table", {},
-    el("tr", {}, el("th", { textContent: range === "12m" ? "เดือน" : "วันที่" }), ...AC_SERIES.map((sr) => el("th", { textContent: `${sr.label} (+ใหม่ · สะสม)` }))),
+    el("tr", {}, el("th", { textContent: "วันที่" }), ...AC_SERIES.map((sr) => el("th", { textContent: `${sr.label} (+ใหม่ · สะสม)` }))),
     ...keys.map((k, i) => el("tr", {}, el("td", { textContent: binTitle(k) }), el("td", { textContent: `+${a[i]} · ${data.a[i]}` }), el("td", { textContent: `+${s[i]} · ${data.s[i]}` }))).reverse()));
 }

@@ -7,7 +7,7 @@ const s = (sentOn: string, dueOn: string, outcome: Send["outcome"]): Send => ({ 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} != ${b}`);
 
 test("early", () =>
-  assert.deepEqual(taskScore([s("2026-01-08", "2026-01-10", "approved")]), { onTime: 10, accuracy: 10, task: 10 }));
+  assert.deepEqual(taskScore([s("2026-01-08", "2026-01-10", "approved")]), { onTime: 10, accuracy: 10, task: 10, daysLate: 0 }));
 
 test("4 days late", () => near(taskScore([s("2026-01-14", "2026-01-10", "approved")])!.task, 8.6667));
 
@@ -17,7 +17,7 @@ test("40 days late floors at 0", () =>
 test("one fix round", () =>
   assert.deepEqual(
     taskScore([s("2026-01-10", "2026-01-10", "fix"), s("2026-01-18", "2026-01-15", "approved")]),
-    { onTime: 9, accuracy: 9.5, task: 9.25 },
+    { onTime: 9, accuracy: 9.5, task: 9.25, daysLate: 3 },
   ));
 
 test("void send ignored", () =>
@@ -156,4 +156,12 @@ test("รวม 1–5 = mean of the person's own 1–5 scores (ตรงเว�
     { owner: "U2", tags: ["การประสานงาน", "ความถูกต้อง"], sends: [s("2026-01-13", "2026-01-10", "approved")] },
   ], { U1: "A", U2: "B" });
   near(solo.find((r) => r.line_user_id === "U2")!.overall5, (1 + 1 + 5) / 3); // ตรงเวลา 1, ประสานงาน 1, ความถูกต้อง 5
+});
+
+test("taskParts: per-task scores for the list under a name", async () => {
+  const { taskParts } = await import("./scoring.ts");
+  const p = taskParts({ owner: "U1", tags: ["ความถูกต้อง", "การประสานงาน"], sends: [s("2026-01-10", "2026-01-10", "fix"), s("2026-01-18", "2026-01-15", "approved")] })!;
+  assert.deepEqual(p, { approved: true, onTime: 9, byTag: { "ความถูกต้อง": 8, "การประสานงาน": 9.5 }, daysLate: 3 });
+  assert.deepEqual(taskParts({ owner: "U1", tags: ["การประสานงาน"], sends: [], lateOnly: 4, daysLate: 18 }), { approved: false, onTime: 4, byTag: {}, daysLate: 18 });
+  assert.equal(taskParts({ owner: "U1", tags: [], sends: [s("2026-01-09", "2026-01-10", "pending")] }), null);
 });

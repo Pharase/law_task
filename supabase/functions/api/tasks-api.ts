@@ -1,7 +1,7 @@
 // Task actions (spec "Button A"). Data lives in the Google Sheet (sheet.ts); rules live in review.ts / scoring.ts / sheetRows.ts.
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
-import { periodCount, performanceRows, type ScoredTask, visibleRows } from "./scoring.ts";
+import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { archiveFiles } from "./archive.ts";
@@ -88,6 +88,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       // Approved in the period -> full score; older tasks still not approved and late -> คะแนนตรงเวลา only (periodCount).
       // Revoked people still count; admins never own tasks.
       const scored: ScoredTask[] = [];
+      const items = new Map<string, unknown[]>(); // owner -> the tasks behind their scores (tap a name to see them)
       for (const t of data.tasks) {
         if (!role.has(t.owner) || role.get(t.owner)!.role === "admin") continue;
         const rows = data.sends.filter((s) => s.task_id === t.id);
@@ -95,7 +96,17 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         const ok = rows.filter((s) => s.outcome === "approved").at(-1);
         const approvedOn = t.state === "approved" ? String(ok?.reviewed_at || ok?.sent_on || t.current_due_on).slice(0, 10) : null;
         const c = periodCount({ state: t.state, createdOn: String(t.created_at).slice(0, 10), currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
-        if (c) scored.push({ owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) });
+        if (!c) continue;
+        const x: ScoredTask = { owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) };
+        const parts = taskParts(x);
+        if (!parts) continue;
+        scored.push(x);
+        const real = rows.filter((s) => s.outcome !== "void");
+        items.set(t.owner, [...(items.get(t.owner) ?? []), {
+          id: t.id, title: t.title, building: t.building, state: t.state, fix_round: t.fix_round,
+          due_on: t.due_on, current_due_on: t.current_due_on, last_sent_on: real.at(-1)?.sent_on ?? null,
+          fixes: real.filter((s) => s.outcome === "fix").length, ...parts,
+        }]);
       }
       const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
       // มอบหมาย: tasks assigned in the period (cancelled left out), shown next to งาน (approved, scored in full)
@@ -111,7 +122,8 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         if (!p || p.role === "admin" || rows.some((r) => r.line_user_id === owner)) continue;
         rows.push({ line_user_id: owner, name: p.name, tasks: 0, assigned: n, overall: null, overall5: null, onTime: null, onTime5: null, byTag: {} } as unknown as typeof rows[number]);
       }
-      return { from, to, rows: visibleRows(rows, me) }; // members: their own row only, filtered here on the server
+      // members: their own row (and task list) only, filtered here on the server
+      return { from, to, rows: visibleRows(rows, me).map((r) => ({ ...r, items: items.get(r.line_user_id) ?? [] })) };
     }
 
     case "myTasks":

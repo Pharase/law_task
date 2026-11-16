@@ -4,7 +4,7 @@ import { daysBetween } from "./dates.ts";
 
 export type Send = { sentOn: string; dueOn: string; outcome: "pending" | "approved" | "fix" | "void" };
 // lateOnly (0–10): a late task the admin has not approved yet; it counts in คะแนนตรงเวลา only, never in the tag scores
-export type ScoredTask = { owner: string; tags: string[]; sends: Send[]; lateOnly?: number };
+export type ScoredTask = { owner: string; tags: string[]; sends: Send[]; lateOnly?: number; daysLate?: number };
 
 // ความถูกต้อง scores how often the work came back for fixes, not lateness: 10 with no มีปรับแก้ round, −2 per round
 // (0 at 5 rounds, where the app flags "เกิน 5 รอบแก้ไข"); กดผิด sends never count.
@@ -21,14 +21,14 @@ export function dayScore(sentOn: string, dueOn: string): number {
 }
 
 /** null unless the task's last real (non-void) send was approved. */
-export function taskScore(sends: Send[]): { onTime: number; accuracy: number; task: number } | null {
+export function taskScore(sends: Send[]): { onTime: number; accuracy: number; task: number; daysLate: number } | null {
   const kept = sends.filter((s) => s.outcome !== "void"); // กดผิด sends never count
   const last = kept.at(-1);
   if (!last || last.outcome !== "approved") return null;
   const latestDue = kept.map((s) => s.dueOn).sort().at(-1)!;
   const onTime = dayScore(last.sentOn, latestDue);
   const accuracy = mean(kept.map((s) => dayScore(s.sentOn, s.dueOn)));
-  return { onTime, accuracy, task: (onTime + accuracy) / 2 };
+  return { onTime, accuracy, task: (onTime + accuracy) / 2, daysLate: Math.max(0, daysBetween(latestDue, last.sentOn)) };
 }
 
 /**
@@ -41,7 +41,7 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
 export function periodCount(
   t: { state: string; createdOn: string; currentDue: string; approvedOn: string | null; sends: Send[] },
   from: string, to: string, today: string,
-): "full" | { lateOnly: number } | null {
+): "full" | { lateOnly: number; daysLate: number } | null {
   if (t.state === "cancelled") return null;
   if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return "full";
   if (t.approvedOn && t.approvedOn < from) return null;
@@ -52,29 +52,35 @@ export function periodCount(
   // shortcut: a fix given after asOf still uses today's due date; only matters when re-scoring an old period
   const delivered = last && (last.outcome === "pending" || last.outcome === "approved");
   const sentOn = delivered ? last.sentOn : asOf, due = delivered ? last.dueOn : t.currentDue;
-  return sentOn > due ? { lateOnly: dayScore(sentOn, due) } : null;
+  return sentOn > due ? { lateOnly: dayScore(sentOn, due), daysLate: daysBetween(due, sentOn) } : null;
 }
 
 /**
  * Per owner (0–1, i.e. score / 10): คะแนนตรงเวลา, one score per tag (หมวดหมู่), and คะแนนรวม = the mean of
  * คะแนนตรงเวลา and the tag scores the member has work in. Unapproved tasks are skipped.
  */
+/**
+ * One task's part of the scores (0–10), also listed per task on the performance page. approved = counts in งาน and
+ * the tags; a lateOnly task feeds คะแนนตรงเวลา only. Each tag the task carries: ความถูกต้อง = fix rounds only; the
+ * others = the mean day score of every send against its own due date (10 on/before it, minus 1 per 3 days late, floor 0).
+ */
+export function taskParts(t: ScoredTask): { approved: boolean; onTime: number; byTag: Record<string, number>; daysLate: number } | null {
+  if (t.lateOnly !== undefined) return { approved: false, onTime: t.lateOnly, byTag: {}, daysLate: t.daysLate ?? 0 };
+  const sc = taskScore(t.sends);
+  if (!sc) return null;
+  const byTag = Object.fromEntries(t.tags.map((tag) => [tag, tag === ACCURACY_TAG ? fixScore(t.sends) : sc.accuracy]));
+  return { approved: true, onTime: sc.onTime, byTag, daysLate: sc.daysLate };
+}
+
 export function memberScores(tasks: ScoredTask[]) {
   const acc: Record<string, { n: number; onTime: number[]; tags: Record<string, number[]> }> = {};
   for (const t of tasks) {
-    if (t.lateOnly !== undefined) {
-      const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
-      m.onTime.push(t.lateOnly / 10); // not in n: งาน counts approved tasks only
-      continue;
-    }
-    const sc = taskScore(t.sends);
-    if (!sc) continue;
+    const p = taskParts(t);
+    if (!p) continue;
     const m = (acc[t.owner] ??= { n: 0, onTime: [], tags: {} });
-    m.n++;
-    m.onTime.push(sc.onTime / 10);
-    // each tag the task carries gets a score: ความถูกต้อง = fix rounds only; the others = the mean day score of
-    // every send against its own due date (10 on/before it, minus 1 per 3 days late, floor 0)
-    for (const tag of t.tags) (m.tags[tag] ??= []).push((tag === ACCURACY_TAG ? fixScore(t.sends) : sc.accuracy) / 10);
+    if (p.approved) m.n++; // งาน counts approved tasks only
+    m.onTime.push(p.onTime / 10);
+    for (const [tag, v] of Object.entries(p.byTag)) (m.tags[tag] ??= []).push(v / 10);
   }
   const out: Record<string, { overall: number; onTime: number; byTag: Record<string, number>; tasks: number }> = {};
   for (const [owner, m] of Object.entries(acc)) {
