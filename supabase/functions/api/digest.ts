@@ -37,7 +37,7 @@ export function adminDigest(x: { waiting: (T & { owner: string })[]; backupDue: 
     x.backupDue > 0 ? `🗄️ มี ${x.backupDue} ไฟล์อายุเกิน 1 ปีรอดาวน์โหลดสำรองก่อนลบ` : null,
     x.quotaLow ? "⚠️ โควตา LINE ใกล้หมด สมาชิกอาจไม่ได้รับสรุปวันนี้" : null,
   ].filter(Boolean);
-  return parts.length ? ["สรุปสำหรับแอดมิน", ...parts].join("\n\n") : null;
+  return parts.length ? ["สรุปสิ่งที่ต้องทำ", ...parts].join("\n\n") : null;
 }
 
 const bkkParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", weekday: "short", hour: "numeric", hourCycle: "h23" });
