@@ -34,8 +34,10 @@ function taskItem(task, today, onChange, opts = {}) {
   const body = el("div", { className: "task-body" },
     task.details && el("p", { className: "pre", textContent: task.details }),
     el("p", {}, ...task.tags.map((t) => el("span", { className: "tag", textContent: t }))),
-    el("p", { className: "muted", textContent: `กำหนดส่งเดิม ${thDate(task.due_on)}` +
-      (task.current_due_on !== task.due_on ? ` · กำหนดส่งปัจจุบัน ${thDate(task.current_due_on)}` : "") }),
+    // due date glows; the original date shows only after a send-back moved it (มีปรับแก้). nowrap: a label never splits from its date
+    el("p", { className: "due-line" },
+      el("span", { className: "nowrap" }, "กำหนดส่ง ", el("span", { className: "due-neon", textContent: thDate(task.current_due_on) })),
+      task.current_due_on !== task.due_on && el("span", { className: "nowrap muted", textContent: ` · กำหนดส่งเดิม ${thDate(task.due_on)}` })),
     fix && el("div", { className: "fix-note" },
       el("strong", { textContent: "สิ่งที่ต้องแก้ไข: " }), el("span", { className: "pre", textContent: fix.fix_note ?? "" })),
   );

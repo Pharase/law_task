@@ -482,3 +482,7 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .hero-preview { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; flex: none; }
 .check-list { margin: 8px 0 0; padding-left: 18px; }
 .check-list li { margin-bottom: 6px; overflow-wrap: anywhere; }
+
+/* task detail: the due date in pink neon; label + date never split across lines */
+.nowrap { white-space: nowrap; }
+.due-neon { color: #ff4fd8; font-weight: 600; text-shadow: 0 0 6px rgba(255, 79, 216, .75), 0 0 14px rgba(255, 79, 216, .45); }
