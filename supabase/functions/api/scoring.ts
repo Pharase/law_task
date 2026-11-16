@@ -91,10 +91,9 @@ export type PerformanceRow = {
   byTag: Record<string, { raw: number; scaled: number }>;
 };
 
-/** One row per member with approved tasks; overall and each tag scaled 1–5 across those members. */
+/** One row per member with scored tasks; ตรงเวลา and each tag scaled 1–5 across those members, รวม = mean of those. */
 export function performanceRows(tasks: ScoredTask[], names: Record<string, string>): PerformanceRow[] {
   const m = memberScores(tasks);
-  const overall5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.overall])));
   const onTime5 = scale(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.onTime])));
   const tags = new Set(Object.values(m).flatMap((v) => Object.keys(v.byTag)));
   const tag5: Record<string, Record<string, number>> = {};
@@ -106,7 +105,8 @@ export function performanceRows(tasks: ScoredTask[], names: Record<string, strin
     name: names[id] ?? id,
     tasks: v.tasks,
     overall: v.overall,
-    overall5: overall5[id],
+    // รวม 1–5 = plain mean of the person's own 1–5 scores (ตรงเวลา + each tag they have work in); not scaled again
+    overall5: mean([onTime5[id], ...Object.keys(v.byTag).map((tag) => tag5[tag][id])]),
     onTime: v.onTime,
     onTime5: onTime5[id],
     byTag: Object.fromEntries(Object.entries(v.byTag).map(([tag, raw]) => [tag, { raw, scaled: tag5[tag][id] }])),

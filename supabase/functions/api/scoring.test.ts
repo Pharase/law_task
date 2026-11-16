@@ -140,3 +140,20 @@ test("ความถูกต้อง: 10 with no fix round, −2 per มี�
   near(m.byTag["ความถูกต้อง"], 0.8);   // one fix round
   near(m.byTag["การประสานงาน"], 0.95);  // mean of each send vs its due date: (10 + 9) / 2
 });
+
+test("รวม 1–5 = mean of the person's own 1–5 scores (ตรงเวลา + tags with work), no second scaling", () => {
+  const rows = performanceRows([
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
+    { owner: "U1", tags: ["ความถูกต้อง"], sends: [s("2026-01-09", "2026-01-10", "fix"), s("2026-01-12", "2026-01-15", "approved")] },
+    { owner: "U2", tags: ["การประสานงาน"], sends: [s("2026-01-16", "2026-01-10", "approved")] },
+  ], { U1: "A", U2: "B" });
+  const u1 = rows.find((r) => r.line_user_id === "U1")!, u2 = rows.find((r) => r.line_user_id === "U2")!;
+  // U1: ตรงเวลา 5, ประสานงาน 5, ความถูกต้อง 5 (only one with that tag) -> 5; U2: ตรงเวลา 1, ประสานงาน 1 -> 1
+  assert.equal(u1.overall5, 5);
+  assert.equal(u2.overall5, 1);
+  const solo = performanceRows([
+    { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-08", "2026-01-10", "approved")] },
+    { owner: "U2", tags: ["การประสานงาน", "ความถูกต้อง"], sends: [s("2026-01-13", "2026-01-10", "approved")] },
+  ], { U1: "A", U2: "B" });
+  near(solo.find((r) => r.line_user_id === "U2")!.overall5, (1 + 1 + 5) / 3); // ตรงเวลา 1, ประสานงาน 1, ความถูกต้อง 5
+});
