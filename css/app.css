@@ -496,3 +496,13 @@ details[open] > summary .due-head { display: none; }
 .perf-info { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: rgba(2, 215, 244, .08); border: 1px solid rgba(2, 215, 244, .3); }
 .perf-hint { margin-top: 8px; }
 #perfTable td:nth-child(2) { white-space: nowrap; }
+.perf-full { display: none; }
+.perf-note ul { display: none; } /* the criteria list is printed only; on screen, tap a column head */
+@media print {
+  .printing .perf-emoji, .printing .perf-short { display: none; }
+  .printing .perf-full { display: inline; }
+  @page { size: A4 landscape; } /* full Thai labels on one line each: wrapping split words like ลงนา-มกรรมการ */
+  .printing #perfTable th, .printing #perfTable td { font-size: 11px; padding: 6px 5px; }
+  .printing .perf-col { display: inline; padding: 0; font-size: inherit; }
+  .printing .perf-note ul { display: block; }
+}

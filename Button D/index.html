@@ -7,8 +7,8 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261111"></script>
   <script src="../js/work.js?v=20261118"></script>
-  <script src="../js/admin-tasks.js?v=20261121"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261120">
+  <script src="../js/admin-tasks.js?v=20261122"></script>
+  <link rel="stylesheet" href="../css/app.css?v=20261122">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -44,13 +44,14 @@
         <select id="pN" aria-label="เดือนหรือไตรมาส · Month or quarter"></select>
       </div>
       <div class="table-wrap"><table id="perfTable"></table></div>
-      <p id="perfInfo" class="perf-info" role="status" hidden></p>
-      <p class="muted small-note perf-hint">แตะหัวคอลัมน์ (📥 🗂️ ⭐ ⏰ ✅ ⚡ 🔎 🤝) เพื่อดูความหมายและวิธีคิดคะแนน</p>
+      <p id="perfInfo" class="perf-info no-print" role="status" hidden></p>
+      <p class="muted small-note perf-hint no-print">แตะหัวคอลัมน์ (📥 🗂️ ⭐ ⏰ ✅ ⚡ 🔎 🤝) เพื่อดูความหมายและวิธีคิดคะแนน</p>
       <!-- how the numbers are made (same rules as supabase/functions/api/scoring.ts) -->
       <div class="perf-note">
-        <p><strong>คะแนน 1–5</strong> · คำนวณมาจากการหาค่าคะแนนเฉลี่ยแบบกลุ่ม: คนที่คะแนนเฉลี่ยสูงสุดได้ 5, ต่ำสุดได้ 1, คนอื่นไล่ตามสัดส่วน (ถ้ามีคนเดียวหรือเท่ากันหมด = 5)</p>
-        <p><strong>เกณฑ์การให้คะแนน</strong> · คะแนนสะท้อนถึงความสามารถในการทำงานของหัวหน้างานและทีมงาน โดยพิจารณาจาก:</p>
-        <p><strong>งานที่นับ</strong> = งานที่แอดมินอนุมัติในช่วงนี้ (นับทุกคะแนน) · งานที่มอบหมายก่อนช่วงนี้ ยังไม่อนุมัติ และเลยกำหนดส่ง จะนับเป็นงานล่าช้าใน <strong>คะแนนตรงเวลา</strong> เท่านั้น (นับทุกช่วงจนกว่าจะอนุมัติ)</p>
+        <p><strong>คะแนน 1–5</strong> · คำนวณมาจากการหาค่าคะแนนเฉลี่ยแบบกลุ่ม: โดยเฉลี่ยไล่ตามสัดส่วน สูงสุดได้ 5, ต่ำสุดได้ 1</p>
+        <p><strong>คะแนน %</strong> · คำนวณมาจากการดำเนินงานทุกหมวดของแต่ละทีม</p>
+        <p><strong>งานที่นำมาคำนวณคะแนน</strong> · งานที่แอดมินอนุมัติในเดือนหรือไตรมาสนี้</p>
+        <p><strong>*งานที่ไม่ได้กดส่งตามกำหนดเวลาจะถูกคำนวณเป็นงานล่าช้าในคะแนนความตรงเวลา</strong></p>
         <ul>
           <li><strong>ความตรงเวลา</strong> : ประเมินจากการจัดส่งเอกสารให้ฝ่ายนิติกรคือ ส่งตรงตามกำหนด เช่น ทุกต้นเดือน, รอบที่วาง หรือกดส่งงานภายในวันที่กำหนด</li>
           <li><strong>ความถูกต้อง</strong> : ประเมินจากการเตรียมเอกสารประกอบครบ เช่น หนังสือแจ้งเตือน, รายการยอดค้าง</li>
