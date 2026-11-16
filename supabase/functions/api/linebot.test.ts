@@ -59,3 +59,8 @@ test("linkMessage: text in the bubble, ดูรายการงานทั�
   assert.equal(m.contents.body.contents[0].text, "สรุปงานวันนี้\n\nงานใหม่ 2");
   assert.deepEqual(m.contents.footer.contents[0].action, { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: LIFF_URL });
 });
+
+test("linkMessage: hero picture only when given", () => {
+  assert.equal("hero" in linkMessage("x", LIFF_URL).contents, false);
+  assert.equal((linkMessage("x", LIFF_URL, HERO_URL).contents as { hero: { url: string } }).hero.url, HERO_URL);
+});

@@ -1,7 +1,7 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
 import { adminDigest, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
-import { type BubbleTask, LIFF_URL, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
+import { ADMIN_HERO_URL, type BubbleTask, LIFF_URL, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
 import { db, must } from "./shared.ts";
@@ -35,8 +35,8 @@ async function pushMessages(to: string, messages: unknown[], token: string): Pro
   });
   return r.ok ? null : `push ${r.status}: ${(await r.text()).slice(0, 200)}`;
 }
-const push = (to: string, text: string, link: string, token: string) =>
-  pushMessages(to, [linkMessage(text, link)], token);
+const push = (to: string, text: string, link: string, token: string, hero?: string) =>
+  pushMessages(to, [linkMessage(text, link, hero)], token);
 
 const asT = (t: Row): T => ({ title: t.title, building: t.building, due: t.current_due_on });
 // oldest assigned first, then the nearest due date (the same order as "ใกล้ครบกำหนด")
@@ -65,7 +65,7 @@ export async function digest() {
   const taskById = new Map(open.map((t) => [t.id, t]));
 
   // Build every message first (admins first), then send while quota lasts.
-  const outbox: { to: string; text: string; link: string; taskIds: number[]; sendIds: number[] }[] = [];
+  const outbox: { to: string; text: string; link: string; hero?: string; taskIds: number[]; sendIds: number[] }[] = [];
   const waiting = open.filter((t) => t.state === "submitted")
     .map((t) => ({ ...asT(t), owner: t.owner_name }));
   const members = people.filter((p) => p.role === "member");
@@ -88,7 +88,7 @@ export async function digest() {
     return text && { to: p.line_user_id, text, link: LIFF_URL, taskIds: newTasks.map((t) => t.id), sendIds: sends.map((s) => s.id) };
   }).filter(Boolean) as typeof outbox;
   const adminText = adminDigest({ waiting, backupDue: backupDue ?? 0, quotaLow: remaining < admins.length + memberMsgs.length });
-  if (adminText) for (const a of admins) outbox.push({ to: a.line_user_id, text: adminText, link: `${LIFF_URL}/admin/tasks.html`, taskIds: [], sendIds: [] });
+  if (adminText) for (const a of admins) outbox.push({ to: a.line_user_id, text: adminText, link: `${LIFF_URL}/admin/tasks.html`, hero: ADMIN_HERO_URL, taskIds: [], sendIds: [] });
   outbox.push(...memberMsgs);
 
   let sent = 0, quotaSkipped = 0;
@@ -98,7 +98,7 @@ export async function digest() {
       await db.from("notify_log").insert({ run_date: today, line_user_id: m.to, ok: false, error: "quota" });
       continue;
     }
-    const error = await push(m.to, m.text, m.link, token).catch((e) => String(e));
+    const error = await push(m.to, m.text, m.link, token, m.hero).catch((e) => String(e));
     await db.from("notify_log").insert({ run_date: today, line_user_id: m.to, ok: !error, error });
     if (error) continue; // not marked, so tomorrow's summary repeats it
     sent++;
@@ -181,7 +181,7 @@ function sampleMessages() {
       newTasks: [t], dueSoon: [{ ...t, assigned: today, daysLeft: 0 }], overdue: [t],
       sentBack: [{ ...t, reason: "มีปรับแก้", note: "ตัวอย่างสิ่งที่ต้องแก้" }], approved: [t],
     })!, LIFF_URL),
-    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${LIFF_URL}/admin/tasks.html`),
+    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${LIFF_URL}/admin/tasks.html`, ADMIN_HERO_URL),
   ];
 }
 

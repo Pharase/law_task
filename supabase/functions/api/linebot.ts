@@ -6,6 +6,8 @@
 export const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
 /** Picture at the top of every task bubble. */
 export const HERO_URL = "https://pharase.github.io/law_task/img/task-hero.jpg"; // src/logo-a.png at 512px, JPEG on white (44 KB); new filename, so LINE fetches it fresh
+/** Picture at the top of the admin daily summary. */
+export const ADMIN_HERO_URL = "https://pharase.github.io/law_task/img/admin-hero.jpg"; // copy of src/logo-a.jpg
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
 export type BubbleTask = { id: number; title: string; building: string; details: string | null; due: string };
@@ -58,11 +60,12 @@ export function taskMessages(tasks: BubbleTask[]) {
 export const MAX_TASKS_PER_PUSH = PER_CAROUSEL * MAX_MESSAGES;
 
 /** Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link. */
-export function linkMessage(text: string, link: string) {
+export function linkMessage(text: string, link: string, hero?: string) {
   return {
     type: "flex", altText: text.slice(0, 400),
     contents: {
       type: "bubble",
+      ...(hero && { hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" } }),
       body: { type: "box", layout: "vertical", contents: [{ type: "text", text: text.slice(0, 2000), wrap: true, size: "sm" }] },
       footer: { type: "box", layout: "vertical", contents: [
         { type: "button", style: "primary", height: "sm", action: { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: link } },
