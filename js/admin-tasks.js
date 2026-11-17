@@ -155,12 +155,8 @@ function perfName(r, res) {
 }
 
 function showPerfDetail(r, res) {
-  const pct = (v) => (v === undefined ? "-" : (v * 10).toFixed(1) + "%"); // a task's score is out of 10
-  const cols = ["onTime", ...TAG_LIST];
   const head = el("tr", {}, ...["งาน", "สถานะ", "กำหนดส่งเดิม", "กำหนดส่งล่าสุด", "วันส่งงานล่าสุด", "แก้ไข (ครั้ง)", "เกินกำหนด (วัน)"]
-    .map((h) => el("th", { textContent: h })),
-    ...cols.map((k) => el("th", { title: PERF_COLS[k][2] }, el("span", { className: "perf-short", textContent: `${PERF_COLS[k][0]} ${PERF_COLS[k][1]}` }),
-      el("span", { className: "perf-full", textContent: PERF_COLS[k][2] }))));
+    .map((h) => el("th", { textContent: h })));
   const items = [...r.items].sort((a, b) => b.approved - a.approved || a.current_due_on.localeCompare(b.current_due_on));
   const rows = items.map((t) => el("tr", { className: t.approved ? "" : "late-only" },
     el("td", {}, el("strong", { textContent: t.title }), el("div", { className: "muted", textContent: t.building })),
@@ -169,17 +165,15 @@ function showPerfDetail(r, res) {
     el("td", { className: "nowrap", textContent: thDate(t.current_due_on) }),
     el("td", { className: "nowrap", textContent: t.last_sent_on ? thDate(t.last_sent_on) : "-" }),
     el("td", { textContent: t.fixes }),
-    el("td", { className: t.daysLate ? "error" : "", textContent: t.daysLate }),
-    el("td", { textContent: pct(t.onTime) }),
-    ...TAG_LIST.map((tag) => el("td", { className: tag in t.byTag ? "" : "muted", textContent: pct(t.byTag[tag]) }))));
+    el("td", { className: t.daysLate ? "error" : "", textContent: t.daysLate })));
   const close = el("button", { type: "button", className: "small secondary no-print", textContent: "ปิด" });
   close.onclick = () => { $("perfDetail").hidden = true; };
   $("perfDetail").replaceChildren(
     el("div", { className: "row card-head" },
       el("h3", { className: "grow", textContent: `งานที่ใช้คิดคะแนน · ${r.name} (${thDate(res.from)} – ${thDate(res.to)})` }), close),
     el("div", { className: "table-wrap" }, el("table", { className: "perf-detail-table" }, head,
-      ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 7 + cols.length, className: "muted", textContent: "ยังไม่มีงานที่ใช้คิดคะแนนในช่วงนี้" }))]))),
-    el("p", { className: "muted small-note", textContent: 'คะแนนต่องานเต็ม 10 แสดงเป็น % · "-" = งานนี้ไม่ได้ติดหมวดนั้น · งานที่ยังไม่อนุมัติแต่เลยกำหนด นับเฉพาะคะแนนตรงเวลา' }));
+      ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 7, className: "muted", textContent: "ยังไม่มีงานที่ใช้คิดคะแนนในช่วงนี้" }))]))),
+    el("p", { className: "muted small-note", textContent: 'งานที่ยังไม่อนุมัติแต่เลยกำหนด นับเฉพาะคะแนนตรงเวลา' }));
 }
 
 async function loadPerformance() {
