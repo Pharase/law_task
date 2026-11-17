@@ -371,6 +371,12 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .ms-list { max-height: 260px; overflow-y: auto; }
 .ms-list label.inline { display: flex; margin: 0; padding: 8px 6px; border-radius: 10px; }
 .ms-list label.inline:hover { background: rgba(255, 255, 255, .05); }
+.ms .ms-btn.ms-empty { color: var(--ink-3); }
+/* single-pick rows (Invoice form) */
+.ms-list .ms-opt { display: block; width: 100%; margin: 0; padding: 8px 10px; text-align: left; font-size: 15px; font-weight: 400; color: var(--ink); background: transparent; border: 0; border-radius: 10px; box-shadow: none; }
+.ms-list .ms-opt:hover, .ms-list .ms-opt:focus-visible { background: rgba(255, 255, 255, .06); }
+.ms-list .ms-opt.on { color: var(--cyan); background: rgba(17, 69, 84, .35); }
+.ms-list .ms-opt .muted { font-size: 13px; }
 .card:has(.ms-pop:not([hidden])) { z-index: 25; } /* the open list pops over the next card */
 
 /* ---- Reports: performance table ---- */

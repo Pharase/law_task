@@ -7,7 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261119"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261130">
+  <link rel="stylesheet" href="../css/app.css?v=20261131">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -21,18 +21,18 @@
       <!-- Admins: add / edit one invoice -->
       <form id="invForm" class="inv-form" hidden>
         <input type="hidden" name="id">
-        <label for="fBuilding">นิติบุคคล · Building</label>
-        <!-- type to search; the value must be one of the list (checked on save) -->
-        <input id="fBuilding" name="building" list="buildingList" autocomplete="off" placeholder="พิมพ์เพื่อค้นหานิติบุคคล" required>
-        <datalist id="buildingList"></datalist>
+        <!-- searchable drop-downs (same look as the assign form's building list); the hidden inputs carry the values -->
+        <label for="fBuildingBtn">นิติบุคคล · Building</label>
+        <input type="hidden" id="fBuilding" name="building">
+        <div class="ms" id="fBuildingPick"></div>
         <p class="muted small-note" id="fType"></p>
-        <label for="fSubject">รายการเบิก · Subject</label>
-        <!-- pick from the list (same as the old sheet "เบิกเงินทนาย"), or type something else -->
-        <input id="fSubject" name="subject" list="subjectList" autocomplete="off" maxlength="300" placeholder="เลือกหรือพิมพ์รายการเบิก" required>
-        <datalist id="subjectList"></datalist>
-        <label for="fLawyer">ทนาย · Lawyer</label>
-        <input id="fLawyer" name="lawyer" list="lawyerList" autocomplete="off" maxlength="100" placeholder="เลือกหรือพิมพ์ชื่อทนาย">
-        <datalist id="lawyerList"></datalist>
+        <!-- รายการเบิก: the old sheet "เบิกเงินทนาย" list, or type something else in the search box -->
+        <label for="fSubjectBtn">รายการเบิก · Subject</label>
+        <input type="hidden" id="fSubject" name="subject">
+        <div class="ms" id="fSubjectPick"></div>
+        <label for="fLawyerBtn">ทนาย · Lawyer</label>
+        <input type="hidden" id="fLawyer" name="lawyer">
+        <div class="ms" id="fLawyerPick"></div>
         <label for="fAmount">ยอด (บาท) · Amount</label>
         <input id="fAmount" name="amount" inputmode="decimal" placeholder="เช่น 1,500.00" required>
         <div class="inv-dates">
@@ -155,33 +155,79 @@
           "หัวหน้าทีม: " + (b.owner || "ยังไม่มีผู้ดูแล")].join(" · ");
     }
 
+    /**
+     * Searchable drop-down into `box` (a .ms div) for the hidden input `input`. options() -> [{ value, hint? }].
+     * free: what is typed in the search box can be used as the value too. Returns sync() to redraw after a value change.
+     */
+    function picker(box, input, { empty, options, free = false, onPick }) {
+      const btn = el("button", { type: "button", className: "ms-btn", id: input.id + "Btn" });
+      btn.setAttribute("aria-haspopup", "true");
+      const search = el("input", { type: "search", className: "ms-search", placeholder: free ? "ค้นหา หรือพิมพ์ใหม่" : "ค้นหา", ariaLabel: "ค้นหา" });
+      const list = el("div", { className: "ms-list", role: "listbox" });
+      const pop = el("div", { className: "ms-pop", hidden: true }, search, list);
+      box.replaceChildren(btn, pop);
+      const sync = () => { btn.textContent = input.value || empty; btn.classList.toggle("ms-empty", !input.value); };
+      const open = (on) => {
+        pop.hidden = !on;
+        btn.setAttribute("aria-expanded", String(on));
+        if (on) { search.value = ""; draw(); search.focus(); }
+      };
+      const choose = (v) => { input.value = v; sync(); open(false); btn.focus(); onPick?.(); };
+      const opt = (text, value, hint) => el("button", { type: "button", className: "ms-opt" + (value === input.value ? " on" : ""), role: "option", onclick: () => choose(value) },
+        text, hint && el("span", { className: "muted", textContent: " · " + hint }));
+      function draw() {
+        const q = search.value.trim(), ql = q.toLowerCase();
+        const hits = options().filter((o) => !ql || o.value.toLowerCase().includes(ql) || (o.hint || "").toLowerCase().includes(ql));
+        list.replaceChildren(
+          ...(free && q && !hits.some((o) => o.value === q) ? [opt(`ใช้ "${q}"`, q)] : []),
+          ...(free && input.value ? [opt("— ไม่ระบุ —", "")] : []),
+          ...hits.map((o) => opt(o.value, o.value, o.hint)),
+          ...(!hits.length && !(free && q) ? [el("p", { className: "muted", textContent: "ไม่พบ" })] : []));
+      }
+      search.oninput = draw;
+      search.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); list.querySelector(".ms-opt")?.click(); } }; // Enter = first match
+      btn.onclick = () => open(pop.hidden);
+      document.addEventListener("pointerdown", (e) => { if (!pop.hidden && !box.contains(e.target)) open(false); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pop.hidden) { open(false); btn.focus(); } });
+      sync();
+      return sync;
+    }
+    const pickers = [
+      picker($("fBuildingPick"), $("fBuilding"), { empty: "เลือกนิติบุคคล", onPick: showType,
+        options: () => pickable().map((b) => ({ value: b.name, hint: [b.type, b.owner].filter(Boolean).join(" · ") })) }),
+      picker($("fSubjectPick"), $("fSubject"), { empty: "เลือกรายการเบิก", free: true, options: () => SUBJECTS.map((value) => ({ value })) }),
+      picker($("fLawyerPick"), $("fLawyer"), { empty: "เลือกทนาย (ไม่บังคับ)", free: true,
+        options: () => [...new Set([...LAWYERS, ...data.invoices.map((i) => i.lawyer).filter(Boolean)])].map((value) => ({ value })) }),
+    ];
+
     function openForm(inv) {
       const f = $("invForm");
       f.reset();
       $("formMsg").textContent = "";
-      $("buildingList").replaceChildren(...pickable().map((b) => el("option", { value: b.name, label: [b.type, b.owner].filter(Boolean).join(" · ") })));
-      $("subjectList").replaceChildren(...SUBJECTS.map((s) => el("option", { value: s })));
-      $("lawyerList").replaceChildren(...[...new Set([...LAWYERS, ...data.invoices.map((i) => i.lawyer).filter(Boolean)])].map((s) => el("option", { value: s })));
       $("fStatus").replaceChildren(...STATUS.map((s) => el("option", { value: s, textContent: s })));
       f.elements.id.value = inv?.id ?? ""; // via .elements: a field named "id" would shadow form.id
+      // hidden inputs keep their value through reset(), so set all three every time
+      f.building.value = inv?.building ?? ""; f.subject.value = inv?.subject ?? ""; f.lawyer.value = inv?.lawyer ?? "";
       if (inv) {
-        f.building.value = inv.building; f.subject.value = inv.subject; f.lawyer.value = inv.lawyer ?? ""; f.amount.value = baht(inv.amount);
+        f.amount.value = baht(inv.amount);
         f.billed_on.value = inv.billed_on ?? ""; f.transfer_on.value = inv.transfer_on ?? ""; f.receipt_on.value = inv.receipt_on ?? "";
         f.status.value = inv.status; f.note.value = inv.note ?? "";
       }
+      pickers.forEach((sync) => sync());
       showType();
       f.hidden = false;
       f.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    $("fBuilding").oninput = showType;
     $("q").oninput = render;
     $("addBtn").onclick = () => openForm(null);
     $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
     $("invForm").onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target, btn = e.submitter;
+      // hidden inputs skip the browser's required check, so check here
       if (!pickable().some((b) => b.name === f.building.value.trim())) return void ($("formMsg").textContent = "เลือกนิติบุคคลจากรายการ · pick a building from the list");
+      if (!f.subject.value.trim()) return void ($("formMsg").textContent = "เลือกรายการเบิก · pick a subject");
       btn.disabled = true;
       try {
         data = await api("saveInvoice", Object.fromEntries(new FormData(f)));
