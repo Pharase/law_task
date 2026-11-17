@@ -34,6 +34,15 @@ function summaryLine(t) {
     t.fix_round > 5 && el("span", { className: "badge late", textContent: "เกิน 5 รอบแก้ไข" }));
 }
 
+// lock every button in box while one request runs, so a double tap can't send twice;
+// success re-renders the list (fresh buttons), so only an error unlocks them
+async function locked(box, fn) {
+  const btns = [...box.querySelectorAll("button")];
+  if (btns.some((b) => b.disabled)) return;
+  btns.forEach((b) => { b.disabled = true; });
+  try { await fn(); } catch (err) { btns.forEach((b) => { b.disabled = false; }); throw err; }
+}
+
 function reviewControls(t) {
   const msg = el("p", { role: "alert", className: "error" });
   const reason = el("select", { required: true }, option("", "เลือกเหตุผล"), option("กดผิด", "กดผิด"), option("มีปรับแก้", "มีปรับแก้"));
@@ -48,7 +57,7 @@ function reviewControls(t) {
   };
   const submit = async (payload) => {
     msg.textContent = "";
-    try { await api("reviewTask", { task_id: t.id, ...payload }); }
+    try { await locked(box, () => api("reviewTask", { task_id: t.id, ...payload })); }
     catch (err) {
       if (/already reviewed/.test(err.message)) alert("งานนี้ถูกตรวจโดยแอดมินคนอื่นแล้ว (already reviewed by another admin)");
       else return void (msg.textContent = err.message);
@@ -63,7 +72,8 @@ function reviewControls(t) {
   approve.onclick = () => submit({ decision: "approved" });
   const reject = el("button", { type: "button", className: "small danger", textContent: "ไม่อนุมัติ (Not approved)" });
   reject.onclick = () => { notForm.hidden = false; };
-  return el("div", {}, approve, reject, notForm, msg);
+  const box = el("div", {}, approve, reject, notForm, msg);
+  return box;
 }
 
 function editControls(t) {
@@ -74,7 +84,7 @@ function editControls(t) {
     el("button", { textContent: "บันทึก" }));
   form.onsubmit = async (e) => {
     e.preventDefault();
-    try { await api("editTask", { task_id: t.id, title: title.value, due_on: due.value }); loadAll(); }
+    try { await locked(box, () => api("editTask", { task_id: t.id, title: title.value, due_on: due.value })); loadAll(); }
     catch (err) { alert(err.message); }
   };
   const edit = el("button", { type: "button", className: "small secondary", textContent: "แก้ไข" });
@@ -82,9 +92,10 @@ function editControls(t) {
   const cancel = el("button", { type: "button", className: "small danger", textContent: "ยกเลิกงาน" });
   cancel.onclick = async () => {
     if (!confirm(`ยกเลิกงาน "${t.title}"?`)) return;
-    try { await api("cancelTask", { task_id: t.id }); loadAll(); } catch (err) { alert(err.message); }
+    try { await locked(box, () => api("cancelTask", { task_id: t.id })); loadAll(); } catch (err) { alert(err.message); }
   };
-  return el("div", {}, edit, cancel, form);
+  const box = el("div", {}, edit, cancel, form);
+  return box;
 }
 
 async function loadReview() {
