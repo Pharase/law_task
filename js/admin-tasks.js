@@ -294,8 +294,12 @@ async function initAssignForm(onCreated) {
     if (!name) return;
     // one person chosen: the new building goes straight into their responsibility
     const one = checked("owner").length === 1 ? memberLabel(members.find((m) => m.line_user_id === checked("owner")[0])) : "";
+    const btn = $("addBuildingBtn");
+    if (btn.disabled) return;
+    btn.disabled = true; // a double click would pass the server's "exists?" check twice and append two rows
     try { const b = await api("addBuilding", { name, owner_name: one }); $("newBuilding").value = ""; await loadBuildings(b.name); }
     catch (err) { alert(err.message); }
+    btn.disabled = false;
   };
 
   let saving = false; // one save at a time: a double tap / second click while saving does nothing
