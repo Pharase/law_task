@@ -22,10 +22,14 @@
       <form id="invForm" class="inv-form" hidden>
         <input type="hidden" name="id">
         <label for="fBuilding">นิติบุคคล · Building</label>
-        <select id="fBuilding" name="building" required></select>
+        <!-- type to search; the value must be one of the list (checked on save) -->
+        <input id="fBuilding" name="building" list="buildingList" autocomplete="off" placeholder="พิมพ์เพื่อค้นหานิติบุคคล" required>
+        <datalist id="buildingList"></datalist>
         <p class="muted small-note" id="fType"></p>
-        <label for="fSubject">ขอเบิกเรื่อง · Subject</label>
-        <input id="fSubject" name="subject" maxlength="300" required>
+        <label for="fSubject">รายการเบิก · Subject</label>
+        <!-- pick from the list (same as the old sheet "เบิกเงินทนาย"), or type something else -->
+        <input id="fSubject" name="subject" list="subjectList" autocomplete="off" maxlength="300" placeholder="เลือกหรือพิมพ์รายการเบิก" required>
+        <datalist id="subjectList"></datalist>
         <label for="fAmount">ยอด (บาท) · Amount</label>
         <input id="fAmount" name="amount" inputmode="decimal" placeholder="เช่น 1,500.00" required>
         <div class="inv-dates">
@@ -58,7 +62,10 @@
 
   <script>
     const STATUS = ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"];
-    const baht = (n) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // รายการเบิก choices from the old sheet "เบิกเงินทนาย"
+    const SUBJECTS = ["ค่าทนายชั้นโนติส", "ค่าส่งหนังสือบอกกล่าว", "คชจ ชั้นโนติส", "ค่าทนายชั้นฟ้อง", "คชจ ชั้นฟ้อง", "ค่าธรรมเนียมชั้นฟ้อง",
+      "ค่าทนายชั้นบังคับคดี", "คชจ ชั้นบังคับคดี", "ค่าธรรมเนียมชั้นบังคับคดี", "ค่าเดินทาง", "ค่าอื่นๆ"];
+    const baht =(n) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let data = { invoices: [], buildings: [], types: [] }, tab = "all", isAdmin = false;
 
     function renderTabs() {
@@ -80,7 +87,7 @@
       const row = el("div", { className: "inv-row" },
         el("div", { className: "grow" },
           el("strong", { textContent: inv.subject }),
-          el("div", { className: "muted", textContent: `${inv.building}${inv.type ? " · " + inv.type : ""}` }),
+          el("div", { className: "muted", textContent: [inv.building, inv.type, isAdmin && ownerOf(inv.building) && "หัวหน้าทีม " + ownerOf(inv.building)].filter(Boolean).join(" · ") }),
           el("div", { className: "muted small-note", textContent: dates }),
           inv.note && el("div", { className: "muted pre", textContent: inv.note })),
         el("div", { className: "inv-side" },
@@ -132,19 +139,24 @@
         : "";
     }
 
+    // หัวหน้าทีม = the member who looks after the building (ข้อมูลการมอบหมาย)
+    const ownerOf = (name) => data.buildings.find((b) => b.name === name)?.owner || "";
+    // "ทุกนิติ" means every building: an invoice is always for one building, so it is not offered
+    const pickable = () => data.buildings.filter((b) => !b.name.trim().startsWith("ทุกนิติ"));
+
     function showType() {
-      const b = data.buildings.find((x) => x.name === $("fBuilding").value);
-      $("fType").textContent = b ? (b.type ? "ประเภท: " + b.type : "ยังไม่ระบุประเภท — ตั้งได้ในชีต แท็บ Buildings คอลัมน์ type") : "";
+      const v = $("fBuilding").value.trim(), b = pickable().find((x) => x.name === v);
+      $("fType").textContent = !v ? "" : !b ? "ไม่พบนิติบุคคลนี้ · เลือกจากรายการ"
+        : [b.type ? "ประเภท: " + b.type : "ยังไม่ระบุประเภท — ตั้งได้ในชีต แท็บ Buildings คอลัมน์ type",
+          "หัวหน้าทีม: " + (b.owner || "ยังไม่มีผู้ดูแล")].join(" · ");
     }
 
     function openForm(inv) {
       const f = $("invForm");
       f.reset();
       $("formMsg").textContent = "";
-      $("fBuilding").replaceChildren(el("option", { value: "", textContent: "เลือกนิติบุคคล" }),
-        // "ทุกนิติ" means every building: an invoice is always for one building, so it is not offered
-        ...data.buildings.filter((b) => !b.name.trim().startsWith("ทุกนิติ"))
-          .map((b) => el("option", { value: b.name, textContent: b.name + (b.type ? " · " + b.type : "") })));
+      $("buildingList").replaceChildren(...pickable().map((b) => el("option", { value: b.name, label: [b.type, b.owner].filter(Boolean).join(" · ") })));
+      $("subjectList").replaceChildren(...SUBJECTS.map((s) => el("option", { value: s })));
       $("fStatus").replaceChildren(...STATUS.map((s) => el("option", { value: s, textContent: s })));
       f.elements.id.value = inv?.id ?? ""; // via .elements: a field named "id" would shadow form.id
       if (inv) {
@@ -157,13 +169,14 @@
       f.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    $("fBuilding").onchange = showType;
+    $("fBuilding").oninput = showType;
     $("q").oninput = render;
     $("addBtn").onclick = () => openForm(null);
     $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
     $("invForm").onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target, btn = e.submitter;
+      if (!pickable().some((b) => b.name === f.building.value.trim())) return void ($("formMsg").textContent = "เลือกนิติบุคคลจากรายการ · pick a building from the list");
       btn.disabled = true;
       try {
         data = await api("saveInvoice", Object.fromEntries(new FormData(f)));
