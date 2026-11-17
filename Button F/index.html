@@ -30,6 +30,9 @@
         <!-- pick from the list (same as the old sheet "เบิกเงินทนาย"), or type something else -->
         <input id="fSubject" name="subject" list="subjectList" autocomplete="off" maxlength="300" placeholder="เลือกหรือพิมพ์รายการเบิก" required>
         <datalist id="subjectList"></datalist>
+        <label for="fLawyer">ทนาย · Lawyer</label>
+        <input id="fLawyer" name="lawyer" list="lawyerList" autocomplete="off" maxlength="100" placeholder="เลือกหรือพิมพ์ชื่อทนาย">
+        <datalist id="lawyerList"></datalist>
         <label for="fAmount">ยอด (บาท) · Amount</label>
         <input id="fAmount" name="amount" inputmode="decimal" placeholder="เช่น 1,500.00" required>
         <div class="inv-dates">
@@ -65,6 +68,7 @@
     // รายการเบิก choices from the old sheet "เบิกเงินทนาย"
     const SUBJECTS = ["ค่าทนายชั้นโนติส", "ค่าส่งหนังสือบอกกล่าว", "คชจ ชั้นโนติส", "ค่าทนายชั้นฟ้อง", "คชจ ชั้นฟ้อง", "ค่าธรรมเนียมชั้นฟ้อง",
       "ค่าทนายชั้นบังคับคดี", "คชจ ชั้นบังคับคดี", "ค่าธรรมเนียมชั้นบังคับคดี", "ค่าเดินทาง", "ค่าอื่นๆ"];
+    const LAWYERS = ["ศิระ", "บารมี", "ตั้ม", "ลิลลี่", "นิว", "บอม"]; // same sheet; names typed on invoices are suggested too
     const baht =(n) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let data = { invoices: [], buildings: [], types: [] }, tab = "all", isAdmin = false;
 
@@ -87,7 +91,7 @@
       const row = el("div", { className: "inv-row" },
         el("div", { className: "grow" },
           el("strong", { textContent: inv.subject }),
-          el("div", { className: "muted", textContent: [inv.building, inv.type, isAdmin && ownerOf(inv.building) && "หัวหน้าทีม " + ownerOf(inv.building)].filter(Boolean).join(" · ") }),
+          el("div", { className: "muted", textContent: [inv.building, inv.type, inv.lawyer && "ทนาย " + inv.lawyer, isAdmin && ownerOf(inv.building) && "หัวหน้าทีม " + ownerOf(inv.building)].filter(Boolean).join(" · ") }),
           el("div", { className: "muted small-note", textContent: dates }),
           inv.note && el("div", { className: "muted pre", textContent: inv.note })),
         el("div", { className: "inv-side" },
@@ -157,10 +161,11 @@
       $("formMsg").textContent = "";
       $("buildingList").replaceChildren(...pickable().map((b) => el("option", { value: b.name, label: [b.type, b.owner].filter(Boolean).join(" · ") })));
       $("subjectList").replaceChildren(...SUBJECTS.map((s) => el("option", { value: s })));
+      $("lawyerList").replaceChildren(...[...new Set([...LAWYERS, ...data.invoices.map((i) => i.lawyer).filter(Boolean)])].map((s) => el("option", { value: s })));
       $("fStatus").replaceChildren(...STATUS.map((s) => el("option", { value: s, textContent: s })));
       f.elements.id.value = inv?.id ?? ""; // via .elements: a field named "id" would shadow form.id
       if (inv) {
-        f.building.value = inv.building; f.subject.value = inv.subject; f.amount.value = baht(inv.amount);
+        f.building.value = inv.building; f.subject.value = inv.subject; f.lawyer.value = inv.lawyer ?? ""; f.amount.value = baht(inv.amount);
         f.billed_on.value = inv.billed_on ?? ""; f.transfer_on.value = inv.transfer_on ?? ""; f.receipt_on.value = inv.receipt_on ?? "";
         f.status.value = inv.status; f.note.value = inv.note ?? "";
       }

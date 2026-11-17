@@ -24,6 +24,8 @@ test("a good row parses: amount with commas, Buddhist date, type from the buildi
   assert.equal(invoices[0].billed_on, "2026-11-01");
   assert.equal(invoices[0].transfer_on, null);
   assert.equal(invoices[0].type, "บ้านจัดสรร");
+  assert.equal(invoices[0].lawyer, null); // no lawyer column yet (older sheet) = blank
+  assert.equal(parseInvoices([row({ lawyer: " ตั้ม " })], types).invoices[0].lawyer, "ตั้ม");
 });
 
 test("a building without a type (or not in Buildings) gets an empty type, the row still shows", () => {
@@ -46,11 +48,11 @@ test("blank status counts as the first step (a row typed by hand)", () =>
   assert.equal(parseInvoices([row({ status: "" })], types).invoices[0].status, "รอทนายวางบิล"));
 
 const buildings = ["B1", "B2", "ทุกนิติ"];
-const input = { building: "B1", subject: " ค่าน้ำ ", amount: "2,000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "" };
+const input = { building: "B1", subject: " ค่าน้ำ ", lawyer: " บารมี ", amount: "2,000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "" };
 
 test("invoiceCells: trims, cleans the amount, keeps ISO dates, blanks stay blank", () =>
   assert.deepEqual(invoiceCells(input, buildings), {
-    building: "B1", subject: "ค่าน้ำ", amount: "2000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "",
+    building: "B1", subject: "ค่าน้ำ", lawyer: "บารมี", amount: "2000", billed_on: "2026-11-20", transfer_on: "", receipt_on: "", status: "รอนิติชำระเงิน", note: "",
   }));
 
 test("invoiceCells: status defaults to the first step; an old name is saved as the new one", () => {

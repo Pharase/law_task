@@ -74,7 +74,7 @@ test("patch cannot change the id", () =>
   assert.equal(planBatch([{ op: "update", tab: "Tasks", id: 4, patch: { id: "7" } }], tables(), counter()).results[0].id, "4"));
 
 test("Invoices tab has the invoice columns, ids come from the counter", () => {
-  assert.deepEqual(HEADERS.Invoices, ["id", "building", "subject", "amount", "billed_on", "transfer_on", "receipt_on", "status", "note", "created_by", "created_at", "updated_at"]);
+  assert.deepEqual(HEADERS.Invoices, ["id", "building", "subject", "amount", "billed_on", "transfer_on", "receipt_on", "status", "note", "created_by", "created_at", "updated_at", "lawyer"]);
   const t = { Invoices: { headers: HEADERS.Invoices, rows: [] } };
   const r = planBatch([{ op: "append", tab: "Invoices", rows: [{ subject: "ค่าส่วนกลาง", amount: "1500" }] }], t, () => 1);
   assert.equal(r.results[0][0].id, "1");

@@ -8,7 +8,7 @@ var HEADERS = {
     "reviewed_at", "member_notified_at"],
   Buildings: ["name", "type", "owner"], // type: บ้านจัดสรร or อาคารชุด; owner: the หัวหน้างาน (staff name) who looks after it
   Invoices: ["id", "building", "subject", "amount", "billed_on", "transfer_on", "receipt_on", "status", "note",
-    "created_by", "created_at", "updated_at"],
+    "created_by", "created_at", "updated_at", "lawyer"], // lawyer (ทนาย) added later: setup() appends it at the end
   News: ["id", "title", "body", "pinned", "created_by", "created_at", "deleted_at"], // Home news; deleted_at = soft delete
   Members: ["line_user_id", "name", "role"],
 };

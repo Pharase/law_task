@@ -12,7 +12,7 @@ const statusOf = (s: string) => (s ? OLD_STATUS[s] ?? s : INVOICE_STATUS[0]);
 export const BUILDING_TYPES = ["บ้านจัดสรร", "อาคารชุด"] as const;
 export type InvoiceStatus = typeof INVOICE_STATUS[number];
 export type Invoice = {
-  id: number; building: string; type: string; subject: string; amount: number;
+  id: number; building: string; type: string; subject: string; lawyer: string | null; amount: number;
   billed_on: string | null; transfer_on: string | null; receipt_on: string | null;
   status: InvoiceStatus; note: string | null; created_at: string; updated_at: string | null;
 };
@@ -50,7 +50,7 @@ export function parseInvoices(rows: Row[], buildingTypes: Map<string, string>) {
     if (badDate) { fail(`${badDate} ไม่ใช่วันที่ (ใช้ วว/ดด/ปปปป หรือ YYYY-MM-DD)`); continue; }
     const building = cell(r, "building");
     invoices.push({
-      id, building, type: buildingTypes.get(building) ?? "", subject, amount,
+      id, building, type: buildingTypes.get(building) ?? "", subject, lawyer: cell(r, "lawyer") || null, amount,
       billed_on: dates.billed_on, transfer_on: dates.transfer_on, receipt_on: dates.receipt_on,
       status, note: cell(r, "note") || null, created_at: cell(r, "created_at"), updated_at: cell(r, "updated_at") || null,
     });
@@ -70,7 +70,9 @@ export function invoiceCells(body: Record<string, unknown>, buildings: string[])
   if (amount === null || amount > 1e12) throw new Error("ยอด (amount) must be a number, e.g. 1500 or 1,500.50");
   const status = statusOf(s("status"));
   if (!(INVOICE_STATUS as readonly string[]).includes(status)) throw new Error("สถานะ (status) must be one of " + INVOICE_STATUS.join(", "));
-  const out: Record<string, string> = { building, subject, amount: String(Math.round(amount * 100) / 100) };
+  const lawyer = s("lawyer"); // optional, free text (the form suggests names)
+  if (lawyer.length > 100) throw new Error("ทนาย (lawyer) is over 100 characters");
+  const out: Record<string, string> = { building, subject, lawyer, amount: String(Math.round(amount * 100) / 100) };
   for (const k of DATE_FIELDS) {
     const v = s(k);
     if (v && (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !normDate(v))) throw new Error(`${k}: วันที่ไม่ถูกต้อง (bad date)`);
