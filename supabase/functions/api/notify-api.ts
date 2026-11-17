@@ -121,11 +121,11 @@ export async function digest() {
  * catch-up run nor the morning summary repeats them). Outside working hours, without a token, or when
  * LINE refuses (e.g. monthly quota used up), nothing is marked: pendingNotices sends them later.
  */
-export async function notifyNewTasks(groups: { to: string; tasks: BubbleTask[] }[]): Promise<number[]> {
+export async function notifyNewTasks(groups: { to: string; tasks: BubbleTask[] }[], anyTime = false): Promise<number[]> {
   const { token, liffUrl: app } = await loadLine();
   if (!token || !groups.length) return [];
   const settings = await loadSettings();
-  if (!isWorkingHours(new Date(), settings.instant)) return [];
+  if (!anyTime && !isWorkingHours(new Date(), settings.instant)) return []; // anyTime: an admin's resend goes now
   const today = bangkokDate(new Date());
   const done: number[] = [];
   for (const g of groups) {

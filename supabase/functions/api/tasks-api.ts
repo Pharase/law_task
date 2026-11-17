@@ -309,6 +309,17 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
       return one(id);
     }
 
+    case "resendNotice": {
+      // tracking page 📨: push this task's new-task card again now (any time), then mark it notified
+      const id = taskId(body);
+      const t = taskIn(await loadSheet(), id);
+      if (t.state !== "on_process") throw new HttpError(409, "แจ้งซ้ำได้เฉพาะงานที่กำลังดำเนินการ · only open tasks");
+      const sent = await notifyNewTasks([{ to: t.owner, tasks: [{ id, title: t.title, building: t.building, details: t.details, due: t.current_due_on }] }], true);
+      if (!sent.length) throw new HttpError(502, "ส่ง LINE ไม่สำเร็จ (ตรวจ token หรือโควตาข้อความ ในหน้าตั้งค่า)");
+      await batch([{ op: "update", tab: "Tasks", id, patch: { member_notified_at: new Date().toISOString() } }]);
+      return one(id);
+    }
+
     case "cancelTask": {
       const id = taskId(body);
       const data = await loadSheet();

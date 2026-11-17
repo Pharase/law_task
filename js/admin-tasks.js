@@ -24,9 +24,28 @@ function adminTaskBody(t) {
   );
 }
 
+/** Right side of a task row (this page is admins only): was the new-task LINE card sent, and 📨 to send it again. */
+function notifyStatus(t) {
+  const sent = !!t.member_notified_at;
+  const box = el("span", { className: "notify " + (sent ? "muted" : "error"),
+    textContent: sent ? `🔔 แจ้งแล้ว ${thDate(bkkDay(t.member_notified_at))}` : "🔕 ยังไม่แจ้ง" });
+  if (t.state !== "on_process") return box; // the card has a ส่งงาน button: only useful while the task is open
+  const btn = el("button", { type: "button", textContent: "📨", title: "ส่งแจ้งเตือนงานนี้ทาง LINE อีกครั้ง", ariaLabel: "ส่งแจ้งเตือนอีกครั้ง" });
+  btn.onclick = async (e) => {
+    e.preventDefault(); // inside <summary>: don't open / close the task
+    if (btn.disabled || !confirm(`ส่งแจ้งเตือน "${t.title}" ถึง ${t.owner_name} ทาง LINE อีกครั้ง?`)) return;
+    btn.disabled = true; // one push per tap
+    try { await api("resendNotice", { task_id: t.id }); loadAll(); }
+    catch (err) { alert(err.message); btn.disabled = false; }
+  };
+  box.append(btn);
+  return box;
+}
+
 function summaryLine(t) {
   const overdue = t.state === "on_process" && t.current_due_on < bkkToday();
   return el("summary", {},
+    notifyStatus(t),
     el("strong", { textContent: t.title }),
     el("span", { className: "muted", textContent: ` · ${t.building} · ${t.owner_name} · ${thDate(t.current_due_on)}` }),
     overdue && el("span", { className: "badge late", textContent: "เลยกำหนด" }),
