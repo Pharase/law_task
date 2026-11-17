@@ -521,3 +521,8 @@ details[open] > summary .due-head { display: none; }
 @media print { .printing .perf-detail-table th .perf-short { display: none; } .printing .perf-detail-table th .perf-full { display: inline; } }
 .perf-detail-table td:first-child { min-width: 180px; }
 .perf-detail .small-note { margin-top: 8px; }
+
+/* ตั้งค่า → Linkage: collapsed until an admin opens it */
+.linkage { margin: 16px 0; }
+.linkage > summary { cursor: pointer; }
+.linkage > summary h3 { display: inline; }

@@ -1,6 +1,6 @@
 // Shared by every page: LINE login, calls to the Supabase `api` function, role gate, uploads.
 // Load after the LIFF SDK: <script src="js/app.js"></script> (or ../js/app.js from admin/).
-const LIFF_ID = "2012450429-k3WOCwtO";
+const BUILTIN_LIFF_ID = "2012450429-k3WOCwtO"; // used until/unless ตั้งค่า → Linkage saves another one
 const API_URL = "https://edymfgeecbsmepdveqkj.supabase.co/functions/v1/api";
 const HOME = new URL("../", document.currentScript.src).href;
 
@@ -170,8 +170,25 @@ async function api(action, data = {}) {
 // Call at the top of every page. Resolves to the profile, or redirects away.
 // need: "member" (members and admins), "admin", or "any" (home page: resolves null when
 // logged out instead of redirecting, and shows the invite-code screen itself).
+// LIFF ID from ตั้งค่า → Linkage, remembered per device; the first open on a device waits for it (max 3 s),
+// later opens use the remembered one and refresh it in the background.
+async function initLiff() {
+  let saved = null;
+  try { saved = localStorage.getItem("liffId"); } catch {}
+  const fresh = fetch(API_URL, { method: "POST", headers: { "content-type": "application/json" }, body: '{"action":"liffId"}', signal: AbortSignal.timeout(3000) })
+    .then((r) => r.json()).then((b) => { try { localStorage.setItem("liffId", b.liffId); } catch {} return b.liffId; })
+    .catch(() => null);
+  const id = saved || (await fresh) || BUILTIN_LIFF_ID;
+  try { await liff.init({ liffId: id }); }
+  catch (e) {
+    if (id === BUILTIN_LIFF_ID) throw e;
+    try { localStorage.removeItem("liffId"); } catch {}
+    await liff.init({ liffId: BUILTIN_LIFF_ID }); // a wrong saved ID must never lock anyone out
+  }
+}
+
 async function start(need = "member") {
-  await liff.init({ liffId: LIFF_ID });
+  await initLiff();
   if (!liff.isLoggedIn()) {
     if (need === "any") return null;
     login();

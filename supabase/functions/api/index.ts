@@ -12,13 +12,12 @@ import { adminInvoiceActions, memberInvoiceActions } from "./invoices-api.ts";
 import { memberReportActions } from "./reports-api.ts";
 import { adminNewsActions, memberNewsActions } from "./news-api.ts";
 import { adminLienActions, memberLienActions } from "./lien-api.ts";
-import { adminSettingsActions } from "./settings-api.ts";
+import { adminSettingsActions, loadLine } from "./settings-api.ts";
 
 // Feature handlers return undefined for actions they don't own. Member handlers run for any approved user.
 const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions, memberInvoiceActions, memberReportActions, memberNewsActions, memberLienActions];
 const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions, adminNotifyActions, adminLienActions, adminSettingsActions];
 
-const LINE_CHANNEL_ID = Deno.env.get("LINE_CHANNEL_ID")!;
 const MAX_WRONG_CODES = 5;
 const MAX_BYTES = 10 * 1024 * 1024;
 const MIME_EXT: Record<string, string> = {
@@ -35,12 +34,12 @@ const json = (body: unknown, status = 200) =>
 
 async function verifyLine(idToken: string | null) {
   if (!idToken) throw new HttpError(401, "missing LINE ID token");
-  const r = await fetch("https://api.line.me/oauth2/v2.1/verify", {
-    method: "POST",
-    body: new URLSearchParams({ id_token: idToken, client_id: LINE_CHANNEL_ID }),
-  });
-  if (!r.ok) throw new HttpError(401, "invalid or expired LINE ID token");
-  return await r.json() as { sub: string; name?: string; picture?: string };
+  // the saved LIFF's channel first, then the built-in one (a bad Linkage edit must not lock admins out)
+  for (const client_id of (await loadLine()).channelIds) {
+    const r = await fetch("https://api.line.me/oauth2/v2.1/verify", { method: "POST", body: new URLSearchParams({ id_token: idToken, client_id }) });
+    if (r.ok) return await r.json() as { sub: string; name?: string; picture?: string };
+  }
+  throw new HttpError(401, "invalid or expired LINE ID token");
 }
 
 /** Current LINE profile via the LIFF access token; null on any problem (the ID token values are kept). */
@@ -49,7 +48,7 @@ async function liveProfile(accessToken: string | null) {
   try {
     // The access token must be issued for OUR channel, or someone could pass another app's token.
     const v = await fetch(`https://api.line.me/oauth2/v2.1/verify?access_token=${encodeURIComponent(accessToken)}`);
-    if (!v.ok || (await v.json()).client_id !== LINE_CHANNEL_ID) return null;
+    if (!v.ok || !(await loadLine()).channelIds.includes((await v.json()).client_id)) return null;
     const p = await fetch("https://api.line.me/v2/profile", { headers: { Authorization: `Bearer ${accessToken}` } });
     return p.ok ? await p.json() as { userId: string; displayName?: string; pictureUrl?: string } : null;
   } catch {
@@ -73,6 +72,8 @@ Deno.serve(async (req) => {
 
     // Public on purpose: it only deletes files that are due AND backed up, so a stranger calling it changes nothing.
     if (body.action === "cleanup") return json(await cleanup());
+    // Public on purpose: pages need the LIFF ID before anyone is logged in; it is in every LIFF link anyway.
+    if (body.action === "liffId") return json({ liffId: (await loadLine()).liffId });
     // Public on purpose: runs at most once per Bangkok weekday after 09:00, otherwise does nothing.
     if (body.action === "digest") return json(await digest());
     // Public on purpose: sends only new-task bubbles nobody got yet, during 08:30–17:30, and marks them.

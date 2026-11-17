@@ -1,6 +1,7 @@
 // Members page → ตั้งค่า: notice times, bubble pictures, and a "do the Sheet / Drive links still work" check.
 import { TABS } from "./lien.ts";
 import { normalizeSettings, readSettings, type Settings } from "./settings.ts";
+import { type LineConfig, type LineStored, masked, normalizeLine, resolveLine } from "./lineconfig.ts";
 import { sheet } from "./sheet.ts";
 import { db, HttpError, type Me, must } from "./shared.ts";
 
@@ -21,6 +22,58 @@ async function save(input: unknown, me: Me): Promise<Settings> {
   try { value = normalizeSettings(input, await loadSettings()); } catch (e) { throw new HttpError(400, (e as Error).message); }
   must(await db.from("app_settings").upsert({ key: KEY, value, updated_at: new Date().toISOString(), updated_by: me.line_user_id }));
   return value;
+}
+
+// --- LINE OA linkage: read on every request (login check), so kept for a minute per worker
+let lineCache: { at: number; stored: LineStored } | null = null;
+async function lineStored(): Promise<LineStored> {
+  if (lineCache && Date.now() - lineCache.at < 60_000) return lineCache.stored;
+  const { data, error } = await db.from("app_settings").select("value").eq("key", "line").maybeSingle();
+  if (error) console.error("line settings", error); // fall back to the Supabase secrets, never block login
+  lineCache = { at: Date.now(), stored: (data?.value ?? {}) as LineStored };
+  return lineCache.stored;
+}
+
+/** Bot token, channel secret, LIFF: saved in ตั้งค่า → Linkage, else the Supabase secrets / built-in LIFF. */
+export async function loadLine(): Promise<LineConfig> {
+  return resolveLine(await lineStored(), {
+    token: Deno.env.get("LINE_MESSAGING_TOKEN"), secret: Deno.env.get("LINE_CHANNEL_SECRET"), channelId: Deno.env.get("LINE_CHANNEL_ID"),
+  });
+}
+
+/** Which OA a token belongs to; null when LINE rejects it. */
+async function botInfo(token: string | null): Promise<{ name: string; basicId: string } | null> {
+  if (!token) return null;
+  try {
+    const r = await fetch("https://api.line.me/v2/bot/info", { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return null;
+    const b = await r.json();
+    return { name: b.displayName, basicId: b.basicId };
+  } catch { return null; }
+}
+
+async function lineView() {
+  const stored = await lineStored(), c = await loadLine();
+  return {
+    liffId: c.liffId,
+    liffSaved: !!stored.liffId,
+    token: masked(c.token), tokenSaved: !!stored.token,
+    secret: masked(c.secret), secretSaved: !!stored.secret,
+    bot: await botInfo(c.token),
+    webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/api`,
+  };
+}
+
+async function saveLine(input: unknown, me: Me) {
+  lineCache = null;
+  let value: LineStored;
+  try { value = normalizeLine(input, await lineStored()); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  // a new token must really work: a wrong one would silently stop every LINE message
+  // deno-lint-ignore no-explicit-any
+  if ((input as any)?.token?.trim() && !(await botInfo(value.token ?? null))) throw new HttpError(400, "LINE ไม่รับ Channel access token นี้ (หมดอายุหรือคัดลอกผิด)");
+  must(await db.from("app_settings").upsert({ key: "line", value, updated_at: new Date().toISOString(), updated_by: me.line_user_id }));
+  lineCache = null;
+  return await lineView();
 }
 
 type Check = { name: string; ok: boolean; detail: string; url?: string | null };
@@ -78,6 +131,12 @@ export async function adminSettingsActions(action: string, body: any, me: Me): P
       must(await images.upload(path, file, { contentType: file.type }));
       return { settings: await save({ [field]: images.getPublicUrl(path).data.publicUrl }, me) };
     }
+
+    case "getLine":
+      return await lineView();
+
+    case "saveLine":
+      return await saveLine(body.line, me);
 
     case "checkLinks":
       return { checks: await checkLinks() };

@@ -84,6 +84,28 @@
       <div class="row tools"><button type="button" class="small secondary" id="checkLinksBtn">ตรวจลิงก์ Google Sheet และ Drive</button></div>
       <ul id="checkList" class="check-list" role="status"></ul>
 
+      <!-- LINE OA linkage: collapsed so nobody changes it by accident; loads only when opened -->
+      <details class="linkage" id="linkage">
+        <summary><h3>การเชื่อมต่อ LINE OA · Linkage</h3></summary>
+        <p class="muted small-note" id="lineNow">กำลังโหลด…</p>
+        <form id="lineForm" autocomplete="off">
+          <label for="lineToken">Channel access token (long-lived) · Messaging API</label>
+          <input id="lineToken" name="token" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
+          <label for="lineSecret">Channel secret · Messaging API → Basic settings</label>
+          <input id="lineSecret" name="secret" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
+          <label for="lineLiff">LIFF ID · LINE Login → LIFF</label>
+          <input id="lineLiff" name="liffId" placeholder="1234567890-AbCdEfGh">
+          <p class="muted small-note">เปลี่ยน OA ใหม่: ใส่ token + secret ของ OA ใหม่ แล้วนำ Webhook URL ด้านล่างไปใส่ใน Messaging API → Webhook settings (เปิด Use webhook) · ถ้า LIFF ID ใหม่ใช้ไม่ได้ แอปจะกลับไปใช้ LIFF เดิมเอง · OA ต่าง provider = LINE ID ของทุกคนเปลี่ยน ต้องลงทะเบียนใหม่</p>
+          <div class="row tools"><button class="small">บันทึกการเชื่อมต่อ</button></div>
+          <p id="lineMsg" role="status"></p>
+        </form>
+        <label for="lineWebhook">Webhook URL</label>
+        <div class="row">
+          <input id="lineWebhook" readonly>
+          <button type="button" class="small secondary" id="lineCopy">คัดลอก</button>
+        </div>
+      </details>
+
       <h3>ประกาศถึงทีม · Broadcast</h3>
       <form id="broadcastForm">
         <select name="to" aria-label="ผู้รับ">
@@ -291,6 +313,37 @@
       } catch (err) { list.replaceChildren(el("li", { className: "error", textContent: "❌ " + err.message })); }
       btn.disabled = false;
     };
+
+    function showLine(v) {
+      const src = (saved) => (saved ? "บันทึกในแอป" : "Supabase secret");
+      $("lineNow").textContent = [
+        v.bot ? `เชื่อมกับ OA: ${v.bot.name} (${v.bot.basicId})` : "❌ LINE ไม่รับ token ปัจจุบัน หรือยังไม่ได้ตั้ง",
+        `token ${v.token ?? "ยังไม่ได้ตั้ง"} (${src(v.tokenSaved)})`,
+        `secret ${v.secret ?? "ยังไม่ได้ตั้ง"} (${src(v.secretSaved)})`,
+        `LIFF ${v.liffId}${v.liffSaved ? "" : " (ค่าเริ่มต้น)"}`,
+      ].join(" · ");
+      $("lineLiff").value = v.liffId;
+      $("lineWebhook").value = v.webhookUrl;
+    }
+    $("linkage").ontoggle = () => {
+      if ($("linkage").open) api("getLine").then(showLine).catch((err) => { $("lineNow").textContent = "❌ " + err.message; });
+    };
+    $("lineForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = f.querySelector("button");
+      if (!confirm("บันทึกการเชื่อมต่อ LINE OA? การแจ้งเตือนทั้งหมดจะใช้ค่าใหม่ทันที")) return;
+      btn.disabled = true;
+      say("lineMsg", true, "กำลังตรวจกับ LINE…");
+      try {
+        showLine(await api("saveLine", { line: { token: f.token.value, secret: f.secret.value, liffId: f.liffId.value } }));
+        f.token.value = f.secret.value = "";
+        say("lineMsg", true, "✅ บันทึกแล้ว · กด \"ทดสอบส่ง LINE ถึงฉัน\" เพื่อตรวจ");
+        loadQuota();
+      } catch (err) { say("lineMsg", false, "❌ " + err.message); }
+      btn.disabled = false;
+    };
+    $("lineCopy").onclick = () => navigator.clipboard.writeText($("lineWebhook").value)
+      .then(() => say("lineMsg", true, "✅ คัดลอก Webhook URL แล้ว"), () => $("lineWebhook").select());
 
     $("broadcastForm").onsubmit = async (e) => {
       e.preventDefault();

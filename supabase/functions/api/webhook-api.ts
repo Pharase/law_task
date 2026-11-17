@@ -3,6 +3,7 @@
 import { postbackReply, sendIdOf, validSignature } from "./linebot.ts";
 import { replyText } from "./notify-api.ts";
 import { loadSheet } from "./sheet.ts";
+import { loadLine } from "./settings-api.ts";
 import { db, HttpError } from "./shared.ts";
 import { submitTask } from "./tasks-api.ts";
 
@@ -22,8 +23,8 @@ async function pressSend(id: number, userId: string): Promise<string> {
 
 /** Returns the HTTP status for LINE. Signature first: without the channel secret nothing is trusted. */
 export async function lineWebhook(raw: string, signature: string | null): Promise<number> {
-  const secret = Deno.env.get("LINE_CHANNEL_SECRET"), token = Deno.env.get("LINE_MESSAGING_TOKEN");
-  if (!secret || !token) { console.error("webhook: LINE_CHANNEL_SECRET or LINE_MESSAGING_TOKEN not set"); return 500; }
+  const { secret, token } = await loadLine();
+  if (!secret || !token) { console.error("webhook: channel secret or access token not set (ตั้งค่า → Linkage)"); return 500; }
   if (!(await validSignature(secret, raw, signature))) return 401;
   const events = (JSON.parse(raw).events ?? []) as { type: string; replyToken?: string; source?: { userId?: string }; postback?: { data?: string } }[];
   for (const ev of events) {

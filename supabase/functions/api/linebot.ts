@@ -2,8 +2,10 @@
 // sendLineFlex), the "ส่งงาน" postback data, the webhook signature check, and the reply wording.
 // Pure: no Deno or npm imports, so node tests run it.
 
-/** The LIFF app (home page = Work dashboard). */
-export const LIFF_URL = "https://liff.line.me/2012450429-k3WOCwtO";
+import { DEFAULT_LIFF_ID, liffUrl } from "./lineconfig.ts";
+
+/** The built-in LIFF app (home page = Work dashboard); the live one comes from loadLine().liffUrl. */
+export const LIFF_URL = liffUrl(DEFAULT_LIFF_ID);
 // No picture on bubbles unless an admin adds one in ตั้งค่า (settings.taskHero / adminHero).
 const PER_CAROUSEL = 12, MAX_MESSAGES = 5; // LINE limits: 12 bubbles per carousel, 5 messages per push
 
@@ -19,7 +21,7 @@ const row = (label: string, value: string, color: string) => ({
   ],
 });
 
-export function taskBubble(t: BubbleTask, hero?: string | null) {
+export function taskBubble(t: BubbleTask, hero?: string | null, app = LIFF_URL) {
   return {
     type: "bubble",
     ...(hero && { hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" } }), // the picture's own shape, nothing cropped
@@ -37,7 +39,7 @@ export function taskBubble(t: BubbleTask, hero?: string | null) {
       type: "box", layout: "vertical", spacing: "sm", flex: 0, contents: [{
         type: "button", style: "primary", height: "sm",
         // opens the LIFF app on this task (attach files + send there); bubbles sent earlier still use the send= postback below
-        action: { type: "uri", label: "ส่งงาน", uri: `${LIFF_URL}?task=${t.id}` },
+        action: { type: "uri", label: "ส่งงาน", uri: `${app}?task=${t.id}` },
       }],
     },
     styles: { body: { separator: true } },
@@ -45,12 +47,12 @@ export function taskBubble(t: BubbleTask, hero?: string | null) {
 }
 
 /** Flex messages for one push: a single bubble, or carousels of 12. Tasks past 60 are left out (caller keeps them unmarked). */
-export function taskMessages(tasks: BubbleTask[], hero?: string | null) {
+export function taskMessages(tasks: BubbleTask[], hero?: string | null, app = LIFF_URL) {
   const altText = `มีงานใหม่รอดำเนินการ ${tasks.length} งาน`;
-  if (tasks.length === 1) return [{ type: "flex", altText, contents: taskBubble(tasks[0], hero) }];
+  if (tasks.length === 1) return [{ type: "flex", altText, contents: taskBubble(tasks[0], hero, app) }];
   const out = [];
   for (let i = 0; i < tasks.length && out.length < MAX_MESSAGES; i += PER_CAROUSEL) {
-    out.push({ type: "flex", altText, contents: { type: "carousel", contents: tasks.slice(i, i + PER_CAROUSEL).map((t) => taskBubble(t, hero)) } });
+    out.push({ type: "flex", altText, contents: { type: "carousel", contents: tasks.slice(i, i + PER_CAROUSEL).map((t) => taskBubble(t, hero, app)) } });
   }
   return out;
 }
