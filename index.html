@@ -6,9 +6,9 @@
   <title>Loliy_Pass</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/app.js?v=20261117"></script>
-  <script src="js/work.js?v=20261118"></script>
+  <script src="js/work.js?v=20261119"></script>
   <script src="js/admin-tasks.js?v=20261128"></script>
-  <link rel="stylesheet" href="css/app.css?v=20261128">
+  <link rel="stylesheet" href="css/app.css?v=20261129">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -106,7 +106,11 @@
         <p class="error" id="newsMsg" role="alert"></p>
       </form>
       <div id="newsList"><p class="loading" role="status"></p></div>
-      <div class="news-more"><button type="button" class="small secondary" id="newsMore" hidden></button></div>
+      <div class="news-more" id="newsPager" hidden>
+        <button type="button" class="small secondary" id="newsPrev" aria-label="ข่าวก่อนหน้า · Previous">‹ ก่อนหน้า</button>
+        <span class="muted" id="newsPage"></span>
+        <button type="button" class="small secondary" id="newsNext" aria-label="ข่าวถัดไป · Next">ถัดไป ›</button>
+      </div>
     </section>
     <section class="card">
       <h2 id="dashTitle">ภาพรวมงาน</h2>

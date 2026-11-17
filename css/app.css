@@ -316,11 +316,17 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .news-form { padding: 10px 0; border-top: 1px solid var(--line); margin-bottom: 6px; }
 .news-item { padding: 12px 10px; border-top: 1px solid var(--line); border-radius: 12px; }
 .news-item.pinned { background: rgba(2, 215, 244, .06); box-shadow: inset 3px 0 0 var(--cyan); }
-.news-head { display: flex; align-items: baseline; gap: 8px; }
+.news-head { display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none; }
+.news-head::-webkit-details-marker { display: none; }
+.news-head::before { content: "▸"; color: var(--ink-2); transition: transform .15s; }
+.news-item[open] > .news-head::before { transform: rotate(90deg); }
+/* unread: a small red LED next to the title */
+.news-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; background: #ff3b5c; box-shadow: 0 0 8px rgba(255, 59, 92, .8); }
 .news-date { font-size: 13px; white-space: nowrap; }
 .news-body { margin: 6px 0 0; color: var(--ink-2); }
 .news-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
-.news-more { display: flex; justify-content: flex-end; margin-top: 6px; }
+.news-more { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 6px; }
+.news-more[hidden] { display: none; }
 
 /* ---- Reports: assigned vs sent line chart ---- */
 .ac-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 4px; font-size: 14px; }

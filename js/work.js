@@ -225,32 +225,45 @@ function groupDocs(groups, docs, keepEmpty = false) {
 }
 
 // ---- Home: ข่าวสาร · News (everyone reads; admins add, pin, delete) ----
-const NEWS_SHOWN = 4; // rows before "ดูทั้งหมด"
+const NEWS_PAGE = 7; // per page, pinned included (pinned come first, so page 1 starts with them)
 async function initNews(me) {
   const admin = me.role === "admin";
-  let items = [], showAll = false;
+  let items = [], page = 0;
   const render = () => {
-    const rows = showAll ? items : items.slice(0, NEWS_SHOWN);
+    const pages = Math.max(1, Math.ceil(items.length / NEWS_PAGE));
+    page = Math.min(page, pages - 1); // a delete can remove the last page
+    const rows = items.slice(page * NEWS_PAGE, (page + 1) * NEWS_PAGE);
     $("newsList").replaceChildren(...(rows.length ? rows.map((n) => {
       const actions = admin && el("div", { className: "news-actions" },
         el("button", { type: "button", className: "small secondary", textContent: n.pinned ? "เลิกปักหมุด" : "📌 ปักหมุด", onclick: () => act("pinNews", { id: n.id, pinned: !n.pinned }) }),
         el("button", { type: "button", className: "small danger", textContent: "ลบ", onclick: () => confirm(`ลบข่าว "${n.title}"?`) && act("deleteNews", { id: n.id }) }));
-      return el("article", { className: "news-item" + (n.pinned ? " pinned" : "") },
-        el("div", { className: "news-head" },
+      const dot = !n.read && el("span", { className: "news-dot", title: "ยังไม่ได้อ่าน · Unread", ariaLabel: "ยังไม่ได้อ่าน" });
+      // collapsed: title only; tap to read (first open marks it read)
+      const item = el("details", { className: "news-item" + (n.pinned ? " pinned" : "") },
+        el("summary", { className: "news-head" },
           n.pinned && el("span", { className: "news-pin", textContent: "📌", title: "ปักหมุด · Pinned" }),
-          el("strong", { className: "grow", textContent: n.title }),
+          el("strong", { className: "grow", textContent: n.title }), dot,
           el("span", { className: "muted news-date", textContent: thDate(n.created_at.slice(0, 10)) })),
         n.body && el("p", { className: "pre news-body", textContent: n.body }),
         actions);
+      item.addEventListener("toggle", () => {
+        if (!item.open || n.read) return;
+        n.read = true;
+        dot?.remove();
+        api("readNews", { id: n.id }).catch(() => { n.read = false; }); // not saved: the dot comes back on the next load
+      });
+      return item;
     }) : [el("p", { className: "muted", textContent: "ยังไม่มีข่าว" })]));
-    const more = items.length > NEWS_SHOWN;
-    $("newsMore").hidden = !more;
-    $("newsMore").textContent = showAll ? "แสดงน้อยลง ▴" : `ดูทั้งหมด (${items.length}) ▾`;
+    $("newsPager").hidden = pages < 2;
+    $("newsPage").textContent = `${page + 1} / ${pages}`;
+    $("newsPrev").disabled = page === 0;
+    $("newsNext").disabled = page >= pages - 1;
   };
   async function act(action, data) {
     try { items = await api(action, data); render(); } catch (err) { alert(err.message); }
   }
-  $("newsMore").onclick = () => { showAll = !showAll; render(); };
+  $("newsPrev").onclick = () => { page--; render(); };
+  $("newsNext").onclick = () => { page++; render(); };
   if (admin) {
     $("newsAddBtn").hidden = false;
     $("newsAddBtn").onclick = () => { $("newsForm").hidden = !$("newsForm").hidden; $("newsTitle").focus(); };
