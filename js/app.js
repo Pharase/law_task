@@ -38,7 +38,7 @@ function renderNav() {
   const here = pageUrl();
   // Logo (Lady Justice) leads the bar and goes Home; it also becomes the tab icon.
   const brand = Object.assign(document.createElement("a"), { className: "brand", href: HOME });
-  brand.append(Object.assign(document.createElement("img"), { src: HOME + "img/logo.png", alt: "law_task · Home" }));
+  brand.append(Object.assign(document.createElement("img"), { src: HOME + "img/logo.png", alt: "Loliy_Pass · Home" }));
   if (!document.querySelector("link[rel=icon]")) {
     document.head.append(Object.assign(document.createElement("link"), { rel: "icon", type: "image/png", href: HOME + "img/logo.png" }));
   }
@@ -86,7 +86,7 @@ function fillLoaders() {
 }
 document.addEventListener("DOMContentLoaded", fillLoaders);
 // credit line at the bottom of every page
-document.addEventListener("DOMContentLoaded", () => document.body.append(Object.assign(document.createElement("footer"), { className: "site-foot", textContent: `© ${new Date().getFullYear()} law_task · Powered by Pharase` })));
+document.addEventListener("DOMContentLoaded", () => document.body.append(Object.assign(document.createElement("footer"), { className: "site-foot", textContent: `© ${new Date().getFullYear()} Loliy_Pass · Powered by Pharase` })));
 
 // ---- Right side of the navbar: (admins) members link with waiting count, who you are, Log out ----
 const ROLE_TEXT = { pending: "Pending approval", member: "Member", admin: "Admin", revoked: "Access revoked" };

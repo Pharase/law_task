@@ -206,7 +206,7 @@ export async function adminNotifyActions(action: string, body: any, me: { line_u
   if (action === "broadcast") return await broadcast(body, me, token, app);
   const quotaLeft = await remainingQuota(token).catch(() => null);
   const messages = action === "testLineAll" ? sampleMessages(await loadSettings(), app)
-    : [linkMessage("✅ ทดสอบการแจ้งเตือนจาก law_task\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", app)];
+    : [linkMessage("✅ ทดสอบการแจ้งเตือนจาก Loliy_Pass\nถ้าเห็นข้อความนี้ แปลว่าการแจ้งเตือนทาง LINE ใช้งานได้", app)];
   const error = await pushMessages(me.line_user_id, messages, token).catch((e) => String(e));
   await db.from("notify_log").insert({ run_date: bangkokDate(new Date()), line_user_id: me.line_user_id, ok: !error, error: error ? "test: " + error : null });
   return { ok: !error, error, quotaLeft: quotaLeft === Infinity ? "unlimited" : quotaLeft };

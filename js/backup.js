@@ -27,7 +27,7 @@ async function downloadBackup(files, status) {
   const flush = async () => {
     if (!ids.length) return;
     status.textContent = `กำลังสร้าง ZIP ส่วนที่ ${part}…`;
-    saveBlob(await zip.generateAsync({ type: "blob" }), `law_task-backup-${day}-part${part}.zip`);
+    saveBlob(await zip.generateAsync({ type: "blob" }), `Loliy_Pass-backup-${day}-part${part}.zip`);
     await api("backupDone", { ids }); // recorded only after this part's download was triggered
     zip = new JSZip(); ids = []; bytes = 0; part++;
   };
