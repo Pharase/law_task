@@ -289,19 +289,6 @@ async function initAssignForm(onCreated) {
   await loadBuildings();
   $("owners").addEventListener("change", () => filterBuildings());
 
-  $("addBuildingBtn").onclick = async () => {
-    const name = $("newBuilding").value.trim();
-    if (!name) return;
-    // one person chosen: the new building goes straight into their responsibility
-    const one = checked("owner").length === 1 ? memberLabel(members.find((m) => m.line_user_id === checked("owner")[0])) : "";
-    const btn = $("addBuildingBtn");
-    if (btn.disabled) return;
-    btn.disabled = true; // a double click would pass the server's "exists?" check twice and append two rows
-    try { const b = await api("addBuilding", { name, owner_name: one }); $("newBuilding").value = ""; await loadBuildings(b.name); }
-    catch (err) { alert(err.message); }
-    btn.disabled = false;
-  };
-
   let saving = false; // one save at a time: a double tap / second click while saving does nothing
   $("createForm").onsubmit = async (e) => {
     e.preventDefault();
@@ -462,6 +449,26 @@ async function initResponsibilities(onChange) {
       : "ดูอย่างเดียว · กด \"เปิดโหมดแก้ไข\" ก่อนย้ายนิติบุคคล";
   }
   $("respEdit").onclick = () => setEditing(!editing);
+
+  // new building lands in "Unassigned"; drag it to a หัวหน้างาน in edit mode
+  $("addBuildingBtn").onclick = async () => {
+    const name = $("newBuilding").value.trim();
+    const btn = $("addBuildingBtn");
+    if (!name || btn.disabled) return;
+    if ([...$("respList").querySelectorAll(".resp-chip")].some((c) => c.dataset.building === name)) return void alert(`มี "${name}" อยู่แล้ว`);
+    btn.disabled = true; // a double click would pass the server's "exists?" check twice and append two rows
+    try {
+      const b = await api("addBuilding", { name, owner_name: NONE });
+      $("newBuilding").value = "";
+      const c = chipFor(b);
+      c.draggable = editing;
+      c.tabIndex = editing ? 0 : -1;
+      zones.get(NONE).append(c);
+      count();
+      onChange?.();
+    } catch (err) { alert(err.message); }
+    btn.disabled = false;
+  };
 
   count();
   $("respList").replaceChildren(...list);

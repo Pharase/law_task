@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>law_task</title>
+  <title>Loliy_Pass</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/app.js?v=20261111"></script>
   <script src="js/work.js?v=20261118"></script>
@@ -16,7 +16,7 @@
   <!-- Logged out (external browser only; inside LINE you are always logged in) -->
   <div class="card" id="loggedOutCard" hidden>
     <h2>Welcome</h2>
-    <p>Log in with your LINE account to use law_task.</p>
+    <p>Log in with your LINE account to use Loliy_Pass.</p>
     <button id="loginBtn">Log in with LINE</button>
   </div>
 
@@ -60,10 +60,6 @@
           </div>
         </div>
         <p class="muted small-note" id="buildingHint"></p>
-        <div class="row">
-          <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
-          <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
-        </div>
         <label for="title">หัวข้องาน · Title</label>
         <input id="title" maxlength="200" required>
         <label for="details">รายละเอียด · Details</label>
@@ -84,6 +80,10 @@
         <button type="button" class="small secondary" id="respEdit" aria-pressed="false">✎ เปิดโหมดแก้ไข</button>
       </div>
       <p class="muted small-note" id="respHelp">ดูอย่างเดียว · กด "เปิดโหมดแก้ไข" ก่อนย้ายนิติบุคคล</p>
+      <div class="row">
+        <input id="newBuilding" placeholder="เพิ่มนิติบุคคลใหม่" aria-label="New building name">
+        <button type="button" class="small" id="addBuildingBtn">เพิ่ม</button>
+      </div>
       <p class="resp-picked" id="respPicked" role="status" hidden></p>
       <div id="respList"><p class="loading" role="status"></p></div>
     </section>
