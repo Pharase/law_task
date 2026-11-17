@@ -111,6 +111,12 @@ input:focus, select:focus, textarea:focus, summary:focus-visible, a:focus-visibl
   outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(2, 215, 244, .22);
 }
 select option { background: #0e1114; color: var(--ink); }
+/* drop-downs look like text boxes: no system look, our own arrow (same height, border and radius) */
+select:not([multiple]) {
+  appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2302d7f4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; background-size: 12px 8px;
+}
 input[type="file"] { padding: 8px; }
 input[type="file"]::file-selector-button { margin-right: 10px; padding: 6px 14px; border: 1px solid rgba(2, 215, 244, .6); border-radius: 999px; color: var(--cyan); background: rgba(17, 69, 84, .35); font: inherit; cursor: pointer; }
 fieldset { border: 1px solid var(--line-2); border-radius: 16px; margin: 0 0 10px; }
@@ -258,6 +264,12 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .dp-pop button { width: auto; margin: 0; box-shadow: none; }
 .dp-pop .dp-nav { width: 32px; height: 32px; padding: 0; font-size: 18px; line-height: 1; color: var(--ink); background: rgba(255, 255, 255, .06); border: 1px solid var(--line); }
 .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+.dp-grid.dp-big { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.dp-pop .dp-big .dp-day { height: 44px; }
+.dp-pop .dp-title { padding: 6px 10px; font-size: 15px; font-weight: 600; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 10px; }
+.dp-pop .dp-title:hover:not(:disabled) { border-color: var(--line-2); background: rgba(255, 255, 255, .06); }
+.dp-pop .dp-title:not(:disabled)::after { content: " ▾"; color: var(--ink-3); font-size: 12px; }
+.dp-pop .dp-title:disabled { opacity: 1; cursor: default; }
 .dp-dow { font-size: 12px; color: var(--ink-3); padding: 4px 0; }
 .dp-pop .dp-day { height: 34px; padding: 0; font-size: 14px; font-weight: 400; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 10px; }
 .dp-pop .dp-day:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }

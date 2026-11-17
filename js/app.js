@@ -325,14 +325,44 @@ function showCalendar(wrap, orig, pick) {
     x.onclick = onclick;
     return x;
   };
+  // zoom: tap the title to go days -> months -> years (12 at a time); picking one zooms back in
+  let view = "day";
+  const minY = orig.min ? Number(orig.min.slice(0, 4)) : -Infinity, maxY = orig.max ? Number(orig.max.slice(0, 4)) : Infinity;
   const render = () => {
+    const head = Object.assign(document.createElement("div"), { className: "dp-head" });
+    const step = (dir) => () => {
+      if (view === "year") y += 12 * dir; else if (view === "month") y += dir; else { m += dir; if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; } }
+      render();
+    };
+    const y0 = y - (((y % 12) + 12) % 12); // first year of this 12-year page
+    const title = view === "year" ? `${y0 + 543} – ${y0 + 554}` : view === "month" ? String(y + 543) : `${TH_MONTHS[m]} ${y + 543}`;
+    const zoom = b(title, "dp-title", () => { if (view !== "year") { view = view === "day" ? "month" : "year"; render(); } },
+      view === "year" ? "ช่วงปี" : "ซูมออก · เลือก" + (view === "day" ? "เดือน" : "ปี"));
+    zoom.disabled = view === "year";
+    const unit = view === "year" ? "12 ปี" : view === "month" ? "ปี" : "เดือน";
+    head.append(b("‹", "dp-nav", step(-1), unit + "ก่อน"), zoom, b("›", "dp-nav", step(1), unit + "ถัดไป"));
+    if (view !== "day") {
+      const big = Object.assign(document.createElement("div"), { className: "dp-grid dp-big" });
+      if (view === "month") {
+        big.append(...TH_MONTHS.map((name, k) => {
+          const c = b(name, "dp-day" + (k === m && y === Number(start.slice(0, 4)) ? " selected" : ""), () => { m = k; view = "day"; render(); }, `${name} ${y + 543}`);
+          const last = isoOf(y, k, new Date(Date.UTC(y, k + 1, 0)).getUTCDate());
+          c.disabled = !!((orig.min && last < orig.min) || (orig.max && isoOf(y, k, 1) > orig.max)); // whole month outside min/max
+          return c;
+        }));
+      } else {
+        for (let k = 0; k < 12; k++) {
+          const yy = y0 + k, c = b(String(yy + 543), "dp-day" + (yy === Number(todayIso().slice(0, 4)) ? " today" : "") + (yy === Number(start.slice(0, 4)) ? " selected" : ""),
+            () => { y = yy; view = "month"; render(); });
+          c.disabled = yy < minY || yy > maxY;
+          big.append(c);
+        }
+      }
+      pop.replaceChildren(head, big);
+      return;
+    }
     const first = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7; // Monday = 0
     const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    const head = Object.assign(document.createElement("div"), { className: "dp-head" });
-    head.append(
-      b("‹", "dp-nav", () => { if (m === 0) { m = 11; y--; } else m--; render(); }, "เดือนก่อน"),
-      Object.assign(document.createElement("strong"), { textContent: `${TH_MONTHS[m]} ${y + 543}` }),
-      b("›", "dp-nav", () => { if (m === 11) { m = 0; y++; } else m++; render(); }, "เดือนถัดไป"));
     const grid = Object.assign(document.createElement("div"), { className: "dp-grid" });
     grid.append(...TH_WEEK.map((d) => Object.assign(document.createElement("span"), { className: "dp-dow", textContent: d })));
     for (let i = 0; i < first; i++) grid.append(document.createElement("span"));
