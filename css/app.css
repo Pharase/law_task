@@ -154,8 +154,8 @@ button.danger:hover { background: rgba(255, 107, 107, .16); }
 .task { border-top: 1px solid var(--line); padding: 10px 0 10px 10px; }
 .task summary { cursor: pointer; line-height: 1.6; border-radius: 8px; }
 .task summary .badge { margin-left: 6px; }
-.task summary .notify { float: right; margin-left: 8px; white-space: nowrap; font-size: .85em; }
-.task summary .notify button { padding: 0 6px; margin-left: 4px; border: 0; background: none; font-size: 1.1em; cursor: pointer; }
+.task summary .notify { float: right; display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; white-space: nowrap; font-size: .85em; }
+.task summary .notify .icon-btn { width: 28px; height: 28px; font-size: 14px; }
 .task-body { padding: 8px 0 0; }
 .overdue { border-left: 3px solid var(--danger); }
 .timeline { padding-left: 20px; margin: 4px 0; color: var(--ink-2); }

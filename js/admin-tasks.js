@@ -30,7 +30,7 @@ function notifyStatus(t) {
   const box = el("span", { className: "notify " + (sent ? "muted" : "error"),
     textContent: sent ? `🔔 แจ้งแล้ว ${thDate(bkkDay(t.member_notified_at))}` : "🔕 ยังไม่แจ้ง" });
   if (t.state !== "on_process") return box; // the card has a ส่งงาน button: only useful while the task is open
-  const btn = el("button", { type: "button", textContent: "📨", title: "ส่งแจ้งเตือนงานนี้ทาง LINE อีกครั้ง", ariaLabel: "ส่งแจ้งเตือนอีกครั้ง" });
+  const btn = el("button", { type: "button", className: "icon-btn", textContent: "📨", title: "ส่งแจ้งเตือนงานนี้ทาง LINE อีกครั้ง", ariaLabel: "ส่งแจ้งเตือนอีกครั้ง" });
   btn.onclick = async (e) => {
     e.preventDefault(); // inside <summary>: don't open / close the task
     if (btn.disabled || !confirm(`ส่งแจ้งเตือน "${t.title}" ถึง ${t.owner_name} ทาง LINE อีกครั้ง?`)) return;
