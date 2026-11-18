@@ -131,7 +131,7 @@
             try { draw(await api("deleteInvoiceFile", { id: inv.id, fileId: f.id })); } catch (err) { msg.textContent = "❌ " + err.message; e.currentTarget.disabled = false; }
           } })))
           : [el("p", { className: "muted", textContent: "ยังไม่มีไฟล์แนบ" })]),
-        isAdmin && el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() }),
+        ...(isAdmin ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []), // replaceChildren would print a bare false as text
         msg);
       const pick = el("input", { type: "file", multiple: true, accept: "application/pdf,image/jpeg,image/png,image/webp", onchange: async () => {
         const picked = [...pick.files];
