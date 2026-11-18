@@ -36,7 +36,7 @@ function adminTaskBody(t) {
     el("p", { className: "muted", textContent: `${t.owner_name} · ${STATE_TEXT[t.state]} · เดิม ${thDate(t.due_on)} · ปัจจุบัน ${thDate(t.current_due_on)}` }),
     t.details && el("p", { className: "pre", textContent: t.details }),
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
-    t.state === "submitted" && taskFolderButton(t),
+    taskFolderButton(t), // every task, so old (history) tasks' sent files can be opened too
     t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
       `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)}) → ${OUTCOME_TEXT[s.outcome]}`,
       s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
@@ -153,9 +153,29 @@ async function loadList() {
     state: $("fState").value || undefined,
     overdue: $("fOverdue").checked || undefined,
   });
-  $("allList").replaceChildren(...(list.length
-    ? list.map((t) => el("details", { className: "task" }, summaryLine(t), adminTaskBody(t), editControls(t)))
+  allTasks = list.sort((a, b) => b.id - a.id); // newest first, so page 1 is the latest work and old tasks are further back
+  renderAll(); // keeps the page after an edit / cancel (renderAll clamps it)
+}
+
+// All tasks: 20 per page, after the 🔍 search (text match on what the filters loaded)
+const ALL_PAGE = 20;
+let allTasks = [], allPage = 0;
+const taskText = (t) => [`#${t.id}`, t.id, t.title, t.details, t.owner_name, t.building, ...t.tags, STATE_TEXT[t.state],
+  ...t.sends.map((s) => s.fix_note), ...t.files.map((f) => f.name)].filter(Boolean).join(" ").toLowerCase();
+function renderAll() {
+  const q = $("fQ").value.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean); // every word must match, in any field
+  const shown = words.length ? allTasks.filter((t) => { const s = taskText(t); return words.every((w) => s.includes(w)); }) : allTasks;
+  const pages = Math.max(1, Math.ceil(shown.length / ALL_PAGE));
+  allPage = Math.min(allPage, pages - 1);
+  $("allCount").textContent = shown.length;
+  $("allList").replaceChildren(...(shown.length
+    ? shown.slice(allPage * ALL_PAGE, (allPage + 1) * ALL_PAGE).map((t) => el("details", { className: "task" }, summaryLine(t), adminTaskBody(t), editControls(t)))
     : [el("p", { className: "muted", textContent: "ไม่พบงาน" })]));
+  $("allPager").hidden = pages < 2;
+  $("allPage").textContent = `${allPage + 1} / ${pages}`;
+  $("allPrev").disabled = allPage === 0;
+  $("allNext").disabled = allPage >= pages - 1;
 }
 
 // performance columns: emoji + one short word (fits phones); tap for the full name and how it is scored
@@ -363,7 +383,18 @@ async function initTracking() {
   members = await api("listMembers");
   $("fOwner").append(...members.map((m) => option(m.line_user_id, m.staff_name || m.display_name)));
   await loadBuildings();
-  for (const id of ["fOwner", "fBuilding", "fState", "fOverdue"]) $(id).onchange = () => loadList();
+  for (const id of ["fOwner", "fBuilding", "fState", "fOverdue"]) $(id).onchange = () => { allPage = 0; loadList(); };
+  const top = () => $("allList").closest(".card").scrollIntoView({ block: "start" });
+  $("allPrev").onclick = () => { allPage--; renderAll(); top(); };
+  $("allNext").onclick = () => { allPage++; renderAll(); top(); };
+  $("fQ").oninput = () => { allPage = 0; renderAll(); };
+  $("searchBtn").onclick = () => {
+    const on = $("fQ").hidden; // opening
+    $("fQ").hidden = !on;
+    $("searchBtn").setAttribute("aria-expanded", String(on));
+    if (on) $("fQ").focus();
+    else if ($("fQ").value) { $("fQ").value = ""; allPage = 0; renderAll(); } // closing clears the search
+  };
   loadAll();
 }
 

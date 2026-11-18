@@ -7,7 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261121"></script>
-  <script src="../js/admin-tasks.js?v=20261130"></script>
+  <script src="../js/admin-tasks.js?v=20261131"></script>
   <script src="../js/backup.js?v=20261117"></script>
   <link rel="stylesheet" href="../css/app.css?v=20261134">
 </head>
@@ -27,8 +27,11 @@
 
     <section class="card">
       <div class="row card-head">
-        <h2 class="grow">งานทั้งหมด · All tasks</h2>
+        <h2 class="grow">งานทั้งหมด · All tasks <span id="allCount" class="badge"></span></h2>
+        <button type="button" class="icon-btn" id="searchBtn" title="ค้นหางาน" aria-label="ค้นหางาน" aria-expanded="false">🔍</button>
       </div>
+      <!-- searches what is loaded for the filters below: subject, details, member, building, tags, notes, task number -->
+      <input type="search" id="fQ" placeholder="ค้นหา ชื่องาน รายละเอียด ชื่อคน นิติบุคคล หมวด เลขงาน" aria-label="ค้นหางาน" hidden>
       <div class="row filters">
         <select id="fOwner" aria-label="Member"><option value="">ทุกคน</option></select>
         <select id="fBuilding" aria-label="Building"><option value="">นิติบุคคล: ไม่กรอง · Any building</option></select>
@@ -39,6 +42,11 @@
         <label class="inline"><input type="checkbox" id="fOverdue"> เลยกำหนด</label>
       </div>
       <div id="allList"></div>
+      <div class="news-more" id="allPager" hidden>
+        <button type="button" class="small secondary" id="allPrev" aria-label="หน้าก่อนหน้า · Previous">‹ ก่อนหน้า</button>
+        <span class="muted" id="allPage"></span>
+        <button type="button" class="small secondary" id="allNext" aria-label="หน้าถัดไป · Next">ถัดไป ›</button>
+      </div>
     </section>
   </div>
 
