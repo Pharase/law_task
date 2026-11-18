@@ -288,8 +288,14 @@ function invoiceUpload(id, folder, name, mime, base64) {
   if (!base64) throw new Error("empty file");
   // a lock: two uploads to a new invoice at once must not make two folders
   var dir = withLock(function () { return invoiceFolder(id, folder, true); });
-  dir.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime || undefined, name));
-  return { ok: true };
+  var made = dir.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime || undefined, name));
+  // same name = a new version: the older copies go to the trash only now, after the new file is safely in Drive
+  var same = dir.getFilesByName(name), replaced = [];
+  while (same.hasNext()) {
+    var f = same.next();
+    if (f.getId() !== made.getId() && !f.isTrashed()) { f.setTrashed(true); replaced.push(f.getId()); }
+  }
+  return { ok: true, replaced: replaced };
 }
 
 /** A file of this invoice's folder only, so an id cannot reach any other Drive file. */

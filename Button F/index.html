@@ -136,8 +136,8 @@
       const pick = el("input", { type: "file", multiple: true, accept: "application/pdf,image/jpeg,image/png,image/webp", onchange: async () => {
         const picked = [...pick.files];
         pick.value = "";
-        try { const files = await uploadInvoiceFiles(inv.id, picked, (t) => { msg.textContent = t; }); if (files) draw(files); msg.textContent = ""; }
-        catch (err) { msg.textContent = "❌ " + err.message; }
+        const { list } = await uploadInvoiceFiles(inv.id, picked, (t) => { msg.textContent = t; });
+        if (list) draw(list); // draw keeps msg, so a failure note stays visible
       } });
       box.replaceChildren(el("p", { className: "muted", textContent: "กำลังโหลด…" }));
       api("invoiceFiles", { id: inv.id }).then(draw, (err) => box.replaceChildren(el("p", { className: "error", textContent: err.message })));
@@ -181,17 +181,23 @@
       btn.disabled = false;
     }
 
-    /** One by one, original files unchanged, all into the invoice's one Drive folder; returns its files after the last upload. */
+    /**
+     * One by one, original files unchanged, all into the invoice's one Drive folder. A file with the same name as one
+     * already there replaces it (Drive keeps only the newest); a file that fails is skipped and the old version stays.
+     * Returns the folder's files after the last good upload (null if none) and the files that failed, with why.
+     */
     async function uploadInvoiceFiles(id, files, say) {
       let list = null;
+      const failed = [];
       for (const [i, file] of files.entries()) {
         say(`กำลังอัปโหลด ${i + 1}/${files.length}: ${file.name}`);
         const form = new FormData();
         form.append("id", id);
         form.append("file", file);
-        list = await api("uploadInvoiceFile", form);
+        try { list = await api("uploadInvoiceFile", form); } catch (err) { failed.push({ file, why: err.message }); }
       }
-      return list;
+      say(failed.length ? `❌ อัปโหลดไม่สำเร็จ ${failed.length} ไฟล์ (ไฟล์เดิมยังอยู่): ` + failed.map((x) => `${x.file.name} — ${x.why}`).join(" · ") : "");
+      return { list, failed: failed.map((x) => x.file) };
     }
 
     // Status as a track: 5 points left -> right, filled with an orange -> yellow -> green -> blue gradient up to the
@@ -326,8 +332,13 @@
         render();
         f.elements.id.value = savedId; // if an upload fails, Save again edits this invoice instead of adding another
         const files = [...$("fFiles").files];
-        if (files.length) await uploadInvoiceFiles(savedId, files, (t) => { $("formMsg").textContent = t; });
-        f.hidden = true;
+        const { failed } = files.length ? await uploadInvoiceFiles(savedId, files, (t) => { $("formMsg").textContent = t; }) : { failed: [] };
+        if (failed.length) {
+          // keep only the failed files picked, so Save again retries just those
+          const keep = new DataTransfer();
+          failed.forEach((x) => keep.items.add(x));
+          $("fFiles").files = keep.files;
+        } else f.hidden = true;
       } catch (err) { $("formMsg").textContent = err.message; }
       btn.disabled = false;
     };

@@ -88,6 +88,12 @@ export async function memberInvoiceActions(action: string, body: any, me: Me): P
   return undefined;
 }
 
+/** Removes the app's cached copies of a Drive file that was deleted or replaced. */
+async function dropCache(fileId: string) {
+  const cached = (await cache.list(fileId)).data ?? [];
+  if (cached.length) await cache.remove(cached.map((o) => `${fileId}/${o.name}`));
+}
+
 // deno-lint-ignore no-explicit-any
 export async function adminInvoiceActions(action: string, body: any, me: Me): Promise<unknown> {
   switch (action) {
@@ -114,9 +120,11 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       if (!MIME_EXT[file.type]) throw new HttpError(400, "only JPG, PNG, WEBP or PDF");
       if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
       const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
-      await sheet("invoiceUpload", {
+      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
+      const { replaced = [] } = await sheet("invoiceUpload", {
         id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
       }, 60_000);
+      await Promise.all((replaced as string[]).map(dropCache));
       return driveFiles(inv);
     }
 
@@ -124,8 +132,7 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       const inv = await invoiceFor(me, body.id);
       const fileId = String(body.fileId ?? "");
       await sheet("invoiceFileDelete", { id: inv.id, fileId }); // to Drive's trash: restorable there for 30 days
-      const cached = (await cache.list(fileId)).data ?? [];
-      if (cached.length) await cache.remove(cached.map((o) => `${fileId}/${o.name}`));
+      await dropCache(fileId);
       return driveFiles(inv);
     }
   }
