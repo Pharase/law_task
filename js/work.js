@@ -105,7 +105,7 @@ function taskFilesBox(task) {
           e.currentTarget.disabled = true;
           try { draw(await api("deleteTaskFile", { task_id: task.id, fileId: f.id })); } catch (err) { fail(err); e.currentTarget.disabled = false; }
         } }))))
-      : el("p", { className: "muted", textContent: "ยังไม่มีไฟล์" }),
+      : el("p", { className: "muted", textContent: "ไม่มีไฟล์แนบ" }),
     ...(canEdit ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []),
     msg);
   const pick = el("input", { type: "file", multiple: true, onchange: async () => {

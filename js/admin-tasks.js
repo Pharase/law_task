@@ -18,7 +18,7 @@ function taskFolderButton(t) {
     msg.textContent = " กำลังเปิด…";
     try {
       const { url, files } = await api("taskFiles", { task_id: t.id });
-      if (!url) { win?.close(); msg.textContent = " ยังไม่มีไฟล์แนบในงานนี้"; }
+      if (!url) { win?.close(); msg.textContent = " ไม่มีไฟล์แนบ"; }
       else { if (win) win.location = url; else openFile(url, true); msg.textContent = ` ${files.length} ไฟล์`; }
     } catch (err) { win?.close(); msg.textContent = " ❌ " + err.message; }
     btn.disabled = false;

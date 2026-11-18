@@ -5,7 +5,7 @@
 // `invoice-files` bucket (path = fileId/modifiedMs.ext) and opened by a signed link, like the monthly reports.
 import { base64 } from "./archive.ts";
 import { BUILDING_TYPES, type Invoice, invoiceCells, invoiceFolderName, parseInvoices, visibleInvoices } from "./invoices.ts";
-import { batch, sheet } from "./sheet.ts";
+import { batch, isUnknownOp, scriptTooOld, sheet } from "./sheet.ts";
 import { db, HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
 import type { Row } from "./sheetRows.ts";
 
@@ -47,8 +47,9 @@ async function invoiceFor(me: Me, id: unknown): Promise<Invoice> {
 
 /** Files in the invoice's Drive folder, oldest first; the script also renames the folder if the invoice was edited. */
 async function driveFiles(inv: Invoice): Promise<DriveFile[]> {
-  const { files } = await sheet("invoiceFiles", { id: inv.id, folder: invoiceFolderName(inv) }, 30_000);
-  if (!files) throw new HttpError(502, "the script does not know invoice files yet: clasp push + Deploy → New version");
+  // script not redeployed yet: nothing can have been uploaded, so show "ไม่มีไฟล์แนบ" instead of an error
+  const { files = [] } = await sheet("invoiceFiles", { id: inv.id, folder: invoiceFolderName(inv) }, 30_000)
+    .catch((e) => { if (isUnknownOp(e)) return { files: [] }; throw e; });
   return (files as DriveFile[]).sort((a, b) => a.modified.localeCompare(b.modified));
 }
 
@@ -123,7 +124,7 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
       const { replaced = [] } = await sheet("invoiceUpload", {
         id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
-      }, 60_000);
+      }, 60_000).catch(scriptTooOld);
       await Promise.all((replaced as string[]).map(dropCache));
       return driveFiles(inv);
     }

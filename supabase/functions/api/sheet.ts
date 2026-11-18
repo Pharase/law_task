@@ -74,3 +74,11 @@ export async function loadSheet(): Promise<SheetData> {
 export async function syncMembers(people: Person[]) {
   await sheet("replaceMembers", { rows: people.map(({ line_user_id, name, role }) => ({ line_user_id, name, role })) });
 }
+
+/** The live script is older than this code (Apps Script not redeployed: Deploy → New version). */
+export const isUnknownOp = (e: unknown) => e instanceof Error && /unknown op/.test(e.message);
+/** Uploads to Drive when the script is older than this code: say what to do instead of "unknown op". */
+export const scriptTooOld = (e: unknown) => {
+  if (isUnknownOp(e)) throw new HttpError(503, "ยังแนบไฟล์ไม่ได้: แอดมินต้อง Deploy → New version ใน Apps Script ก่อน");
+  throw e;
+};

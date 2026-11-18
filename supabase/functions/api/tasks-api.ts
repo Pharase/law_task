@@ -2,7 +2,7 @@
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
 import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows } from "./scoring.ts";
-import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
+import { batch, isUnknownOp, loadBuildingRows, scriptTooOld, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { archiveFiles, base64 } from "./archive.ts";
 import { taskFolderName } from "./driveName.ts";
@@ -76,9 +76,10 @@ const TASK_MAX_BYTES = 25 * 1024 * 1024; // the file travels base64 in one reque
 
 /** Files in the task's Drive folder (oldest first) and the folder link; the script renames the folder if the task was edited. */
 async function taskDrive(task: Task): Promise<{ files: Row[]; url: string | null }> {
-  const r = await sheet("taskFiles", { id: task.id, folder: taskFolderName(task) }, 30_000);
-  if (!r.files) throw new HttpError(502, "the script does not know task files yet: clasp push + Deploy → New version");
-  return { files: (r.files as Row[]).sort((a, b) => a.modified.localeCompare(b.modified)), url: r.url ?? null };
+  // script not redeployed yet: nothing can have been uploaded, so show "ไม่มีไฟล์แนบ" instead of an error
+  const r = await sheet("taskFiles", { id: task.id, folder: taskFolderName(task) }, 30_000)
+    .catch((e) => { if (isUnknownOp(e)) return { files: [], url: null }; throw e; });
+  return { files: ((r.files ?? []) as Row[]).sort((a, b) => a.modified.localeCompare(b.modified)), url: r.url ?? null };
 }
 
 /** Files change only on your own task while it is open (กำลังดำเนินการ, including a fix round). */
@@ -166,7 +167,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       await sheet("taskUpload", {
         id: task.id, folder: taskFolderName(task), name, mime: file.type || "application/octet-stream",
         base64: base64(new Uint8Array(await file.arrayBuffer())),
-      }, 90_000);
+      }, 90_000).catch(scriptTooOld);
       return taskDrive(task);
     }
 
