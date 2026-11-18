@@ -7,7 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261119"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261133">
+  <link rel="stylesheet" href="../css/app.css?v=20261134">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -51,7 +51,7 @@
           <button class="small">บันทึก · Save</button>
           <button type="button" class="small secondary" id="cancelBtn">ยกเลิก</button>
         </div>
-        <p id="formMsg" class="error" role="alert"></p>
+        <p id="formMsg" class="error upload-msg" role="alert"></p>
       </form>
 
       <div class="inv-warn" id="invWarn" hidden>
@@ -117,7 +117,7 @@
       box = el("div", { className: "inv-files" });
       row.append(box);
       btn.setAttribute("aria-expanded", "true");
-      const msg = el("p", { className: "muted small-note", role: "status" });
+      const msg = el("p", { className: "muted small-note upload-msg", role: "status" });
       const draw = (files) => box.replaceChildren(
         ...(files.length ? files.map((f) => el("div", { className: "inv-file" },
           el("span", { className: "inv-file-name", textContent: fileIcon(f) + f.name }),
