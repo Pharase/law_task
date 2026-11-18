@@ -1,7 +1,7 @@
 // The only door into the database. Every request carries the LINE ID token in
 // `x-line-id-token`; we verify it with LINE, then act with the service role.
 import { newCode, normalizeCode } from "./codes.ts";
-import { bucket, db, found, HttpError, must } from "./shared.ts";
+import { bucket, db, found, HttpError, MAX_BYTES, MIME_EXT, must } from "./shared.ts";
 import { adminTaskActions, memberTaskActions } from "./tasks-api.ts";
 import { adminExDocActions, memberExDocActions } from "./exdocs-api.ts";
 import { adminBackupActions, cleanup } from "./backup-api.ts";
@@ -19,10 +19,6 @@ const MEMBER_HANDLERS = [memberTaskActions, memberExDocActions, memberInvoiceAct
 const ADMIN_HANDLERS = [adminTaskActions, adminExDocActions, adminBackupActions, adminInvoiceActions, adminNewsActions, adminNotifyActions, adminLienActions, adminSettingsActions];
 
 const MAX_WRONG_CODES = 5;
-const MAX_BYTES = 10 * 1024 * 1024;
-const MIME_EXT: Record<string, string> = {
-  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
-}; // no HEIC: only Apple devices can display it
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { INVOICE_STATUS, invoiceCells, parseInvoices } from "./invoices.ts";
+import { INVOICE_STATUS, invoiceCells, invoiceFolderName, parseInvoices } from "./invoices.ts";
 
 const types = new Map([["B1", "บ้านจัดสรร"], ["B2", "อาคารชุด"], ["B3", ""]]);
 const row = (over: Record<string, string> = {}) => ({
@@ -97,4 +97,11 @@ test("a row typed without an id still shows (read-only: id <= 0) and is listed f
   assert.equal(invoices.length, 1);
   assert.equal(invoices[0].id, -7);
   assert.deepEqual(bad.map((b) => b.row), [7]);
+});
+
+test("invoiceFolderName: Bangkok date-building-subject-lawyer, Drive-unsafe characters dropped, no lawyer = no dash", () => {
+  const inv = { building: "ไฮคอนโด ท่าศาลา 2", subject: "คชจ/ชั้นโนติส", lawyer: "ตั้ม", created_at: "2026-11-16T18:30:00Z", billed_on: null };
+  assert.equal(invoiceFolderName(inv), "2026-11-17-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส-ตั้ม");
+  assert.equal(invoiceFolderName({ ...inv, lawyer: null }), "2026-11-17-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส");
+  assert.equal(invoiceFolderName({ ...inv, created_at: "", billed_on: "2026-11-01" }), "2026-11-01-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส-ตั้ม");
 });

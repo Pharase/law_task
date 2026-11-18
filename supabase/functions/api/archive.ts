@@ -8,7 +8,7 @@ import { bucket, db, must } from "./shared.ts";
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
-function base64(bytes: Uint8Array): string {
+export function base64(bytes: Uint8Array): string {
   let s = "";
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);

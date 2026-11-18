@@ -108,6 +108,14 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 3. `cd gscript && npx @google/clasp push --force`, then run **`checkUploads`** once (Google asks for Drive write permission).
 4. **Deploy → Manage deployments → edit → New version.**
 
+**Invoice files 📎 (added later; do once):**
+1. Pushing to `main` adds the `invoice-files` bucket (a cache for opening files in the app) and deploys `api`.
+2. Make a Drive folder for invoice files. In **Script properties** add `INVOICE_FOLDER_ID` = its id (`/folders/<id>`). Each invoice gets a sub-folder `<date added>-<building>-<subject>-<lawyer>`, renamed when the invoice is edited.
+3. `cd gscript && npx @google/clasp push --force`, then run **`checkInvoiceFolder`** once (Google asks for Drive permission).
+4. **Deploy → Manage deployments → edit → New version.**
+
+Admins add files in the invoice form (under หมายเหตุ) or with **📎 → + แนบไฟล์**, and delete with 🗑️ (to Drive's trash). Everyone who sees the invoice can tap 📎 and open a file (PDF / picture) to view or print it.
+
 **News (Home):** the same **`setup`** run also adds the **News** tab. Admins post, pin (📌, kept on top) and delete news on Home; deleting only fills `deleted_at`, the row stays in the sheet.
 
 **ข้อมูลการมอบหมาย (which หัวหน้างาน looks after which building):** run **`setup`** again once to add the **owner** column to **Buildings**. Admins then drag buildings between people on Home → ข้อมูลการมอบหมาย (on phones: tap a building, then tap the person), or pick names in the sheet. The assign form shows only the chosen person’s buildings, and the server refuses a building outside their responsibility. People with no buildings yet are not restricted.

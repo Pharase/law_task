@@ -11,3 +11,9 @@ export const must = ({ data, error }: { data: any; error: unknown }): any => { i
 export const found = <T>(row: T | null, what = "user") => { if (!row) throw new HttpError(404, `${what} not found`); return row; };
 
 export type Me = { line_user_id: string; role: string };
+
+/** Uploads: these types only (no HEIC: only Apple devices can display it), max 10 MB. */
+export const MAX_BYTES = 10 * 1024 * 1024;
+export const MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+};

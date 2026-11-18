@@ -1,6 +1,8 @@
 // Invoices (Invoice tab): rows in the Google Sheet "Invoices" tab <-> typed invoices. Pure: no Deno or npm imports.
 import { type Bad, normDate, type Row } from "./sheetRows.ts";
 import { isAllBuildings } from "./responsibility.ts";
+import { bangkokDate } from "./dates.ts";
+import { clean } from "./driveName.ts";
 
 export const INVOICE_STATUS = ["รอทนายวางบิล", "รอนิติชำระเงิน", "รอทนายส่งใบเสร็จ", "เสร็จสิ้น"] as const;
 /** Old status names (before 2026-11-09) -> the new ones, so older rows keep showing. */
@@ -81,6 +83,13 @@ export function invoiceCells(body: Record<string, unknown>, buildings: string[])
   const note = s("note");
   if (note.length > 1000) throw new Error("note is over 1000 characters");
   return { ...out, status, note };
+}
+
+/** Drive folder for an invoice's files: "2026-11-17-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส-ตั้ม" (date = day it was added, Bangkok). */
+export function invoiceFolderName(inv: Pick<Invoice, "building" | "subject" | "lawyer" | "created_at" | "billed_on">): string {
+  const made = new Date(inv.created_at);
+  const day = isNaN(made.getTime()) ? inv.billed_on ?? "" : bangkokDate(made);
+  return [day, inv.building, inv.subject, inv.lawyer ?? ""].map(clean).filter(Boolean).join("-");
 }
 
 /**
