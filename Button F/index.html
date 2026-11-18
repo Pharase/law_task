@@ -7,7 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261119"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261132">
+  <link rel="stylesheet" href="../css/app.css?v=20261133">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -120,8 +120,11 @@
       const msg = el("p", { className: "muted small-note", role: "status" });
       const draw = (files) => box.replaceChildren(
         ...(files.length ? files.map((f) => el("div", { className: "inv-file" },
-          el("button", { type: "button", className: "inv-file-name", textContent: fileIcon(f) + f.name, title: "เปิด / พิมพ์",
+          el("span", { className: "inv-file-name", textContent: fileIcon(f) + f.name }),
+          el("button", { type: "button", className: "icon-btn", textContent: "👁️", title: "ดู", ariaLabel: "ดู " + f.name,
             onclick: (e) => openInvoiceFile(inv, f, e.currentTarget, msg) }),
+          el("button", { type: "button", className: "icon-btn", textContent: "🖨️", title: "พิมพ์", ariaLabel: "พิมพ์ " + f.name,
+            onclick: (e) => printInvoiceFile(inv, f, e.currentTarget, msg) }),
           isAdmin && el("button", { type: "button", className: "icon-btn", textContent: "🗑️", title: "ลบ", ariaLabel: "ลบ " + f.name, onclick: async (e) => {
             if (!confirm(`ลบไฟล์ "${f.name}" ? (ไปที่ถังขยะของ Google Drive)`)) return;
             e.currentTarget.disabled = true;
@@ -153,14 +156,39 @@
       btn.disabled = false;
     }
 
-    /** One by one (pictures shrunk like ส่งงาน); returns the folder's files after the last upload. */
+    // Print: on a computer the file is loaded into a hidden frame and the print dialog opens right here.
+    // Phones (and the LINE app) can't print a frame: the file opens instead, print from its share / ⋮ menu.
+    async function printInvoiceFile(inv, f, btn, msg) {
+      if (liff.isInClient() || matchMedia("(pointer: coarse)").matches) {
+        await openInvoiceFile(inv, f, btn, msg);
+        msg.textContent = "สั่งพิมพ์จากเมนูของหน้าที่เปิด (แชร์ / ⋮ → พิมพ์)";
+        return;
+      }
+      btn.disabled = true;
+      msg.textContent = "กำลังเตรียมพิมพ์…";
+      try {
+        const { previewUrl } = await api("invoiceFileUrl", { id: inv.id, fileId: f.id });
+        const res = await fetch(previewUrl);
+        if (!res.ok) throw new Error("โหลดไฟล์ไม่ได้ (" + res.status + ")");
+        const url = URL.createObjectURL(await res.blob()); // same-origin copy: only then may this page call print() on it
+        document.getElementById("printFrame")?.remove();
+        const frame = el("iframe", { id: "printFrame", title: "print", style: "position:fixed;width:0;height:0;border:0;right:0;bottom:0" });
+        frame.onload = () => { frame.contentWindow.focus(); frame.contentWindow.print(); msg.textContent = ""; };
+        if (f.mime.startsWith("image/")) frame.srcdoc = `<style>@page{margin:10mm}body{margin:0}img{display:block;max-width:100%;max-height:100vh;margin:auto}</style><img src="${url}">`;
+        else frame.src = url;
+        document.body.append(frame);
+      } catch (err) { msg.textContent = "❌ " + err.message; }
+      btn.disabled = false;
+    }
+
+    /** One by one, original files unchanged, all into the invoice's one Drive folder; returns its files after the last upload. */
     async function uploadInvoiceFiles(id, files, say) {
       let list = null;
       for (const [i, file] of files.entries()) {
         say(`กำลังอัปโหลด ${i + 1}/${files.length}: ${file.name}`);
         const form = new FormData();
         form.append("id", id);
-        form.append("file", await shrinkImage(file));
+        form.append("file", file);
         list = await api("uploadInvoiceFile", form);
       }
       return list;

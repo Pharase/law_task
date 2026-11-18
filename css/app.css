@@ -415,8 +415,7 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .inv-row > .grow { flex: 1 1 0; min-width: 0; }
 .inv-files { flex: 1 1 100%; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); }
 .inv-file { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.inv-file-name { flex: 1; min-width: 0; width: auto; margin: 0; padding: 6px 4px; text-align: left; overflow-wrap: anywhere; color: var(--cyan); background: none; border: 0; box-shadow: none; }
-.inv-file-name:hover { background: none; box-shadow: none; text-decoration: underline; }
+.inv-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .inv-row .inv-edit, .icon-btn { width: 32px; height: 32px; padding: 0; margin: 0; display: grid; place-items: center; font-size: 15px; border-radius: 10px; background: rgba(255, 255, 255, .05); border: 1px solid var(--line-2); box-shadow: none; }
 .inv-row .inv-edit:hover, .icon-btn:hover { border-color: var(--cyan); background: rgba(17, 69, 84, .4); }
 
