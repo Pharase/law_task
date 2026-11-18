@@ -167,3 +167,18 @@ export function recentTaskKeys(tasks: Pick<Task, "owner" | "building" | "title" 
     .filter((t) => t.created_by === adminId && t.state !== "cancelled" && nowMs - Date.parse(t.created_at) <= windowMs)
     .map((t) => taskKey(t.owner, t.building, t.title, t.due_on)));
 }
+
+/**
+ * Which tabs an Apps Script op writes, so their cached copies can be dropped: a list, null = every tab,
+ * undefined = the op writes no sheet tab (reads, Drive files).
+ */
+// deno-lint-ignore no-explicit-any
+export function writtenTabs(op: string, p: Record<string, any>): string[] | null | undefined {
+  switch (op) {
+    case "append": case "update": case "deleteRows": return p.tab ? [String(p.tab)] : null;
+    case "batch": return [...new Set(((p.steps ?? []) as { tab?: string }[]).map((s) => String(s.tab ?? "")))].filter(Boolean);
+    case "replaceMembers": return ["Members"];
+    case "setup": return null;
+  }
+  return undefined;
+}

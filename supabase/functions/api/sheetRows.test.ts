@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normDate, parseReply, parseSends, parseTasks, scoredSends, SheetDown, taskCells, toPeople, type Task } from "./sheetRows.ts";
+import { normDate, parseReply, parseSends, parseTasks, scoredSends, SheetDown, taskCells, toPeople, type Task, writtenTabs } from "./sheetRows.ts";
 
 const people = [
   { line_user_id: "U1", name: "Ann", role: "member" },
@@ -159,4 +159,13 @@ test("recentTaskKeys: same admin, same owner/building/title/due within 2 minutes
     t({ building: "SD7", state: "cancelled" }),               // cancelled -> not counted
   ] as never, "UA", now);
   assert.deepEqual([...keys], [taskKey("U1", "KL2", "ตรวจสัญญา", "2026-11-20")]);
+});
+
+test("writtenTabs: write ops name their tabs (null = all), reads and Drive ops write none", () => {
+  assert.deepEqual(writtenTabs("append", { tab: "News" }), ["News"]);
+  assert.deepEqual(writtenTabs("update", { tab: "Invoices", id: 3 }), ["Invoices"]);
+  assert.deepEqual(writtenTabs("batch", { steps: [{ tab: "Tasks" }, { tab: "Sends" }, { tab: "Tasks" }] }), ["Tasks", "Sends"]);
+  assert.deepEqual(writtenTabs("replaceMembers", {}), ["Members"]);
+  assert.equal(writtenTabs("setup", {}), null);
+  for (const op of ["read", "taskUpload", "invoiceFiles", "listReports", "saveUpload"]) assert.equal(writtenTabs(op, {}), undefined, op);
 });

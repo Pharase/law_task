@@ -1,12 +1,58 @@
-// Client for the Apps Script row store (gscript/). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
+// Client for the Apps Script row store (gscript/). Reads go through a 60 s cache (below). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
 import { type BuildingRow, buildingRows } from "./responsibility.ts";
 import { db, HttpError, must } from "./shared.ts";
-import { type Bad, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, sheetDownHint, type Task, toPeople } from "./sheetRows.ts";
+import { type Bad, writtenTabs, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, sheetDownHint, type Task, toPeople } from "./sheetRows.ts";
 
 const DOWN = "Google Sheet not reachable, try again";
 
+// ---- Read cache (table sheet_cache, one row per tab) ----
+// A read uses a tab's copy if it is under CACHE_MS old; a write through the app deletes the copies of the tabs it
+// touched once the script has answered, so the next read is fresh. Hand edits in the sheet show within CACHE_MS.
+// shortcut: a read that started before a write and finishes after it can store the old rows again, at most CACHE_MS
+// (cached_at = when that read started); add a version check if people ever notice it.
+const CACHE_MS = 60_000;
+const cache = () => db.from("sheet_cache");
+
 // deno-lint-ignore no-explicit-any
-export async function sheet(op: string, payload: object = {}, timeoutMs = 10_000): Promise<any> {
+type Payload = Record<string, any>;
+
+/** The Apps Script row store, with the read cache in front. payload.fresh on a read skips the cache (connection check). */
+// deno-lint-ignore no-explicit-any
+export async function sheet(op: string, payload: Payload = {}, timeoutMs = 10_000): Promise<any> {
+  if (op === "read" && !payload.fresh) return cachedRead((payload.tabs ?? []) as string[], timeoutMs);
+  const written = writtenTabs(op, payload);
+  try {
+    return await callScript(op, payload, timeoutMs);
+  } finally {
+    // also after a failure or timeout: the script may have written anyway
+    if (written !== undefined) await dropCache(written);
+  }
+}
+
+async function cachedRead(tabs: string[], timeoutMs: number) {
+  const since = new Date(Date.now() - CACHE_MS).toISOString();
+  const { data, error } = await cache().select("tab, rows").in("tab", tabs).gt("cached_at", since);
+  if (error) console.error("sheet cache read", error); // cache trouble never breaks a page: read the sheet instead
+  const got = new Map<string, unknown>((data ?? []).map((r: { tab: string; rows: unknown }) => [r.tab, r.rows]));
+  const missing = tabs.filter((t) => !got.has(t));
+  if (missing.length) {
+    const started = new Date().toISOString();
+    const { tabs: fresh } = await callScript("read", { tabs: missing }, timeoutMs);
+    for (const t of missing) got.set(t, fresh[t] ?? []);
+    const { error: e } = await cache().upsert(missing.map((tab) => ({ tab, rows: fresh[tab] ?? [], cached_at: started })));
+    if (e) console.error("sheet cache write", e);
+  }
+  return { tabs: Object.fromEntries(tabs.map((t) => [t, got.get(t) ?? []])) };
+}
+
+async function dropCache(tabs: string[] | null) {
+  const q = cache().delete();
+  const { error } = await (tabs ? q.in("tab", tabs) : q.neq("tab", "")); // null = every tab (setup)
+  if (error) console.error("sheet cache delete", error);
+}
+
+// deno-lint-ignore no-explicit-any
+async function callScript(op: string, payload: Payload, timeoutMs: number): Promise<any> {
   const url = Deno.env.get("GSHEET_URL"), secret = Deno.env.get("GSHEET_SECRET");
   try {
     if (!url || !secret) throw new SheetDown("GSHEET_URL / GSHEET_SECRET not set");

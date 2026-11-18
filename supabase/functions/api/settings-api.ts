@@ -86,11 +86,11 @@ async function checkLinks(): Promise<Check[]> {
   };
   return await Promise.all([
     run("Google Sheet งาน (Tasks / Sends / Buildings)", async () => {
-      const { tabs } = await sheet("read", { tabs: ["Tasks", "Sends", "Buildings"] });
+      const { tabs } = await sheet("read", { tabs: ["Tasks", "Sends", "Buildings"], fresh: true });
       return { detail: `งาน ${count(tabs.Tasks)} แถว · ส่งงาน ${count(tabs.Sends)} แถว · นิติ ${count(tabs.Buildings)} แถว` };
     }),
     run("Google Sheet ค้างค่าส่วนกลาง (Button E)", async () => {
-      const { tabs } = await sheet("read", { tabs: Object.values(TABS) });
+      const { tabs } = await sheet("read", { tabs: Object.values(TABS), fresh: true });
       return { detail: Object.values(TABS).map((t) => `${t} ${count(tabs[t])} แถว`).join(" · ") };
     }),
     run("Google Drive รายงานประจำเดือน", async () => {
