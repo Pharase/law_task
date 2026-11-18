@@ -53,10 +53,13 @@ function dispatch(body) {
     case "deleteRows": return withLock(function () { return { deleted: deleteRows(body.tab, body.key, body.values || []) }; });
     case "listReports": return { files: listReports(), folderUrl: reportFolder().getUrl() }; // folderUrl: "older reports" button
     case "reportFile": return reportFile(String(body.id || ""));
-    case "invoiceFiles": return { files: invoiceFiles(invoiceFolder(body.id, String(body.folder || ""), false)) };
-    case "invoiceUpload": return invoiceUpload(body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
-    case "invoiceFileData": var inf = invoiceFile(body.id, String(body.fileId || "")); return { name: inf.getName(), base64: Utilities.base64Encode(inf.getBlob().getBytes()) };
-    case "invoiceFileDelete": invoiceFile(body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
+    case "invoiceFiles": return { files: folderFiles(itemFolder("inv", body.id, String(body.folder || ""), false)) };
+    case "invoiceUpload": return folderUpload("inv", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
+    case "invoiceFileData": var inf = folderFile("inv", body.id, String(body.fileId || "")); return { name: inf.getName(), base64: Utilities.base64Encode(inf.getBlob().getBytes()) };
+    case "invoiceFileDelete": folderFile("inv", body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
+    case "taskFiles": var tdir = itemFolder("task", body.id, String(body.folder || ""), false); return { files: folderFiles(tdir), url: tdir ? tdir.getUrl() : null };
+    case "taskUpload": return folderUpload("task", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
+    case "taskFileDelete": folderFile("task", body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
     case "saveUpload": return saveUpload(String(body.folder || "unknown"), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
   }
   return { error: "unknown op" };
@@ -257,23 +260,28 @@ function checkUploads() {
   Logger.log(uploadFolder().getName() + " " + uploadFolder().getUrl());
 }
 
-// ---- Invoice files: <INVOICE_FOLDER_ID>/<date-building-subject-lawyer>/ (Script Property) ----
-// The folder id is kept in property inv_folder_<invoice id>, so an edited invoice keeps its folder (renamed to match).
-function invoiceFolder(id, name, create) {
-  var key = "inv_folder_" + Number(id), fid = PROPS.getProperty(key), dir = null;
-  if (!(Number(id) > 0)) throw new Error("bad invoice id");
+// ---- One Drive folder per invoice / per task, uploaded through the app ----
+// invoice: <INVOICE_FOLDER_ID>/<date-building-subject-lawyer>/
+// task:    <TASK_FOLDER_ID, default the shared ส่งงาน folder>/<taskID-assigned date-subject-member-building>/
+// The folder id is kept in property <kind>_folder_<id>, so an edited invoice / task keeps its folder (renamed to match).
+var FOLDER_ROOTS = { inv: ["INVOICE_FOLDER_ID", ""], task: ["TASK_FOLDER_ID", "1UXYNWyUOuidepj3FpLMbYaGXPF8p2NCK"] };
+
+function itemFolder(kind, id, name, create) {
+  if (!FOLDER_ROOTS[kind]) throw new Error("bad folder kind");
+  if (!(Number(id) > 0)) throw new Error("bad id");
+  var key = kind + "_folder_" + Number(id), fid = PROPS.getProperty(key), dir = null;
   if (fid) { try { dir = DriveApp.getFolderById(fid); if (dir.isTrashed()) dir = null; } catch (e) { dir = null; } } // deleted by hand
   if (!dir && create) {
-    var rootId = PROPS.getProperty("INVOICE_FOLDER_ID");
-    if (!rootId) throw new Error("INVOICE_FOLDER_ID is not set");
-    dir = DriveApp.getFolderById(rootId).createFolder(name || ("invoice " + id));
+    var rootId = PROPS.getProperty(FOLDER_ROOTS[kind][0]) || FOLDER_ROOTS[kind][1];
+    if (!rootId) throw new Error(FOLDER_ROOTS[kind][0] + " is not set");
+    dir = DriveApp.getFolderById(rootId).createFolder(name || (kind + " " + id));
     PROPS.setProperty(key, dir.getId());
   }
   if (dir && name && dir.getName() !== name) dir.setName(name);
   return dir;
 }
 
-function invoiceFiles(dir) {
+function folderFiles(dir) {
   var out = [];
   if (!dir) return out;
   var it = dir.getFiles();
@@ -284,10 +292,10 @@ function invoiceFiles(dir) {
   return out;
 }
 
-function invoiceUpload(id, folder, name, mime, base64) {
+function folderUpload(kind, id, folder, name, mime, base64) {
   if (!base64) throw new Error("empty file");
-  // a lock: two uploads to a new invoice at once must not make two folders
-  var dir = withLock(function () { return invoiceFolder(id, folder, true); });
+  // a lock: two uploads to a new invoice / task at once must not make two folders
+  var dir = withLock(function () { return itemFolder(kind, id, folder, true); });
   var made = dir.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime || undefined, name));
   // same name = a new version: the older copies go to the trash only now, after the new file is safely in Drive
   var same = dir.getFilesByName(name), replaced = [];
@@ -298,11 +306,11 @@ function invoiceUpload(id, folder, name, mime, base64) {
   return { ok: true, replaced: replaced };
 }
 
-/** A file of this invoice's folder only, so an id cannot reach any other Drive file. */
-function invoiceFile(id, fileId) {
-  var dir = invoiceFolder(id, "", false), f = DriveApp.getFileById(fileId), parents = f.getParents(), ok = false;
+/** A file of this invoice's / task's folder only, so an id cannot reach any other Drive file. */
+function folderFile(kind, id, fileId) {
+  var dir = itemFolder(kind, id, "", false), f = DriveApp.getFileById(fileId), parents = f.getParents(), ok = false;
   while (dir && parents.hasNext()) if (parents.next().getId() === dir.getId()) ok = true;
-  if (!ok || f.isTrashed()) throw new Error("file is not in this invoice");
+  if (!ok || f.isTrashed()) throw new Error("file is not in this folder");
   return f;
 }
 

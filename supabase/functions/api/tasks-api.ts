@@ -4,7 +4,8 @@ import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds
 import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows } from "./scoring.ts";
 import { batch, loadBuildingRows, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
-import { archiveFiles } from "./archive.ts";
+import { archiveFiles, base64 } from "./archive.ts";
+import { taskFolderName } from "./driveName.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
 import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
@@ -71,6 +72,24 @@ async function memberName(name: unknown): Promise<string> {
 }
 
 /** Actions for approved members (and admins). Returns undefined for actions it doesn't own. */
+const TASK_MAX_BYTES = 25 * 1024 * 1024; // the file travels base64 in one request to Apps Script (~50 MB cap)
+
+/** Files in the task's Drive folder (oldest first) and the folder link; the script renames the folder if the task was edited. */
+async function taskDrive(task: Task): Promise<{ files: Row[]; url: string | null }> {
+  const r = await sheet("taskFiles", { id: task.id, folder: taskFolderName(task) }, 30_000);
+  if (!r.files) throw new HttpError(502, "the script does not know task files yet: clasp push + Deploy → New version");
+  return { files: (r.files as Row[]).sort((a, b) => a.modified.localeCompare(b.modified)), url: r.url ?? null };
+}
+
+/** Files change only on your own task while it is open (กำลังดำเนินการ, including a fix round). */
+function ownOpenTask(data: SheetData, id: number, me: Me): Task {
+  const task = taskIn(data, id);
+  if (task.owner !== me.line_user_id || task.state !== "on_process") {
+    throw new HttpError(403, "แนบ / ลบไฟล์ได้เฉพาะงานของคุณที่กำลังดำเนินการ · only your own task while on process");
+  }
+  return task;
+}
+
 export async function memberTaskActions(action: string, body: Row, me: Me): Promise<unknown> {
   switch (action) {
     case "listBuildings": // with owner, so the assign form can show only the chosen person's buildings
@@ -126,13 +145,41 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       return { from, to, rows: visibleRows(rows, me).map((r) => ({ ...r, items: items.get(r.line_user_id) ?? [] })) };
     }
 
-    case "myTasks":
-      return loadTasks((t) => t.owner === me.line_user_id && t.state !== "cancelled");
+    case "myTasks": // score tags are for admins only: members never get them
+      return (await loadTasks((t) => t.owner === me.line_user_id && t.state !== "cancelled")).map((t) => ({ ...t, tags: [] }));
+
+    // Task files: the owner uploads (any type) to the task's own Drive folder <main>/<taskFolderName>/; admins open it in Drive.
+    case "taskFiles": {
+      const task = taskIn(await loadSheet(), taskId(body));
+      if (task.owner !== me.line_user_id && me.role !== "admin") throw new HttpError(403, "not your task");
+      return taskDrive(task);
+    }
+
+    case "uploadTaskFile": {
+      const task = ownOpenTask(await loadSheet(), taskId(body), me);
+      const file = body.file;
+      if (!(file instanceof File)) throw new HttpError(400, "no file");
+      if (!file.size) throw new HttpError(400, "file is empty");
+      if (file.size > TASK_MAX_BYTES) throw new HttpError(400, "file is over 25 MB");
+      const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
+      await sheet("taskUpload", {
+        id: task.id, folder: taskFolderName(task), name, mime: file.type || "application/octet-stream",
+        base64: base64(new Uint8Array(await file.arrayBuffer())),
+      }, 90_000);
+      return taskDrive(task);
+    }
+
+    case "deleteTaskFile": {
+      const task = ownOpenTask(await loadSheet(), taskId(body), me);
+      await sheet("taskFileDelete", { id: task.id, fileId: String(body.fileId ?? "") }); // to Drive's trash
+      return taskDrive(task);
+    }
 
     case "sendTask": {
       const id = taskId(body);
       await submitTask(id, me.line_user_id, validFileIds(body.file_ids)); // non-uuids dropped: a bad id must not 500 after the send is saved
-      return one(id);
+      return { ...await one(id), tags: [] }; // no score tags for members
     }
   }
   return undefined;

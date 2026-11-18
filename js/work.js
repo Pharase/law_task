@@ -1,7 +1,5 @@
 // Member Work dashboard (spec "Member view"). Needs js/app.js (api, uploadFile, $).
 const OUTCOME_TEXT = { pending: "รอตรวจ", approved: "อนุมัติ", void: "กดผิด", fix: "มีปรับแก้" };
-// ส่งงาน: staff upload work files to this shared Drive folder themselves (the app no longer takes files)
-const DRIVE_UPLOAD_URL = "https://drive.google.com/drive/folders/1UXYNWyUOuidepj3FpLMbYaGXPF8p2NCK";
 const bkkToday =() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 // dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
 const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
@@ -35,7 +33,7 @@ function taskItem(task, today, onChange, opts = {}) {
 
   const body = el("div", { className: "task-body" },
     task.details && el("p", { className: "pre", textContent: task.details }),
-    el("p", {}, ...task.tags.map((t) => el("span", { className: "tag", textContent: t }))),
+    task.tags.length > 0 && el("p", {}, ...task.tags.map((t) => el("span", { className: "tag", textContent: t }))), // members get none (server)
     // due date glows; the original date shows only after a send-back moved it (มีปรับแก้). nowrap: a label never splits from its date
     el("p", { className: "due-line" },
       el("span", { className: "nowrap" }, "กำหนดส่ง ", el("span", { className: "due-neon", textContent: thDate(task.current_due_on) })),
@@ -59,6 +57,10 @@ function taskItem(task, today, onChange, opts = {}) {
         : el("span", { className: "muted", textContent: `${f.name} (ลบหลังสำรองข้อมูลแล้ว)` })))));
   }
 
+  // the owner's files for this task, in its own Drive folder; loaded the first time the card is opened
+  const files = !opts.admin && taskFilesBox(task);
+  if (files) body.append(files.box);
+
   if (task.state === "on_process" && !opts.admin) {
     const msg = el("p", { role: "status" });
     const btn = el("button", { type: "button", textContent: "ส่งงาน (Send)" });
@@ -73,15 +75,62 @@ function taskItem(task, today, onChange, opts = {}) {
         btn.disabled = false;
       }
     };
-    // files go to the shared Drive folder by hand; opened outside LINE's browser so the Drive app / login works
-    const drive = el("a", { href: DRIVE_UPLOAD_URL, textContent: "📂 เปิด Google Drive เพื่ออัปโหลดไฟล์" });
-    drive.onclick = (e) => { e.preventDefault(); openFile(DRIVE_UPLOAD_URL, true); };
-    body.append(el("p", { className: "label", textContent: "แนบไฟล์: อัปโหลดไฟล์งานที่ Google Drive ก่อน แล้วกดส่งงาน" }), el("p", {}, drive), btn, msg);
+    body.append(btn, msg);
   }
 
   const item = el("details", { className: "task" + (overdue ? " overdue" : "") }, summary, body);
   item.dataset.task = task.id;
+  if (files) item.addEventListener("toggle", () => { if (item.open) files.load(); });
   return item;
+}
+
+/**
+ * ไฟล์งาน: any file type, max 25 MB each, uploaded one by one to <main folder>/<taskID-date-subject-member-building>/.
+ * Same name = new version (Drive keeps the newest). A failed file is named and skipped; the old version stays.
+ * Adding and deleting only while the task is กำลังดำเนินการ (the server checks too).
+ */
+function taskFilesBox(task) {
+  const canEdit = task.state === "on_process";
+  const box = el("div", { className: "task-files" });
+  const msg = el("p", { className: "muted small-note upload-msg", role: "status" });
+  let loaded = false;
+  const fail = (err) => { msg.textContent = "❌ " + err.message; };
+  const draw = ({ files }) => box.replaceChildren(
+    el("p", { className: "label", textContent: canEdit ? "แนบไฟล์งาน (แนบก่อน แล้วกดส่งงาน)" : "ไฟล์งาน" }),
+    files.length
+      ? el("div", {}, ...files.map((f) => el("div", { className: "inv-file" },
+        el("span", { className: "inv-file-name", textContent: "📄 " + f.name }),
+        canEdit && el("button", { type: "button", className: "icon-btn", textContent: "🗑️", title: "ลบ", ariaLabel: "ลบ " + f.name, onclick: async (e) => {
+          if (!confirm(`ลบไฟล์ "${f.name}" ?`)) return;
+          e.currentTarget.disabled = true;
+          try { draw(await api("deleteTaskFile", { task_id: task.id, fileId: f.id })); } catch (err) { fail(err); e.currentTarget.disabled = false; }
+        } }))))
+      : el("p", { className: "muted", textContent: "ยังไม่มีไฟล์" }),
+    ...(canEdit ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []),
+    msg);
+  const pick = el("input", { type: "file", multiple: true, onchange: async () => {
+    const picked = [...pick.files], failed = [];
+    pick.value = "";
+    let list = null;
+    for (const [i, file] of picked.entries()) {
+      msg.textContent = `กำลังอัปโหลด ${i + 1}/${picked.length}: ${file.name}`;
+      const form = new FormData();
+      form.append("task_id", task.id);
+      form.append("file", file);
+      try { list = await api("uploadTaskFile", form); } catch (err) { failed.push(`${file.name} — ${err.message}`); }
+    }
+    msg.textContent = failed.length ? `❌ อัปโหลดไม่สำเร็จ ${failed.length} ไฟล์ (ไฟล์เดิมยังอยู่): ` + failed.join(" · ") : "";
+    if (list) draw(list);
+  } });
+  return {
+    box,
+    load() {
+      if (loaded) return;
+      loaded = true;
+      box.replaceChildren(el("p", { className: "muted", textContent: "กำลังโหลดไฟล์…" }));
+      api("taskFiles", { task_id: task.id }).then(draw, (err) => { loaded = false; box.replaceChildren(el("p", { className: "error", textContent: err.message })); });
+    },
+  };
 }
 
 

@@ -108,6 +108,8 @@ Tasks, sends and buildings live in a Google Sheet. Admins may fix things by hand
 3. `cd gscript && npx @google/clasp push --force`, then run **`checkUploads`** once (Google asks for Drive write permission).
 4. **Deploy → Manage deployments → edit → New version.**
 
+**Task files (members upload in the app):** on an open task (กำลังดำเนินการ) the owner adds files of any type (max 25 MB each) under **แนบไฟล์งาน**, then presses ส่งงาน. They go to the shared ส่งงาน Drive folder (`TASK_FOLDER_ID` overrides it), in one sub-folder per task: `<taskID>-<assigned date>-<subject>-<member>-<building>`. A file with the same name replaces the older one. Admins open that folder with **📂 เปิดโฟลเดอร์งาน**, under the score tags of a task waiting for review. Members never see the score tags. After pulling: `cd gscript && npx @google/clasp push --force`, then **Deploy → New version**.
+
 **Invoice files 📎 (added later; do once):**
 1. Pushing to `main` adds the `invoice-files` bucket (a cache for opening files in the app) and deploys `api`.
 2. Make a Drive folder for invoice files. In **Script properties** add `INVOICE_FOLDER_ID` = its id (`/folders/<id>`). Each invoice gets a sub-folder `<date added>-<building>-<subject>-<lawyer>`, renamed when the invoice is edited.

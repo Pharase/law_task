@@ -7,6 +7,25 @@ const option = (value, text) => el("option", { value, textContent: text });
 const check = (name, value, text) => el("label", { className: "inline" }, el("input", { type: "checkbox", name, value }), " " + text);
 const checked = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value);
 
+/** รอตรวจ: open the member's files for this task, i.e. the task's own Drive folder (made by their first upload). */
+function taskFolderButton(t) {
+  const msg = el("span", { className: "muted small-note", role: "status" });
+  const btn = el("button", { type: "button", className: "small secondary", textContent: "📂 เปิดโฟลเดอร์งาน (Google Drive)" });
+  btn.onclick = async () => {
+    // computer: open the tab before the wait (pop-up blocker); LINE app: open Drive in the phone's browser after
+    const win = !liff.isInClient() ? window.open("about:blank", "_blank") : null;
+    btn.disabled = true;
+    msg.textContent = " กำลังเปิด…";
+    try {
+      const { url, files } = await api("taskFiles", { task_id: t.id });
+      if (!url) { win?.close(); msg.textContent = " ยังไม่มีไฟล์แนบในงานนี้"; }
+      else { if (win) win.location = url; else openFile(url, true); msg.textContent = ` ${files.length} ไฟล์`; }
+    } catch (err) { win?.close(); msg.textContent = " ❌ " + err.message; }
+    btn.disabled = false;
+  };
+  return el("p", {}, btn, msg);
+}
+
 /** Read-only task summary shared by the review queue and the all-tasks list. */
 function adminTaskBody(t) {
   const files = t.files.map((f) => f.url
@@ -17,6 +36,7 @@ function adminTaskBody(t) {
     el("p", { className: "muted", textContent: `${t.owner_name} · ${STATE_TEXT[t.state]} · เดิม ${thDate(t.due_on)} · ปัจจุบัน ${thDate(t.current_due_on)}` }),
     t.details && el("p", { className: "pre", textContent: t.details }),
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
+    t.state === "submitted" && taskFolderButton(t),
     t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
       `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)}) → ${OUTCOME_TEXT[s.outcome]}`,
       s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
