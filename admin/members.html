@@ -8,7 +8,7 @@
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261121"></script>
   <script src="../js/backup.js?v=20261117"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261135">
+  <link rel="stylesheet" href="../css/app.css?v=20261136">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -119,6 +119,26 @@
             <div class="row tools"><button class="small">ทดสอบและบันทึก</button></div>
             <p id="sheetMsg" role="status"></p>
           </form>
+        </details>
+
+        <!-- How to change the fallback values themselves (Supabase secrets): done in the Supabase dashboard, not here -->
+        <details class="linkage" id="secretsHelp">
+          <summary><h3>วิธีอัปเดตค่าใน Supabase secret</h3></summary>
+          <p class="muted small-note">ค่าที่บันทึกในแอป (2 หัวข้อด้านบน) ใช้ก่อนเสมอ · Supabase secret เป็นค่าสำรอง ใช้เมื่อไม่ได้บันทึกค่าในแอป หรือเมื่อลบค่าในแอปออก</p>
+          <ol class="small-note">
+            <li>เปิด <a id="secretsLink" target="_blank" rel="noopener">Supabase → Edge Functions → Secrets</a> (ล็อกอินด้วยบัญชีเจ้าของโปรเจกต์)</li>
+            <li>กดแก้ไขชื่อที่ต้องการ ใส่ค่าใหม่ แล้วกด Save:
+              <ul>
+                <li><code>LINE_MESSAGING_TOKEN</code> · Channel access token ของ LINE OA</li>
+                <li><code>LINE_CHANNEL_SECRET</code> · Channel secret ของ LINE OA</li>
+                <li><code>GSHEET_URL</code> · Web app URL ของ Apps Script (…/exec)</li>
+                <li><code>GSHEET_SECRET</code> · ค่าเดียวกับ Script property <code>API_SECRET</code></li>
+              </ul>
+            </li>
+            <li>ค่าใหม่มีผลภายในไม่กี่นาที ไม่ต้อง deploy ใหม่ · ถ้าในแอปมีค่าบันทึกไว้ ค่าในแอปยังใช้ก่อน</li>
+            <li>ตรวจด้วยปุ่ม "ตรวจลิงก์ Google Sheet และ Drive" และ "ทดสอบส่ง LINE ถึงฉัน"</li>
+          </ol>
+          <p class="muted small-note"><code>LINE_CHANNEL_ID</code> ตั้งโดย GitHub Actions ทุกครั้งที่ deploy (แก้ในไฟล์ .github/workflows/supabase-deploy.yml) · <code>SUPABASE_URL</code> และ <code>SUPABASE_SERVICE_ROLE_KEY</code> Supabase ตั้งให้เอง ไม่ต้องแก้</p>
         </details>
 
     </details>
@@ -344,6 +364,8 @@
       $("lineLiff").value = v.liffId;
       $("lineWebhook").value = v.webhookUrl;
     }
+    // the project's own secrets page, from the API address (still right after moving to another project)
+    $("secretsLink").href = `https://supabase.com/dashboard/project/${new URL(API_URL).hostname.split(".")[0]}/settings/functions`;
     function showSheetLink(v) {
       const src = (saved) => (saved ? "บันทึกในแอป" : "Supabase secret");
       $("sheetNow").textContent = `URL ${v.url ?? "ยังไม่ได้ตั้ง"} (${src(v.urlSaved)}) · secret ${v.secret ?? "ยังไม่ได้ตั้ง"} (${src(v.secretSaved)})`;

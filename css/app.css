@@ -523,6 +523,10 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 #quotaInfo { margin-top: 10px; }
 /* 20px between a text and the buttons under it */
 .fold .row.tools, .fold .row:has(> button) { margin-top: 20px; }
+/* 20px between texts that sat too close: notes, status lines, the help list */
+.fold .small-note, .fold p[role="status"]:not(:empty), .fold .linkage > summary + p { margin-top: 20px; }
+.fold ol.small-note li + li { margin-top: 8px; }
+.fold ol.small-note ul { margin-top: 6px; }
 .hero-preview { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; flex: none; }
 .check-list { margin: 8px 0 0; padding-left: 18px; }
 .check-list li { margin-bottom: 6px; overflow-wrap: anywhere; }
