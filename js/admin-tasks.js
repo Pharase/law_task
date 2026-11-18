@@ -137,24 +137,39 @@ function editControls(t) {
   return box;
 }
 
-async function loadReview() {
-  const list = (await api("listTasks", { state: "submitted" }))
-    .sort((a, b) => (a.sends.at(-1)?.sent_at ?? "").localeCompare(b.sends.at(-1)?.sent_at ?? ""));
+/** A task card; data-key keeps it open / closed through an auto refresh. */
+const taskCard = (t, open, ...kids) => { const d = el("details", { className: "task", open }, ...kids); d.dataset.key = "t" + t.id; return d; };
+
+// both lists refresh by themselves (every minute and when you come back; see autoRefresh in js/app.js)
+let reviewWatch = null, listWatch = null;
+const reviewData = async () => (await api("listTasks", { state: "submitted" }))
+  .sort((a, b) => (a.sends.at(-1)?.sent_at ?? "").localeCompare(b.sends.at(-1)?.sent_at ?? ""));
+function drawReview(list) {
   $("reviewCount").textContent = list.length;
   $("reviewList").replaceChildren(...(list.length
-    ? list.map((t) => el("details", { className: "task", open: true }, summaryLine(t), adminTaskBody(t), reviewControls(t)))
+    ? list.map((t) => taskCard(t, true, summaryLine(t), adminTaskBody(t), reviewControls(t)))
     : [el("p", { className: "muted", textContent: "ไม่มีงานรอตรวจ" })]));
 }
+async function loadReview() {
+  const list = await reviewData();
+  drawReview(list);
+  reviewWatch?.seen(list);
+}
 
-async function loadList() {
-  const list = await api("listTasks", {
-    owner: $("fOwner").value || undefined,
-    building: $("fBuilding").value || undefined,
-    state: $("fState").value || undefined,
-    overdue: $("fOverdue").checked || undefined,
-  });
+const listData = () => api("listTasks", {
+  owner: $("fOwner").value || undefined,
+  building: $("fBuilding").value || undefined,
+  state: $("fState").value || undefined,
+  overdue: $("fOverdue").checked || undefined,
+});
+function drawList(list) {
   allTasks = list.sort((a, b) => b.id - a.id); // newest first, so page 1 is the latest work and old tasks are further back
-  renderAll(); // keeps the page after an edit / cancel (renderAll clamps it)
+  renderAll(); // keeps the page after an edit / cancel / refresh (renderAll clamps it)
+}
+async function loadList() {
+  const list = await listData();
+  drawList(list);
+  listWatch?.seen(list);
 }
 
 // All tasks: 20 per page, after the 🔍 search (text match on what the filters loaded)
@@ -170,7 +185,7 @@ function renderAll() {
   allPage = Math.min(allPage, pages - 1);
   $("allCount").textContent = shown.length;
   $("allList").replaceChildren(...(shown.length
-    ? shown.slice(allPage * ALL_PAGE, (allPage + 1) * ALL_PAGE).map((t) => el("details", { className: "task" }, summaryLine(t), adminTaskBody(t), editControls(t)))
+    ? shown.slice(allPage * ALL_PAGE, (allPage + 1) * ALL_PAGE).map((t) => taskCard(t, false, summaryLine(t), adminTaskBody(t), editControls(t)))
     : [el("p", { className: "muted", textContent: "ไม่พบงาน" })]));
   $("allPager").hidden = pages < 2;
   $("allPage").textContent = `${allPage + 1} / ${pages}`;
@@ -246,9 +261,13 @@ function showPerfDetail(r, res) {
     el("p", { className: "muted small-note", textContent: 'งานที่ยังไม่อนุมัติแต่เลยกำหนด นับเฉพาะคะแนนตรงเวลา' }));
 }
 
-async function loadPerformance() {
-  $("perfDetail").hidden = true; // a new period: the open list would be stale
-  const res = await api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
+const perfData = () => api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
+/** Draws the table from `res` (auto refresh) or loads the picked period. */
+async function loadPerformance(res) {
+  if (!res) {
+    $("perfDetail").hidden = true; // a new period: the open list would be stale
+    res = await perfData();
+  }
   const pct = (x) => (x * 100).toFixed(1) + "%"; // raw score: average task score / 10
   // one cell = the 1–5 score (big) over the raw % (small); how both are made is explained under the table
   const score = (scaled, raw) => scaled === null ? el("td", { className: "muted", textContent: "-" }) : el("td", { className: "perf-score" },
@@ -388,6 +407,8 @@ async function initTracking() {
   $("allPrev").onclick = () => { allPage--; renderAll(); top(); };
   $("allNext").onclick = () => { allPage++; renderAll(); top(); };
   $("fQ").oninput = () => { allPage = 0; renderAll(); };
+  reviewWatch = autoRefresh({ box: $("reviewList").closest(".card"), load: reviewData, draw: drawReview });
+  listWatch = autoRefresh({ box: $("allList").closest(".card"), load: listData, draw: drawList });
   $("searchBtn").onclick = () => {
     const on = $("fQ").hidden; // opening
     $("fQ").hidden = !on;
@@ -431,6 +452,8 @@ function initReports() {
   const reload = () => loadPerformance().catch((e) => { $("perfTable").textContent = "Error: " + e.message; });
   periodPicker("p", reload);
   reload();
+  // scores move when tasks are approved: refreshed by itself, but not while a person's task list is open under the table
+  autoRefresh({ box: $("perfTable").closest(".card"), load: perfData, draw: (res) => loadPerformance(res), busy: () => !$("perfDetail").hidden });
 }
 
 /**

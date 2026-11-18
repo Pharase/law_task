@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Members – admin</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="../js/app.js?v=20261120"></script>
-  <script src="../js/work.js?v=20261121"></script>
+  <script src="../js/app.js?v=20261121"></script>
+  <script src="../js/work.js?v=20261122"></script>
   <script src="../js/backup.js?v=20261117"></script>
   <link rel="stylesheet" href="../css/app.css?v=20261136">
 </head>
@@ -230,8 +230,16 @@
         el("div", { className: "person-actions" }, right));
     }
 
+    // new sign-ups and role changes show by themselves (every minute and when you come back), see autoRefresh in js/app.js
+    let usersWatch = null;
     async function loadUsers() {
       const users = await api("listUsers");
+      drawUsers(users);
+      // waits while a staff name / invite is being typed in the approval card, so nothing typed is lost
+      usersWatch ??= autoRefresh({ box: $("pendingList").closest(".card"), load: () => api("listUsers"), draw: drawUsers });
+      usersWatch.seen(users);
+    }
+    function drawUsers(users) {
       const pending = users.filter((u) => u.role === "pending");
       const order = { admin: 0, member: 1, revoked: 2 };
       const org = users.filter((u) => u.role !== "pending")

@@ -139,7 +139,13 @@ function navUser(me) {
 }
 const login = () => liff.login({ redirectUri: location.origin + location.pathname });
 
+let apiPending = 0; // requests in flight: auto refresh waits while a save / upload runs
 async function api(action, data = {}) {
+  apiPending++;
+  try { return await apiCall(action, data); } finally { apiPending--; }
+}
+
+async function apiCall(action, data) {
   const isForm = data instanceof FormData;
   if (isForm) data.append("action", action);
   const res = await fetch(API_URL, {
@@ -407,4 +413,57 @@ function openFile(url, download = false) {
   if (window.liff?.isInClient?.()) return liff.openWindow({ url, external: download });
   if (download) location.href = url; // served as an attachment: the page stays
   else window.open(url, "_blank", "noopener");
+}
+
+// ---- Auto refresh: one list on a page stays up to date, no page reload ----
+/**
+ * Every `ms` while the page is on screen, and when the person comes back to it: data = await load(); if it differs
+ * from what is drawn (links that change on every call are ignored), draw(data) inside `box`. Waits while someone is
+ * busy: a request in flight, typing in a field, a form open inside `box`, a text box in it typed in and not saved, or busy(). Open / closed
+ * <details> in `box` keep their state (matched by data-key, else the summary text without numbers) and the scroll position stays.
+ * Returns { seen(data) } to record what the first, normal load drew.
+ */
+function autoRefresh({ box, load, draw, busy = () => false, ms = 60_000 }) {
+  let sig = null, drawnAt = Date.now(), running = false, lastTry = 0;
+  const sign = (d) => JSON.stringify(d, (k, v) => (/url$/i.test(k) ? undefined : v));
+  const idle = () => !document.hidden && apiPending === 0 && !typing() && !openForm(box) && !edited(box) && !busy();
+  async function tick() {
+    if (running || !idle()) return;
+    running = true;
+    lastTry = Date.now();
+    try {
+      const data = await load();
+      const s = sign(data);
+      // also redraw every 30 min: signed file links in the drawn list expire after an hour
+      if (s === sig && Date.now() - drawnAt < 30 * 60_000) return;
+      if (!idle()) return; // someone started typing meanwhile: try again next time
+      keepState(box, () => draw(data));
+      sig = s;
+      drawnAt = Date.now();
+    } catch (e) { console.warn("auto refresh", e); } // keep what is on screen; next tick tries again
+    finally { running = false; }
+  }
+  setInterval(tick, ms);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - lastTry > 5000) tick(); });
+  return { seen(data) { sig = sign(data); drawnAt = Date.now(); } };
+}
+/** Focus in a box someone types in (search boxes don't count: lists redraw with the search applied). */
+function typing() {
+  const a = document.activeElement;
+  return !!a && (a.isContentEditable || a.matches("textarea, select, input:not([type=search]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file])"));
+}
+// a text box someone typed in (and has not saved: saving redraws the list, which drops the mark)
+const TEXT_FIELD = "textarea, input:not([type=search]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden])";
+document.addEventListener("input", (e) => { if (e.target.matches?.(TEXT_FIELD)) e.target.dataset.edited = "1"; }, true);
+const edited = (box) => [...box.querySelectorAll("[data-edited]")].some((f) => f.offsetParent !== null);
+/** A form opened inside the box (review "not approved", edit task ...): never redraw it away. */
+const openForm = (box) => [...box.querySelectorAll("form")].some((f) => !f.hidden && f.offsetParent !== null);
+function keepState(box, draw) {
+  // without data-key: the header text minus numbers, so a group whose count or total changed is still the same group
+  const key = (d) => d.dataset.key || d.dataset.task || (d.querySelector(":scope > summary")?.textContent ?? "").replace(/[\d,.฿%]+/g, "");
+  const was = new Map([...box.querySelectorAll("details")].map((d) => [key(d), d.open]));
+  const y = scrollY;
+  draw();
+  for (const d of box.querySelectorAll("details")) { const k = key(d); if (was.has(k) && d.open !== was.get(k)) d.open = was.get(k); }
+  scrollTo(scrollX, y);
 }

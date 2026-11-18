@@ -195,12 +195,18 @@ function donut(parts, total, onPick) {
 // ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
 // turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
 let linkUsed = false;
+let homeKey = null; // the status group being looked at: kept when the list reloads or auto-refreshes
 
-async function renderHome(me) {
+/** Home tasks: the whole team for admins, your own for members. */
+const homeTasks = (me) => (me.role === "admin" ? api("listTasks", {}) : api("myTasks"));
+
+/** Draws Home from `data` (auto refresh) or a fresh load; returns the tasks it drew. */
+async function renderHome(me, data) {
   const today = bkkToday(), month = today.slice(0, 7);
   const isAdmin = me.role === "admin";
   const reload = () => renderHome(me);
-  const all = (isAdmin ? await api("listTasks", {}) : await api("myTasks")).filter((t) => t.state !== "cancelled");
+  const raw = data ?? await homeTasks(me);
+  const all = raw.filter((t) => t.state !== "cancelled");
   if (isAdmin && $("trackDot")) {
     // red dot on "ติดตามงาน": how many sent tasks wait for review (อนุมัติ / ไม่อนุมัติ)
     const waiting = all.filter((t) => t.state === "submitted").length;
@@ -218,6 +224,7 @@ async function renderHome(me) {
   let selected = null;
   const pick = (p) => {
     selected = p;
+    homeKey = p.key;
     for (const row of legend.children) row.classList.toggle("selected", row.dataset.key === p.key);
     $("dashListTitle").textContent = `${p.label} (${p.n})`;
     const sorted = [...p.tasks].sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
@@ -247,7 +254,8 @@ async function renderHome(me) {
   $("dashChart").replaceChildren(chart ? chart.svg : el("p", { className: "muted donut-empty", textContent: "ยังไม่มีงานที่มอบหมายเดือนนี้" }), legend);
 
   // Open the list people most likely need: work to fix or do first, then waiting review, then the backlog.
-  pick([parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
+  const before = homeKey && [...parts, backlog].find((p) => p.key === homeKey);
+  pick(before ?? [parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
 
   const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
   linkUsed = true;
@@ -260,6 +268,7 @@ async function renderHome(me) {
     item.open = true;
     item.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  return raw;
 }
 
 // ---- Ex Doc groups (Button C and admin/exdoc.html) ----
@@ -295,6 +304,7 @@ async function initNews(me) {
           el("span", { className: "muted news-date", textContent: thDate(n.created_at.slice(0, 10)) })),
         n.body && el("p", { className: "pre news-body", textContent: n.body }),
         actions);
+      item.dataset.key = "news" + n.id; // stays open through an auto refresh
       item.addEventListener("toggle", () => {
         if (!item.open || n.read) return;
         n.read = true;
@@ -334,6 +344,7 @@ async function initNews(me) {
   }
   items = await api("listNews");
   render();
+  autoRefresh({ box: $("newsList").closest(".card"), load: () => api("listNews"), draw: (fresh) => { items = fresh; render(); } }).seen(items);
 }
 
 /** Inside one group: documents with no subfolder first, then one open section per subfolder (A-Z). */

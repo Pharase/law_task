@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Loliy_Pass</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="js/app.js?v=20261120"></script>
-  <script src="js/work.js?v=20261121"></script>
-  <script src="js/admin-tasks.js?v=20261131"></script>
+  <script src="js/app.js?v=20261121"></script>
+  <script src="js/work.js?v=20261122"></script>
+  <script src="js/admin-tasks.js?v=20261132"></script>
   <link rel="stylesheet" href="css/app.css?v=20261136">
 </head>
 <body>
@@ -138,7 +138,9 @@
       $("lockedCard").hidden = approved || !me.locked;
       $("appCard").hidden = !approved;
       if (!approved) return;
-      const home = () => renderHome(me).catch((err) => { $("dashChart").textContent = "Error: " + err.message; });
+      // task list + overview: refreshed by itself (every minute and when you come back), see autoRefresh in js/app.js
+      const homeWatch = autoRefresh({ box: $("dashList").closest(".card"), load: () => homeTasks(me), draw: (all) => renderHome(me, all) });
+      const home = () => renderHome(me).then((all) => homeWatch.seen(all)).catch((err) => { $("dashChart").textContent = "Error: " + err.message; });
       home();
       initNews(me).catch((err) => { $("newsList").textContent = "Error: " + err.message; });
       if (me.role === "admin") {

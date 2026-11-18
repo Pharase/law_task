@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Invoice</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="../js/app.js?v=20261120"></script>
-  <script src="../js/work.js?v=20261121"></script>
+  <script src="../js/app.js?v=20261121"></script>
+  <script src="../js/work.js?v=20261122"></script>
   <link rel="stylesheet" href="../css/app.css?v=20261136">
 </head>
 <body>
@@ -233,6 +233,7 @@
         el("summary", {}, `✅ ${STATUS[STATUS.length - 1]}`, el("span", { className: "badge", textContent: done.length }),
           el("span", { className: "muted", textContent: ` ฿${baht(done.reduce((s, i) => s + i.amount, 0))}` })),
         ...done.map(invoiceRow));
+      if (doneGroup) doneGroup.dataset.key = "done"; // stays open / closed through an auto refresh
       $("invList").replaceChildren(...(shown.length ? [...open.map(invoiceRow), doneGroup].filter(Boolean)
         : [el("p", { className: "muted", textContent: data.invoices.length ? "ไม่พบรายการ" : "ยังไม่มีรายการเบิก" })]));
       $("invTotal").textContent = shown.length
@@ -351,6 +352,9 @@
       $("status").hidden = true;
       $("page").hidden = false;
       render();
+      // the list refreshes by itself (every minute and when you come back); it waits while the form or a 📎 panel is open
+      autoRefresh({ box: $("invList").closest(".card"), load: () => api("listInvoices"), draw: (d) => { data = d; render(); },
+        busy: () => !!document.querySelector(".inv-files:not([hidden])") }).seen(data);
     }).catch((err) => {
       $("status").textContent = "Error: " + err.message;
       $("status").className = "error";
