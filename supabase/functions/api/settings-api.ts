@@ -2,7 +2,7 @@
 import { TABS } from "./lien.ts";
 import { normalizeSettings, readSettings, type Settings } from "./settings.ts";
 import { type LineConfig, type LineStored, masked, normalizeLine, resolveLine } from "./lineconfig.ts";
-import { sheet } from "./sheet.ts";
+import { saveSheetLink, sheet, sheetLinkView } from "./sheet.ts";
 import { db, HttpError, type Me, must } from "./shared.ts";
 
 const KEY = "notify";
@@ -137,6 +137,12 @@ export async function adminSettingsActions(action: string, body: any, me: Me): P
 
     case "saveLine":
       return await saveLine(body.line, me);
+
+    case "getSheetLink":
+      return await sheetLinkView();
+
+    case "saveSheetLink":
+      return await saveSheetLink(body.link, me.line_user_id);
 
     case "checkLinks":
       return { checks: await checkLinks() };

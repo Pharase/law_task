@@ -34,3 +34,22 @@ export function normalizeLine(input: any, base: LineStored = {}): LineStored {
 
 /** Shown back to the admin: never the whole secret. */
 export const masked = (s: string | null | undefined) => (s ? "••••" + s.slice(-4) : null);
+
+// ---- Google Sheet linkage (ตั้งค่า → การเชื่อมต่อ Google Sheet): the Apps Script web app the `api` talks to.
+// Saved values win; anything not saved falls back to the Supabase secrets GSHEET_URL / GSHEET_SECRET. app_settings.key = 'gsheet'.
+export type SheetLink = { url?: string; secret?: string };
+const SCRIPT_URL = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
+
+/** An admin's edit: blank or missing = keep the saved value. Throws a Thai message on bad input. */
+// deno-lint-ignore no-explicit-any
+export function normalizeSheetLink(input: any, base: SheetLink = {}): SheetLink {
+  const pick = (k: keyof SheetLink) => (typeof input?.[k] === "string" && input[k].trim() ? input[k].trim() : base[k]);
+  const out: SheetLink = { url: pick("url"), secret: pick("secret") };
+  if (out.url && !SCRIPT_URL.test(out.url)) throw new Error("URL ต้องเป็น https://script.google.com/macros/s/…/exec (Deploy → Manage deployments → Web app URL)");
+  if (out.secret && (out.secret.length < 16 || /\s/.test(out.secret))) throw new Error("API secret ต้องยาวอย่างน้อย 16 ตัวอักษร ไม่มีช่องว่าง (ค่าเดียวกับ Script property API_SECRET)");
+  return out;
+}
+
+/** "https://script.google.com/macros/s/AKfy…xyz/exec" -> "…/s/AKfy••••xyz/exec": enough to recognise it, not to call it. */
+export const maskedUrl = (u: string | null | undefined) =>
+  u ? u.replace(/\/s\/([A-Za-z0-9_-]{4})[A-Za-z0-9_-]+([A-Za-z0-9_-]{4})\/exec$/, "/s/$1••••$2/exec") : null;

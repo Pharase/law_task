@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_LIFF_ID, masked, normalizeLine, resolveLine } from "./lineconfig.ts";
+import { DEFAULT_LIFF_ID, masked, maskedUrl, normalizeLine, normalizeSheetLink, resolveLine } from "./lineconfig.ts";
 
 const TOKEN = "x".repeat(150), SECRET = "0123456789abcdef0123456789abcdef";
 
@@ -30,4 +30,14 @@ test("normalizeLine: blank keeps, bad input throws", () => {
 test("masked: last 4 only", () => {
   assert.equal(masked(SECRET), "••••cdef");
   assert.equal(masked(null), null);
+});
+
+test("normalizeSheetLink: script /exec URL + secret of 16+ characters; blank keeps the saved value", () => {
+  const url = "https://script.google.com/macros/s/AKfycbx1234567890abcdefghijXYZ/exec";
+  assert.deepEqual(normalizeSheetLink({ url, secret: "0123456789abcdef" }), { url, secret: "0123456789abcdef" });
+  assert.deepEqual(normalizeSheetLink({ url: " ", secret: "" }, { url, secret: "s".repeat(20) }), { url, secret: "s".repeat(20) });
+  assert.throws(() => normalizeSheetLink({ url: "https://example.com/exec" }), /script\.google\.com/);
+  assert.throws(() => normalizeSheetLink({ url: url.replace("/exec", "/dev") }), /script\.google\.com/);
+  assert.throws(() => normalizeSheetLink({ secret: "short" }), /16/);
+  assert.equal(maskedUrl(url), "https://script.google.com/macros/s/AKfy••••jXYZ/exec");
 });

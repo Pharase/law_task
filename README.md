@@ -136,6 +136,8 @@ Every push to `main` that changes `supabase/` runs [.github/workflows/supabase-d
 gh secret set SUPABASE_ACCESS_TOKEN   # paste a token from https://supabase.com/dashboard/account/tokens at the prompt
 ```
 
+**Connections without a redeploy:** ตั้งค่า (members page) → **การเชื่อมต่อ LINE OA** (token, secret, LIFF ID) and **การเชื่อมต่อ Google Sheet** (Apps Script `/exec` URL and API secret; tested before it is saved). Saved values win over the Supabase secrets, which stay as the fallback. Moving to another Supabase project is a step-by-step job, not a setting: see [docs/move-supabase.md](docs/move-supabase.md).
+
 **Web pages** are served by GitHub Pages on every push. LINE's in-app browser keeps old CSS/JS, so every page links them with `?v=<date>`: after changing anything in `css/` or `js/`, bump it everywhere (`grep -rl "?v=" --include=*.html .`), or LIFF keeps showing the old version.
 
 ## LINE setup

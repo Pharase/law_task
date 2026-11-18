@@ -106,6 +106,21 @@
           </div>
         </details>
 
+        <!-- Google Sheet linkage: the Apps Script web app the server reads and writes; tested before it is saved -->
+        <details class="linkage" id="sheetLinkage">
+          <summary><h3>การเชื่อมต่อ Google Sheet · Linkage</h3></summary>
+          <p class="muted small-note" id="sheetNow">กำลังโหลด…</p>
+          <form id="sheetForm" autocomplete="off">
+            <label for="sheetUrl">Web app URL · Apps Script → Deploy → Manage deployments</label>
+            <input id="sheetUrl" name="url" type="password" placeholder="https://script.google.com/macros/s/…/exec · เว้นว่าง = ใช้ค่าเดิม">
+            <label for="sheetSecret">API secret · Apps Script → Project Settings → Script properties → API_SECRET</label>
+            <input id="sheetSecret" name="secret" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
+            <p class="muted small-note">ระบบทดสอบอ่านชีตด้วยค่าใหม่ก่อน ถ้าไม่ผ่านจะไม่บันทึก (ค่าเดิมยังใช้ได้ต่อ) · ใช้เมื่อย้ายไปสคริปต์ / ชีตใหม่ หรือเปลี่ยน API_SECRET</p>
+            <div class="row tools"><button class="small">ทดสอบและบันทึก</button></div>
+            <p id="sheetMsg" role="status"></p>
+          </form>
+        </details>
+
     </details>
 
     <!-- 4. Broadcast to the team, collapsed until tapped -->
@@ -329,6 +344,27 @@
       $("lineLiff").value = v.liffId;
       $("lineWebhook").value = v.webhookUrl;
     }
+    function showSheetLink(v) {
+      const src = (saved) => (saved ? "บันทึกในแอป" : "Supabase secret");
+      $("sheetNow").textContent = `URL ${v.url ?? "ยังไม่ได้ตั้ง"} (${src(v.urlSaved)}) · secret ${v.secret ?? "ยังไม่ได้ตั้ง"} (${src(v.secretSaved)})`;
+    }
+    $("sheetLinkage").ontoggle = () => {
+      if ($("sheetLinkage").open) api("getSheetLink").then(showSheetLink).catch((err) => { $("sheetNow").textContent = "❌ " + err.message; });
+    };
+    $("sheetForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = f.querySelector("button");
+      if (!f.url.value.trim() && !f.secret.value.trim()) return say("sheetMsg", false, "ใส่ URL หรือ secret ใหม่อย่างน้อยหนึ่งช่อง");
+      if (!confirm("บันทึกการเชื่อมต่อ Google Sheet? ทุกหน้าจะอ่าน / เขียนชีตด้วยค่าใหม่ทันที")) return;
+      btn.disabled = true;
+      say("sheetMsg", true, "กำลังทดสอบกับ Google Sheet…");
+      try {
+        showSheetLink(await api("saveSheetLink", { link: { url: f.url.value, secret: f.secret.value } }));
+        f.url.value = f.secret.value = "";
+        say("sheetMsg", true, "✅ ทดสอบผ่านและบันทึกแล้ว");
+      } catch (err) { say("sheetMsg", false, "❌ " + err.message); }
+      btn.disabled = false;
+    };
     $("linkage").ontoggle = () => {
       if ($("linkage").open) api("getLine").then(showLine).catch((err) => { $("lineNow").textContent = "❌ " + err.message; });
     };

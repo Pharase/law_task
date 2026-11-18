@@ -1,6 +1,7 @@
 // Client for the Apps Script row store (gscript/). Reads go through a 60 s cache (below). Secrets GSHEET_URL + GSHEET_SECRET; browsers never call the script.
 import { type BuildingRow, buildingRows } from "./responsibility.ts";
 import { db, HttpError, must } from "./shared.ts";
+import { masked, maskedUrl, normalizeSheetLink, type SheetLink } from "./lineconfig.ts";
 import { type Bad, writtenTabs, parseReply, parseSends, parseTasks, type Person, type SendRow, SheetDown, sheetDownHint, type Task, toPeople } from "./sheetRows.ts";
 
 const DOWN = "Google Sheet not reachable, try again";
@@ -51,17 +52,55 @@ async function dropCache(tabs: string[] | null) {
   if (error) console.error("sheet cache delete", error);
 }
 
+// ---- Which script: ตั้งค่า → การเชื่อมต่อ Google Sheet (app_settings 'gsheet'), else the Supabase secrets ----
+let linkCache: { at: number; stored: SheetLink } | null = null;
+async function linkStored(): Promise<SheetLink> {
+  if (linkCache && Date.now() - linkCache.at < 60_000) return linkCache.stored;
+  const { data, error } = await db.from("app_settings").select("value").eq("key", "gsheet").maybeSingle();
+  if (error) console.error("gsheet settings", error); // fall back to the Supabase secrets
+  linkCache = { at: Date.now(), stored: (data?.value ?? {}) as SheetLink };
+  return linkCache.stored;
+}
+async function sheetLink() {
+  const s = await linkStored();
+  return { url: s.url || Deno.env.get("GSHEET_URL"), secret: s.secret || Deno.env.get("GSHEET_SECRET") };
+}
+
+/** What the admin sees: masked values and where each comes from. */
+export async function sheetLinkView() {
+  const s = await linkStored(), c = await sheetLink();
+  return { url: maskedUrl(c.url), urlSaved: !!s.url, secret: masked(c.secret), secretSaved: !!s.secret };
+}
+
+/** Save a new script URL / secret, but only after the script answered a test read with them. */
+export async function saveSheetLink(input: unknown, by: string) {
+  linkCache = null;
+  let value: SheetLink;
+  try { value = normalizeSheetLink(input, await linkStored()); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  const env = { url: value.url || Deno.env.get("GSHEET_URL"), secret: value.secret || Deno.env.get("GSHEET_SECRET") };
+  try {
+    const r = await postScript(env, "read", { tabs: ["Buildings"] }, 20_000);
+    if (!r.tabs) throw new Error("the script did not answer like the law_task script");
+  } catch (e) {
+    throw new HttpError(400, `ทดสอบไม่ผ่าน ยังไม่ได้บันทึก: ${sheetDownHint(e instanceof Error ? e.message : String(e))}`);
+  }
+  must(await db.from("app_settings").upsert({ key: "gsheet", value, updated_at: new Date().toISOString(), updated_by: by }));
+  linkCache = null;
+  await dropCache(null); // a different sheet: nothing cached from the old one may show
+  return sheetLinkView();
+}
+
+// deno-lint-ignore no-explicit-any
+async function postScript(link: { url?: string; secret?: string }, op: string, payload: Payload, timeoutMs: number): Promise<any> {
+  if (!link.url || !link.secret) throw new SheetDown("GSHEET_URL / GSHEET_SECRET not set");
+  const r = await fetch(link.url, { method: "POST", body: JSON.stringify({ secret: link.secret, op, ...payload }), signal: AbortSignal.timeout(timeoutMs) });
+  return parseReply(r.status, await r.text());
+}
+
 // deno-lint-ignore no-explicit-any
 async function callScript(op: string, payload: Payload, timeoutMs: number): Promise<any> {
-  const url = Deno.env.get("GSHEET_URL"), secret = Deno.env.get("GSHEET_SECRET");
   try {
-    if (!url || !secret) throw new SheetDown("GSHEET_URL / GSHEET_SECRET not set");
-    const r = await fetch(url, {
-      method: "POST",
-      body: JSON.stringify({ secret, op, ...payload }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    return parseReply(r.status, await r.text());
+    return await postScript(await sheetLink(), op, payload, timeoutMs);
   } catch (e) {
     if (e instanceof SheetDown && e.message === "not found") throw new HttpError(404, "task not found"); // row deleted by hand
     console.error("sheet", op, e);
