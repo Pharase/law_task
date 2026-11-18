@@ -513,6 +513,16 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .settings h3 { margin: 22px 0 8px; font-weight: 600; font-size: 15px; color: var(--cyan); }
 .settings .card-head h3 { margin: 0; }
 .settings .days { margin-top: 4px; }
+/* Settings / Broadcast frames: closed until tapped; the header row keeps the LINE quota badge on the right */
+.fold > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary h2 { margin: 0; flex: 1; }
+.fold > summary::after { content: "▾"; color: var(--cyan); transition: transform .2s; }
+.fold[open] > summary::after { transform: rotate(180deg); }
+.fold > summary .badge { margin: 0; }
+#quotaInfo { margin-top: 10px; }
+/* 20px between a text and the buttons under it */
+.fold .row.tools, .fold .row:has(> button) { margin-top: 20px; }
 .hero-preview { width: 72px; height: 72px; object-fit: contain; border-radius: 12px; background: #fff; flex: none; }
 .check-list { margin: 8px 0 0; padding-left: 18px; }
 .check-list li { margin-bottom: 6px; overflow-wrap: anywhere; }

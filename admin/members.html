@@ -8,7 +8,7 @@
   <script src="../js/app.js?v=20261120"></script>
   <script src="../js/work.js?v=20261121"></script>
   <script src="../js/backup.js?v=20261117"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261134">
+  <link rel="stylesheet" href="../css/app.css?v=20261135">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
@@ -36,89 +36,93 @@
       <div id="orgList"></div>
     </section>
 
-    <!-- 3. Settings: LINE tests, notice times, bubble pictures, Sheet/Drive check, team announcement -->
-    <section class="card settings">
-      <h2>ตั้งค่า · Settings</h2>
-
-      <div class="row card-head">
-        <h3 class="grow">การแจ้งเตือน LINE · LINE notification</h3>
-        <!-- LINE push quota left this month (when it runs out, messages are not sent); tap for details -->
-        <button type="button" class="badge" id="quotaBadge" aria-expanded="false" aria-controls="quotaInfo">…</button>
-      </div>
+    <!-- 3. Settings, collapsed until tapped. Daily things first, technical ones last. The LINE quota badge stays on the
+         header, so it shows while the frame is closed (tap it for details). -->
+    <details class="card settings fold" id="settingsFold">
+      <summary>
+        <h2>ตั้งค่า · Settings</h2>
+        <button type="button" class="badge" id="quotaBadge" title="โควตาข้อความ LINE คงเหลือเดือนนี้" aria-expanded="false" aria-controls="quotaInfo">…</button>
+      </summary>
       <p class="muted small-note" id="quotaInfo" hidden></p>
-      <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้ · "ทดสอบทุกรูปแบบข้อความ" ส่งตัวอย่างการ์ดงานใหม่ สรุปงานวันนี้ และสรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง ไม่ใช่งานจริง)</p>
-      <div class="row tools">
-        <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
-        <button type="button" class="small secondary" id="testLineAllBtn" title="การ์ดงานใหม่ + สรุปงานวันนี้ + สรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง, ใช้โควตา 1 ข้อความ)">ทดสอบทุกรูปแบบข้อความ</button>
-      </div>
-      <p id="testLineMsg" role="status"></p>
 
-      <h3>เวลาแจ้งเตือน · Notification times</h3>
-      <form id="timesForm">
-        <fieldset>
-          <label class="inline"><input type="checkbox" role="switch" name="instantOn"> จำกัดเวลาแจ้งงานใหม่ (การ์ดงานใหม่) · ไม่ติ๊ก = แจ้งทันทีทุกเวลา</label>
-          <div data-when="instantOn">
-            <label class="inline">ตั้งแต่ <input type="time" name="instantStart" required></label>
-            <label class="inline">ถึง <input type="time" name="instantEnd" required></label>
-            <div class="days" data-days="instant" role="group" aria-label="วันที่แจ้งงานใหม่"></div>
-          </div>
-        </fieldset>
-        <fieldset>
-          <label class="inline"><input type="checkbox" role="switch" name="digestOn"> สรุปงานประจำวัน (สมาชิก + แอดมิน)</label>
-          <div data-when="digestOn">
-            <label class="inline">เวลา <input type="time" name="digestTime" required></label>
-            <div class="days" data-days="digest" role="group" aria-label="วันที่ส่งสรุป"></div>
-          </div>
-        </fieldset>
-        <p class="muted small-note">งานใหม่ (ติ๊กจำกัดเวลา): ส่งการ์ดเฉพาะในช่วงเวลาและวันที่เลือก · งานที่มอบหมายนอกช่วง ระบบส่งการ์ดให้เองเมื่อถึงช่วงเวลา (ตรวจทุก 30 นาที) · งานที่ค้างเกิน 4 วันโดยยังไม่ได้แจ้ง จะอยู่ในสรุปประจำวันแทน · เริ่ม = หยุด คือทั้งวัน · หยุดก่อนเริ่ม คือข้ามเที่ยงคืน (เช่น 22:00–06:00 ช่วงหลังเที่ยงคืนนับเป็นวันถัดไป) · สรุปประจำวัน: ไม่ติ๊ก = ไม่ส่ง · ส่งภายใน 30 นาทีหลังเวลาที่ตั้ง วันละครั้ง (ถ้าวันนี้ส่งไปแล้ว เวลาใหม่เริ่มพรุ่งนี้) · 12:00 AM = เที่ยงคืน, 12:00 PM = เที่ยงวัน</p>
-        <div class="row tools"><button class="small">บันทึกเวลา</button></div>
-        <p id="timesMsg" role="status"></p>
-      </form>
-
-      <h3>รูปในข้อความ LINE · Bubble pictures</h3>
-      <div id="heroList"></div>
-      <p class="muted small-note">JPG หรือ PNG ไม่เกิน 1 MB (รูปสี่เหลี่ยมจัตุรัสดูดีที่สุด) · ข้อความที่ส่งไปแล้วยังใช้รูปเดิม</p>
-      <p id="heroMsg" role="status"></p>
-
-      <h3>ตรวจการเชื่อมต่อ · Google Sheet / Drive</h3>
-      <div class="row tools"><button type="button" class="small secondary" id="checkLinksBtn">ตรวจลิงก์ Google Sheet และ Drive</button></div>
-      <ul id="checkList" class="check-list" role="status"></ul>
-
-      <!-- LINE OA linkage: collapsed so nobody changes it by accident; loads only when opened -->
-      <details class="linkage" id="linkage">
-        <summary><h3>การเชื่อมต่อ LINE OA · Linkage</h3></summary>
-        <p class="muted small-note" id="lineNow">กำลังโหลด…</p>
-        <form id="lineForm" autocomplete="off">
-          <label for="lineToken">Channel access token (long-lived) · Messaging API</label>
-          <input id="lineToken" name="token" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
-          <label for="lineSecret">Channel secret · Messaging API → Basic settings</label>
-          <input id="lineSecret" name="secret" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
-          <label for="lineLiff">LIFF ID · LINE Login → LIFF</label>
-          <input id="lineLiff" name="liffId" placeholder="1234567890-AbCdEfGh">
-          <p class="muted small-note">เปลี่ยน OA ใหม่: ใส่ token + secret ของ OA ใหม่ แล้วนำ Webhook URL ด้านล่างไปใส่ใน Messaging API → Webhook settings (เปิด Use webhook) · ถ้า LIFF ID ใหม่ใช้ไม่ได้ แอปจะกลับไปใช้ LIFF เดิมเอง · OA ต่าง provider = LINE ID ของทุกคนเปลี่ยน ต้องลงทะเบียนใหม่</p>
-          <div class="row tools"><button class="small">บันทึกการเชื่อมต่อ</button></div>
-          <p id="lineMsg" role="status"></p>
+        <h3>เวลาแจ้งเตือน · Notification times</h3>
+        <form id="timesForm">
+          <fieldset>
+            <label class="inline"><input type="checkbox" role="switch" name="instantOn"> จำกัดเวลาแจ้งงานใหม่ (การ์ดงานใหม่) · ไม่ติ๊ก = แจ้งทันทีทุกเวลา</label>
+            <div data-when="instantOn">
+              <label class="inline">ตั้งแต่ <input type="time" name="instantStart" required></label>
+              <label class="inline">ถึง <input type="time" name="instantEnd" required></label>
+              <div class="days" data-days="instant" role="group" aria-label="วันที่แจ้งงานใหม่"></div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <label class="inline"><input type="checkbox" role="switch" name="digestOn"> สรุปงานประจำวัน (สมาชิก + แอดมิน)</label>
+            <div data-when="digestOn">
+              <label class="inline">เวลา <input type="time" name="digestTime" required></label>
+              <div class="days" data-days="digest" role="group" aria-label="วันที่ส่งสรุป"></div>
+            </div>
+          </fieldset>
+          <p class="muted small-note">งานใหม่ (ติ๊กจำกัดเวลา): ส่งการ์ดเฉพาะในช่วงเวลาและวันที่เลือก · งานที่มอบหมายนอกช่วง ระบบส่งการ์ดให้เองเมื่อถึงช่วงเวลา (ตรวจทุก 30 นาที) · งานที่ค้างเกิน 4 วันโดยยังไม่ได้แจ้ง จะอยู่ในสรุปประจำวันแทน · เริ่ม = หยุด คือทั้งวัน · หยุดก่อนเริ่ม คือข้ามเที่ยงคืน (เช่น 22:00–06:00 ช่วงหลังเที่ยงคืนนับเป็นวันถัดไป) · สรุปประจำวัน: ไม่ติ๊ก = ไม่ส่ง · ส่งภายใน 30 นาทีหลังเวลาที่ตั้ง วันละครั้ง (ถ้าวันนี้ส่งไปแล้ว เวลาใหม่เริ่มพรุ่งนี้) · 12:00 AM = เที่ยงคืน, 12:00 PM = เที่ยงวัน</p>
+          <div class="row tools"><button class="small">บันทึกเวลา</button></div>
+          <p id="timesMsg" role="status"></p>
         </form>
-        <label for="lineWebhook">Webhook URL</label>
-        <div class="row">
-          <input id="lineWebhook" readonly>
-          <button type="button" class="small secondary" id="lineCopy">คัดลอก</button>
-        </div>
-      </details>
 
-      <h3>ประกาศถึงทีม · Broadcast</h3>
-      <form id="broadcastForm">
-        <select name="to" aria-label="ผู้รับ">
-          <option value="all">ทุกคน (สมาชิก + แอดมิน)</option>
-          <option value="member">สมาชิกเท่านั้น</option>
-          <option value="admin">แอดมินเท่านั้น</option>
-        </select>
-        <textarea name="text" rows="4" maxlength="2000" required placeholder="ข้อความประกาศ" aria-label="ข้อความประกาศ"></textarea>
-        <p class="muted small-note">ส่งถึง LINE ของทุกคนที่ได้รับอนุมัติ · ใช้โควตา 1 ข้อความต่อคน</p>
-        <div class="row tools"><button class="small">ส่งประกาศ</button></div>
-        <p id="broadcastMsg" role="status"></p>
-      </form>
-    </section>
+        <h3>รูปในข้อความ LINE · Bubble pictures</h3>
+        <div id="heroList"></div>
+        <p class="muted small-note">JPG หรือ PNG ไม่เกิน 1 MB (รูปสี่เหลี่ยมจัตุรัสดูดีที่สุด) · ข้อความที่ส่งไปแล้วยังใช้รูปเดิม</p>
+        <p id="heroMsg" role="status"></p>
+
+        <h3>การแจ้งเตือน LINE · LINE notification</h3>
+        <p class="muted small-note">ส่งข้อความทดสอบถึง LINE ของคุณเองทันที (ทุกเวลา) เพื่อตรวจว่า token และการแจ้งเตือนใช้งานได้ · "ทดสอบทุกรูปแบบข้อความ" ส่งตัวอย่างการ์ดงานใหม่ สรุปงานวันนี้ และสรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง ไม่ใช่งานจริง)</p>
+        <div class="row tools">
+          <button type="button" class="small" id="testLineBtn">ทดสอบส่ง LINE ถึงฉัน</button>
+          <button type="button" class="small secondary" id="testLineAllBtn" title="การ์ดงานใหม่ + สรุปงานวันนี้ + สรุปสำหรับแอดมิน (ข้อมูลตัวอย่าง, ใช้โควตา 1 ข้อความ)">ทดสอบทุกรูปแบบข้อความ</button>
+        </div>
+        <p id="testLineMsg" role="status"></p>
+
+        <h3>ตรวจการเชื่อมต่อ · Google Sheet / Drive</h3>
+        <div class="row tools"><button type="button" class="small secondary" id="checkLinksBtn">ตรวจลิงก์ Google Sheet และ Drive</button></div>
+        <ul id="checkList" class="check-list" role="status"></ul>
+
+        <!-- LINE OA linkage: collapsed so nobody changes it by accident; loads only when opened -->
+        <details class="linkage" id="linkage">
+          <summary><h3>การเชื่อมต่อ LINE OA · Linkage</h3></summary>
+          <p class="muted small-note" id="lineNow">กำลังโหลด…</p>
+          <form id="lineForm" autocomplete="off">
+            <label for="lineToken">Channel access token (long-lived) · Messaging API</label>
+            <input id="lineToken" name="token" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
+            <label for="lineSecret">Channel secret · Messaging API → Basic settings</label>
+            <input id="lineSecret" name="secret" type="password" placeholder="เว้นว่าง = ใช้ค่าเดิม">
+            <label for="lineLiff">LIFF ID · LINE Login → LIFF</label>
+            <input id="lineLiff" name="liffId" placeholder="1234567890-AbCdEfGh">
+            <p class="muted small-note">เปลี่ยน OA ใหม่: ใส่ token + secret ของ OA ใหม่ แล้วนำ Webhook URL ด้านล่างไปใส่ใน Messaging API → Webhook settings (เปิด Use webhook) · ถ้า LIFF ID ใหม่ใช้ไม่ได้ แอปจะกลับไปใช้ LIFF เดิมเอง · OA ต่าง provider = LINE ID ของทุกคนเปลี่ยน ต้องลงทะเบียนใหม่</p>
+            <div class="row tools"><button class="small">บันทึกการเชื่อมต่อ</button></div>
+            <p id="lineMsg" role="status"></p>
+          </form>
+          <label for="lineWebhook">Webhook URL</label>
+          <div class="row">
+            <input id="lineWebhook" readonly>
+            <button type="button" class="small secondary" id="lineCopy">คัดลอก</button>
+          </div>
+        </details>
+
+    </details>
+
+    <!-- 4. Broadcast to the team, collapsed until tapped -->
+    <details class="card settings fold" id="broadcastFold">
+      <summary><h2>ประกาศถึงทีม · Broadcast</h2></summary>
+        <form id="broadcastForm">
+          <select name="to" aria-label="ผู้รับ">
+            <option value="all">ทุกคน (สมาชิก + แอดมิน)</option>
+            <option value="member">สมาชิกเท่านั้น</option>
+            <option value="admin">แอดมินเท่านั้น</option>
+          </select>
+          <textarea name="text" rows="4" maxlength="2000" required placeholder="ข้อความประกาศ" aria-label="ข้อความประกาศ"></textarea>
+          <p class="muted small-note">ส่งถึง LINE ของทุกคนที่ได้รับอนุมัติ · ใช้โควตา 1 ข้อความต่อคน</p>
+          <div class="row tools"><button class="small">ส่งประกาศ</button></div>
+          <p id="broadcastMsg" role="status"></p>
+        </form>
+    </details>
   </div>
 
   <script>
@@ -360,7 +364,9 @@
       loadQuota();
     };
 
-    $("quotaBadge").onclick = () => {
+    $("quotaBadge").onclick = (e) => {
+      e.preventDefault(); // inside <summary>: the badge opens the frame and shows the details, it never closes it
+      $("settingsFold").open = true;
       const info = $("quotaInfo");
       info.hidden = !info.hidden;
       $("quotaBadge").setAttribute("aria-expanded", String(!info.hidden));
