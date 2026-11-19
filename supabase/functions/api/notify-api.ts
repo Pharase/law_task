@@ -185,11 +185,11 @@ export async function pendingNotices() {
 }
 
 /** Reply to a LINE webhook event (free: replies don't use the monthly push quota). */
-export async function replyText(replyToken: string, text: string, token: string) {
+export async function replyMessages(replyToken: string, messages: unknown[], token: string) {
   const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ replyToken, messages: [{ type: "text", text: text.slice(0, 5000) }] }),
+    body: JSON.stringify({ replyToken, messages }),
   });
   if (!r.ok) console.error("LINE reply", r.status, (await r.text()).slice(0, 200));
 }
