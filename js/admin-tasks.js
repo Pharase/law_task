@@ -156,7 +156,7 @@ const reviewData = async () => (await api("listTasks", { state: "submitted" }))
 function drawReview(list) {
   $("reviewCount").textContent = list.length;
   $("reviewList").replaceChildren(...(list.length
-    ? list.map((t) => taskCard(t, true, summaryLine(t), adminTaskBody(t), reviewControls(t)))
+    ? list.map((t) => taskCard(t, false, summaryLine(t), adminTaskBody(t), reviewControls(t))) // closed: name line only, tap to review
     : [el("p", { className: "muted", textContent: "ไม่มีงานรอตรวจ" })]));
 }
 async function loadReview() {
