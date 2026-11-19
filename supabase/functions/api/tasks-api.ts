@@ -1,7 +1,7 @@
 // Task actions (spec "Button A"). Data lives in the Google Sheet (sheet.ts); rules live in review.ts / scoring.ts / sheetRows.ts.
 import { bangkokDate, periodRange } from "./dates.ts";
 import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds } from "./review.ts";
-import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows } from "./scoring.ts";
+import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows, workInPeriod } from "./scoring.ts";
 import { batch, isUnknownOp, loadBuildingRows, scriptTooOld, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { archiveFiles, base64 } from "./archive.ts";
@@ -123,13 +123,17 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       // Revoked people still count; admins never own tasks.
       const scored: ScoredTask[] = [];
       const items = new Map<string, unknown[]>(); // owner -> the tasks behind their scores (tap a name to see them)
+      // มอบหมาย: the owner's work in the period (assigned in it, or carried over and not approved yet); see workInPeriod
+      const assigned = new Map<string, number>();
       for (const t of data.tasks) {
         if (!role.has(t.owner) || role.get(t.owner)!.role === "admin") continue;
         const rows = data.sends.filter((s) => s.task_id === t.id);
         const sends = scoredSends(t, rows);
         const ok = rows.filter((s) => s.outcome === "approved").at(-1);
         const approvedOn = t.state === "approved" ? String(ok?.reviewed_at || ok?.sent_on || t.current_due_on).slice(0, 10) : null;
-        const c = periodCount({ state: t.state, createdOn: String(t.created_at).slice(0, 10), currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
+        const createdOn = String(t.created_at).slice(0, 10);
+        if (workInPeriod({ state: t.state, createdOn, approvedOn }, from, to)) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
+        const c = periodCount({ state: t.state, createdOn, currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
         if (!c) continue;
         const x: ScoredTask = { owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) };
         const parts = taskParts(x);
@@ -143,12 +147,6 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         }]);
       }
       const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
-      // มอบหมาย: tasks assigned in the period (cancelled left out), shown next to งาน (approved, scored in full)
-      const assigned = new Map<string, number>();
-      for (const t of data.tasks) {
-        const on = String(t.created_at).slice(0, 10);
-        if (t.state !== "cancelled" && on >= from && on <= to) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
-      }
       const rows = performanceRows(scored, names).map((r) => ({ ...r, assigned: assigned.get(r.line_user_id) ?? 0 })); // scaled against everyone, then trimmed for members
       // people with tasks assigned in the period but nothing scored yet: a row with their counts, no scores
       for (const [owner, n] of assigned) {

@@ -1,7 +1,7 @@
 // Worked examples from the spec ("Performance"), dates in Jan 2026.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { memberScores, performanceRows, scale, taskScore, type Send } from "./scoring.ts";
+import { memberScores, performanceRows, scale, taskScore, type Send, workInPeriod } from "./scoring.ts";
 
 const s = (sentOn: string, dueOn: string, outcome: Send["outcome"]): Send => ({ sentOn, dueOn, outcome });
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} != ${b}`);
@@ -164,4 +164,16 @@ test("taskParts: per-task scores for the list under a name", async () => {
   assert.deepEqual(p, { approved: true, onTime: 9, byTag: { "ความถูกต้อง": 8, "การประสานงาน": 9.5 }, daysLate: 3 });
   assert.deepEqual(taskParts({ owner: "U1", tags: ["การประสานงาน"], sends: [], lateOnly: 4, daysLate: 18 }), { approved: false, onTime: 4, byTag: {}, daysLate: 18 });
   assert.equal(taskParts({ owner: "U1", tags: [], sends: [s("2026-01-09", "2026-01-10", "pending")] }), null);
+});
+
+test("workInPeriod (มอบหมาย): assigned in the period or carried over; never below อนุมัติ", () => {
+  const from = "2026-11-01", to = "2026-11-30";
+  const w = (state: string, createdOn: string, approvedOn: string | null = null) => workInPeriod({ state, createdOn, approvedOn }, from, to);
+  assert.equal(w("on_process", "2026-11-05"), true); // assigned this month
+  assert.equal(w("approved", "2026-10-20", "2026-11-03"), true); // October task approved in November: counts in both
+  assert.equal(w("submitted", "2026-09-01"), true); // carried over, not approved yet
+  assert.equal(w("approved", "2026-10-01", "2026-10-25"), false); // finished before the month
+  assert.equal(w("on_process", "2026-12-01"), false); // assigned after the month
+  assert.equal(w("cancelled", "2026-11-05"), false);
+  assert.equal(w("approved", "2026-12-02", "2026-11-20"), true); // created_at hand-edited later: still counted with its approval
 });

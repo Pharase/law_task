@@ -32,6 +32,17 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
 }
 
 /**
+ * มอบหมาย on the performance page: the task was the owner's work during from..to — assigned by the period's end and
+ * not approved before it started (so tasks carried over from earlier count too). Cancelled ones don't count.
+ * Every task approved in the period counts here, so มอบหมาย is never below อนุมัติ.
+ */
+export function workInPeriod(t: { state: string; createdOn: string; approvedOn: string | null }, from: string, to: string): boolean {
+  if (t.state === "cancelled") return false;
+  if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return true; // even if created_at was hand-edited later
+  return t.createdOn <= to && !(t.approvedOn && t.approvedOn < from);
+}
+
+/**
  * How a task counts in the period from..to (YYYY-MM-DD; today caps an unfinished period):
  * - "full": approved inside the period -> on time + tag scores, from its real dates.
  * - { lateOnly }: assigned by the period's end, still not approved by then, and late (sent after the due date, or
