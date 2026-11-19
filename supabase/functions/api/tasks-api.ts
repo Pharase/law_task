@@ -122,30 +122,31 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       // Approved in the period -> full score; older tasks still not approved and late -> คะแนนตรงเวลา only (periodCount).
       // Revoked people still count; admins never own tasks.
       const scored: ScoredTask[] = [];
-      const items = new Map<string, unknown[]>(); // owner -> the tasks behind their scores (tap a name to see them)
-      // มอบหมาย: the owner's work in the period (first due date in it, or carried over and not approved yet); see workInPeriod
-      const assigned = new Map<string, number>();
+      // owner -> their tasks in the period (tap a name): every task in มอบหมาย, each marked approved (counts in อนุมัติ and
+      // every score) / late (คะแนนตรงเวลา only) / neither (not scored yet). So the list's length = มอบหมาย and its
+      // approved rows = อนุมัติ. มอบหมาย = workInPeriod, plus any task that is scored (so a score never comes from outside it).
+      const items = new Map<string, unknown[]>();
       for (const t of data.tasks) {
         if (!role.has(t.owner) || role.get(t.owner)!.role === "admin") continue;
         const rows = data.sends.filter((s) => s.task_id === t.id);
         const sends = scoredSends(t, rows);
         const ok = rows.filter((s) => s.outcome === "approved").at(-1);
         const approvedOn = t.state === "approved" ? String(ok?.reviewed_at || ok?.sent_on || t.current_due_on).slice(0, 10) : null;
-        const createdOn = String(t.created_at).slice(0, 10);
-        if (workInPeriod({ state: t.state, firstDue: t.due_on, approvedOn }, from, to)) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
-        const c = periodCount({ state: t.state, createdOn, currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
-        if (!c) continue;
-        const x: ScoredTask = { owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) };
-        const parts = taskParts(x);
-        if (!parts) continue;
-        scored.push(x);
+        const c = periodCount({ state: t.state, createdOn: String(t.created_at).slice(0, 10), currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
+        const x: ScoredTask | null = c && { owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) };
+        const parts = x && taskParts(x);
+        if (parts) scored.push(x!);
+        if (!parts && !workInPeriod({ state: t.state, firstDue: t.due_on, approvedOn }, from, to)) continue;
         const real = rows.filter((s) => s.outcome !== "void");
         items.set(t.owner, [...(items.get(t.owner) ?? []), {
           id: t.id, title: t.title, building: t.building, state: t.state, fix_round: t.fix_round,
           due_on: t.due_on, current_due_on: t.current_due_on, last_sent_on: real.at(-1)?.sent_on ?? null,
-          fixes: real.filter((s) => s.outcome === "fix").length, ...parts,
+          fixes: real.filter((s) => s.outcome === "fix").length,
+          counts: parts ? (parts.approved ? "approved" : "late") : "none",
+          ...(parts ?? { approved: false, onTime: null, byTag: {}, daysLate: 0 }),
         }]);
       }
+      const assigned = new Map([...items].map(([owner, list]) => [owner, list.length]));
       const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
       const rows = performanceRows(scored, names).map((r) => ({ ...r, assigned: assigned.get(r.line_user_id) ?? 0 })); // scaled against everyone, then trimmed for members
       // people with tasks assigned in the period but nothing scored yet: a row with their counts, no scores

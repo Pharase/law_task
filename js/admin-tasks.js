@@ -233,7 +233,7 @@ const STATUS_TEXT = (t) => (t.state === "approved" ? "✅ เสร็จแล�
   : t.state === "cancelled" ? "ยกเลิก" : t.fix_round > 0 ? "↩️ ส่งกลับแก้ไข" : "ยังไม่ส่ง");
 
 function perfName(r, res) {
-  const b = el("button", { type: "button", className: "perf-name", textContent: r.name, title: "ดูงานที่ใช้คิดคะแนน" });
+  const b = el("button", { type: "button", className: "perf-name", textContent: r.name, title: "ดูงานในช่วงนี้" });
   b.setAttribute("aria-expanded", "false");
   b.onclick = () => {
     const box = $("perfDetail"), same = !box.hidden && box.dataset.who === r.line_user_id;
@@ -251,10 +251,13 @@ function perfName(r, res) {
 function showPerfDetail(r, res) {
   const head = el("tr", {}, ...["งาน", "สถานะ", "กำหนดส่งเดิม", "กำหนดส่งล่าสุด", "วันส่งงานล่าสุด", "แก้ไข (ครั้ง)", "เกินกำหนด (วัน)"]
     .map((h) => el("th", { textContent: h })));
-  const items = [...r.items].sort((a, b) => b.approved - a.approved || a.current_due_on.localeCompare(b.current_due_on));
-  const rows = items.map((t) => el("tr", { className: t.approved ? "" : "late-only" },
+  // every task in มอบหมาย: อนุมัติ first, then late ones (คะแนนตรงเวลา only), then not scored yet
+  const ORDER = { approved: 0, late: 1, none: 2 }, NOTE = { approved: "", late: " · นับเฉพาะตรงเวลา", none: " · ยังไม่นับคะแนน" };
+  const items = [...r.items].sort((a, b) => ORDER[a.counts] - ORDER[b.counts] || a.current_due_on.localeCompare(b.current_due_on));
+  const count = (k) => items.filter((t) => t.counts === k).length;
+  const rows = items.map((t) => el("tr", { className: t.counts === "approved" ? "" : "late-only" },
     el("td", {}, el("strong", { textContent: t.title }), el("div", { className: "muted", textContent: t.building })),
-    el("td", { className: "nowrap", textContent: STATUS_TEXT(t) + (t.approved ? "" : " · นับเฉพาะตรงเวลา") }),
+    el("td", { className: "nowrap", textContent: STATUS_TEXT(t) + NOTE[t.counts] }),
     el("td", { className: "nowrap", textContent: thDate(t.due_on) }),
     el("td", { className: "nowrap", textContent: thDate(t.current_due_on) }),
     el("td", { className: "nowrap", textContent: t.last_sent_on ? thDate(t.last_sent_on) : "-" }),
@@ -264,10 +267,12 @@ function showPerfDetail(r, res) {
   close.onclick = () => { $("perfDetail").hidden = true; };
   $("perfDetail").replaceChildren(
     el("div", { className: "row card-head" },
-      el("h3", { className: "grow", textContent: `งานที่ใช้คิดคะแนน · ${r.name} (${thDate(res.from)} – ${thDate(res.to)})` }), close),
+      el("h3", { className: "grow", textContent: `งานในช่วงนี้ · ${r.name} (${thDate(res.from)} – ${thDate(res.to)})` }), close),
+    // same numbers as the table row: มอบหมาย = every row here, อนุมัติ = the approved ones
+    el("p", { className: "muted small-note", textContent: `มอบหมาย ${items.length} งาน · อนุมัติ ${count("approved")} · นับเฉพาะตรงเวลา ${count("late")} · ยังไม่นับคะแนน ${count("none")}` }),
     el("div", { className: "table-wrap" }, el("table", { className: "perf-detail-table" }, head,
-      ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 7, className: "muted", textContent: "ยังไม่มีงานที่ใช้คิดคะแนนในช่วงนี้" }))]))),
-    el("p", { className: "muted small-note", textContent: 'งานที่ยังไม่อนุมัติแต่เลยกำหนด นับเฉพาะคะแนนตรงเวลา' }));
+      ...(rows.length ? rows : [el("tr", {}, el("td", { colSpan: 7, className: "muted", textContent: "ไม่มีงานในช่วงนี้" }))]))),
+    el("p", { className: "muted small-note", textContent: "อนุมัติ = นับทุกคะแนน · นับเฉพาะตรงเวลา = ยังไม่อนุมัติแต่เลยกำหนด นับแค่คะแนนตรงเวลา · ยังไม่นับคะแนน = ยังไม่ถึงกำหนดหรือรอตรวจ จะนับเมื่ออนุมัติ หรือเมื่อเลยกำหนด" }));
 }
 
 const perfData = () => api("performance", { kind: $("pKind").value, year: Number($("pYear").value), n: Number($("pN").value) });
