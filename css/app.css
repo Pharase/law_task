@@ -334,6 +334,11 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .news-item[open] > .news-head::before { transform: rotate(90deg); }
 /* unread: a small red LED next to the title */
 .news-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; align-self: center; background: #ff3b5c; box-shadow: 0 0 8px rgba(255, 59, 92, .8); }
+/* Invoice: new files from a หัวหน้าทีม (admins) — red pill next to the count, red dot on that invoice's 📎 */
+.inv-new { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; margin-left: 6px; vertical-align: middle; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1; color: #fff; background: #ff3b5c; box-shadow: 0 0 10px rgba(255, 59, 92, .6); }
+.inv-new[hidden] { display: none; }
+.inv-edit { position: relative; }
+.inv-edit .news-dot { position: absolute; top: 2px; right: 2px; }
 .news-date { font-size: 13px; white-space: nowrap; }
 .news-body { margin: 6px 0 0; color: var(--ink-2); }
 .news-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }

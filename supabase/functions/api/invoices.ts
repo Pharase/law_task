@@ -40,6 +40,14 @@ export function freeName(name: string, taken: string[]): string {
   return out;
 }
 
+/** Admin's red dot: invoice id -> how many member uploads came after this admin last opened its 📎 (or never opened). */
+export function unseenUploads(uploads: { invoice_id: number; uploaded_at: string }[], seen: { invoice_id: number; seen_at: string }[]) {
+  const at = new Map(seen.map((s) => [s.invoice_id, Date.parse(s.seen_at)]));
+  const out: Record<number, number> = {};
+  for (const u of uploads) if (Date.parse(u.uploaded_at) > (at.get(u.invoice_id) ?? -Infinity)) out[u.invoice_id] = (out[u.invoice_id] ?? 0) + 1;
+  return out;
+}
+
 const cell = (r: Row, k: string) => String(r[k] ?? "").trim();
 /** "1,500.50", "฿1,500", "1500 บาท" -> number; null unless a number >= 0. */
 const money = (s: string) => {

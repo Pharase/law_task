@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { freeName, INVOICE_STATUS, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices } from "./invoices.ts";
+import { freeName, INVOICE_STATUS, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices, unseenUploads } from "./invoices.ts";
 
 const types = new Map([["B1", "บ้านจัดสรร"], ["B2", "อาคารชุด"], ["B3", ""]]);
 const row = (over: Record<string, string> = {}) => ({
@@ -120,4 +120,12 @@ test("freeName: a taken name gets (2), (3)... so a member's upload never replace
   assert.equal(freeName("slip.pdf", ["SLIP.pdf"]), "slip (2).pdf");
   assert.equal(freeName("slip.pdf", ["slip.pdf", "slip (2).pdf"]), "slip (3).pdf");
   assert.equal(freeName("file", ["file"]), "file (2)");
+});
+
+test("unseenUploads: member files after the admin's last 📎 open (or never opened) count as new", () => {
+  const up = (invoice_id: number, uploaded_at: string) => ({ invoice_id, uploaded_at });
+  assert.deepEqual(unseenUploads(
+    [up(1, "2026-11-19T10:00:00Z"), up(1, "2026-11-19T12:00:00Z"), up(2, "2026-11-19T09:00:00Z"), up(3, "2026-11-19T09:00:00Z")],
+    [{ invoice_id: 1, seen_at: "2026-11-19T11:00:00Z" }, { invoice_id: 2, seen_at: "2026-11-19T09:30:00Z" }],
+  ), { 1: 1, 3: 1 });
 });

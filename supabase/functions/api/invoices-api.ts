@@ -4,10 +4,10 @@
 // building's หัวหน้าทีม may also add (never replace or delete) while the invoice is at รอนิติชำระเงิน.
 // Anyone who sees the invoice can open them, through a signed copy (driveCopy.ts).
 import { base64 } from "./archive.ts";
-import { BUILDING_TYPES, type Invoice, invoiceCells, freeName, invoiceFolderName, invoiceNotice, MEMBER_UPLOAD_STATUS, parseInvoices, visibleInvoices } from "./invoices.ts";
+import { BUILDING_TYPES, type Invoice, invoiceCells, freeName, invoiceFolderName, invoiceNotice, MEMBER_UPLOAD_STATUS, parseInvoices, unseenUploads, visibleInvoices } from "./invoices.ts";
 import { batch, isUnknownOp, loadPeople, scriptTooOld, sheet } from "./sheet.ts";
 import { notifyInvoice } from "./notify-api.ts";
-import { HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
+import { db, HttpError, MAX_BYTES, type Me, MIME_EXT, must } from "./shared.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import type { Row } from "./sheetRows.ts";
 
@@ -53,14 +53,33 @@ async function driveFiles(inv: Invoice): Promise<DriveFile[]> {
   return (files as DriveFile[]).sort((a, b) => a.modified.localeCompare(b.modified));
 }
 
+/**
+ * Admins' red dot: newFiles = { invoice id: files a หัวหน้าทีม added since this admin last opened its 📎 }.
+ * Uploads older than 30 days never count, so a new admin doesn't start with every old file "new".
+ */
+async function withNewFiles<T>(me: Me, data: T): Promise<T & { newFiles?: Record<number, number> }> {
+  if (me.role !== "admin") return data;
+  const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const [uploads, seen] = await Promise.all([
+    db.from("invoice_uploads").select("invoice_id, uploaded_at").gt("uploaded_at", since),
+    db.from("invoice_seen").select("invoice_id, seen_at").eq("line_user_id", me.line_user_id),
+  ]);
+  if (uploads.error || seen.error) { console.error("invoice dots", uploads.error ?? seen.error); return data; } // no dot beats no page
+  return { ...data, newFiles: unseenUploads(uploads.data, seen.data) };
+}
+
 // deno-lint-ignore no-explicit-any
 export async function memberInvoiceActions(action: string, body: any, me: Me): Promise<unknown> {
   switch (action) {
     case "listInvoices":
-      return listFor(me);
+      return withNewFiles(me, await listFor(me));
 
-    case "invoiceFiles":
-      return driveFiles(await invoiceFor(me, body.id));
+    case "invoiceFiles": {
+      const inv = await invoiceFor(me, body.id);
+      // an admin opened the 📎 panel: this invoice's new-file dot is cleared for them
+      if (me.role === "admin") must(await db.from("invoice_seen").upsert({ line_user_id: me.line_user_id, invoice_id: inv.id, seen_at: new Date().toISOString() }));
+      return driveFiles(inv);
+    }
 
     case "invoiceFileUrl": {
       const inv = await invoiceFor(me, body.id);
@@ -88,6 +107,11 @@ export async function memberInvoiceActions(action: string, body: any, me: Me): P
         id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
       }, 60_000).catch(scriptTooOld);
       await Promise.all((replaced as string[]).map(dropCopies));
+      if (!isAdmin) { // the admins' red dot; the file is already in Drive, so a failed record only loses the dot
+        const p = me as Me & { staff_name?: string | null; display_name?: string | null };
+        const { error } = await db.from("invoice_uploads").insert({ invoice_id: inv.id, file_name: name, by_name: p.staff_name || p.display_name || me.line_user_id });
+        if (error) console.error("invoice_uploads", error);
+      }
       return driveFiles(inv);
     }
   }
@@ -118,7 +142,7 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
         : await notifyInvoice((await loadPeople()).filter((p) => p.name === owner && p.role !== "revoked").map((p) => p.line_user_id), text, id)
           .catch((e) => String(e));
       // savedId: the form uploads its files to this invoice next
-      return { ...await loadInvoices(), savedId: id, noticeError: noticeError && "บันทึกแล้ว แต่ส่ง LINE ไม่ได้: " + noticeError };
+      return { ...await withNewFiles(me, await loadInvoices()), savedId: id, noticeError: noticeError && "บันทึกแล้ว แต่ส่ง LINE ไม่ได้: " + noticeError };
     }
 
     case "deleteInvoiceFile": {

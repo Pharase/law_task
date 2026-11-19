@@ -7,14 +7,15 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261122"></script>
   <script src="../js/work.js?v=20261123"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261136">
+  <link rel="stylesheet" href="../css/app.css?v=20261137">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
   <div id="page" hidden>
     <section class="card">
       <div class="row card-head">
-        <h2 class="grow">ใบแจ้งหนี้ค้างเบิก · Invoices <span id="invCount" class="badge"></span></h2>
+        <h2 class="grow">ใบแจ้งหนี้ค้างเบิก · Invoices <span id="invCount" class="badge"></span>
+          <span id="invNew" class="inv-new" hidden></span></h2>
         <button type="button" class="small" id="addBtn" hidden>+ เพิ่มรายการเบิก</button>
       </div>
 
@@ -101,8 +102,10 @@
           statusTrack(inv.status),
           el("div", { className: "inv-price" },
             el("strong", { className: "inv-amount", textContent: "฿" + baht(inv.amount) }),
-            inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "📎", title: "ไฟล์แนบ", ariaLabel: "ไฟล์แนบ " + inv.subject,
-              onclick: (e) => toggleFiles(inv, e.currentTarget, row) }),
+            inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "📎", title: "ไฟล์แนบ",
+              ariaLabel: "ไฟล์แนบ " + inv.subject + (data.newFiles?.[inv.id] ? " (มีไฟล์ใหม่)" : ""),
+              onclick: (e) => toggleFiles(inv, e.currentTarget, row) },
+              !!data.newFiles?.[inv.id] && el("span", { className: "news-dot", title: "ไฟล์ใหม่จากหัวหน้าทีม" })),
             // rows typed in the sheet without an id (id <= 0) are read-only: fix them in the sheet
             isAdmin && inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openInvForm(inv) }))));
       row.dataset.inv = inv.id; // for ?invoice=N (LINE button)
@@ -144,7 +147,11 @@
         if (list) draw(list); // draw keeps msg, so a failure note stays visible
       } });
       box.replaceChildren(el("p", { className: "muted", textContent: "กำลังโหลด…" }));
-      api("invoiceFiles", { id: inv.id }).then(draw, (err) => box.replaceChildren(el("p", { className: "error", textContent: err.message })));
+      api("invoiceFiles", { id: inv.id }).then((files) => {
+        draw(files);
+        // admin opened it: the server cleared this invoice's new-file dot, so clear it here too
+        if (data.newFiles?.[inv.id]) { delete data.newFiles[inv.id]; btn.querySelector(".news-dot")?.remove(); newBadge(); }
+      }, (err) => box.replaceChildren(el("p", { className: "error", textContent: err.message })));
     }
 
     // 👁️ / 🖨️ on an invoice file: viewLinked / printLinked in js/app.js, with this invoice file's signed link
@@ -197,6 +204,7 @@
         (tab === "all" || (tab === "none" ? !i.type : i.type === tab)) &&
         (!q || i.subject.toLowerCase().includes(q) || i.building.toLowerCase().includes(q)));
       $("invCount").textContent = data.invoices.length;
+      newBadge();
       const open = shown.filter((i) => i.status !== STATUS[STATUS.length - 1]); // outstanding = not at the last step
       const done = shown.filter((i) => !open.includes(i));
       // finished invoices sit in one closed group at the bottom; a search opens it so matches show
@@ -210,6 +218,14 @@
       $("invTotal").textContent = shown.length
         ? `รวม ${shown.length} รายการ ฿${baht(shown.reduce((s, i) => s + i.amount, 0))} · ค้าง ${open.length} รายการ ฿${baht(open.reduce((s, i) => s + i.amount, 0))}`
         : "";
+    }
+
+    // admins: red pill next to the count = invoices with files a หัวหน้าทีม added since you last opened their 📎
+    function newBadge() {
+      const n = data.invoices.filter((i) => data.newFiles?.[i.id]).length;
+      $("invNew").hidden = !n;
+      $("invNew").textContent = n;
+      $("invNew").title = `มีไฟล์ใหม่จากหัวหน้าทีม ${n} รายการ · กด 📎 ที่มีจุดแดงเพื่อดู`;
     }
 
     // หัวหน้าทีม = the member who looks after the building (ข้อมูลการมอบหมาย)
