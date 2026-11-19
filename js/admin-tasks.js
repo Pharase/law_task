@@ -87,17 +87,26 @@ function reviewControls(t) {
   const reason = el("select", { required: true }, option("", "เลือกเหตุผล"), option("กดผิด", "กดผิด"), option("มีปรับแก้", "มีปรับแก้"));
   const note = el("textarea", { rows: 3, maxLength: 2000, placeholder: "ระบุส่วนที่ต้องแก้ไข" });
   const due = el("input", { type: "date", min: bkkToday() });
-  const fixBox = el("div", { hidden: true }, el("label", { textContent: "สิ่งที่ต้องแก้ไข" }), note, el("label", { textContent: "กำหนดส่งแก้" }), due);
+  // files for the fix (PDF / pictures): the member can view and print them on the task
+  const files = el("input", { type: "file", multiple: true, accept: "application/pdf,image/jpeg,image/png,image/webp" });
+  const fixBox = el("div", { hidden: true }, el("label", { textContent: "สิ่งที่ต้องแก้ไข" }), note, el("label", { textContent: "กำหนดส่งแก้" }), due,
+    el("label", { textContent: "แนบไฟล์ให้ผู้รับงาน (PDF / รูป, ไม่เกิน 10 MB ต่อไฟล์)" }), files);
   const notForm = el("form", { hidden: true }, el("label", { textContent: "เหตุผล" }), reason, fixBox, el("button", { textContent: "ยืนยันไม่อนุมัติ" }));
   reason.onchange = () => {
     const fix = reason.value === "มีปรับแก้";
     fixBox.hidden = !fix;
     note.required = due.required = fix;
   };
-  const submit = async (payload) => {
+  const submit = async (payload, attach = []) => {
     msg.textContent = "";
-    try { await locked(box, () => api("reviewTask", { task_id: t.id, ...payload })); }
-    catch (err) {
+    try {
+      await locked(box, async () => {
+        await api("reviewTask", { task_id: t.id, ...payload });
+        // sent back: now attach the files; the review is already saved, so a failed file is only reported
+        const failed = attach.length ? await uploadBriefFiles([t.id], attach, (x) => { msg.textContent = x; }) : [];
+        if (failed.length) alert("ส่งกลับแก้ไขแล้ว แต่แนบไฟล์ไม่สำเร็จ: " + failed.join(" · "));
+      });
+    } catch (err) {
       if (/already reviewed/.test(err.message)) alert("งานนี้ถูกตรวจโดยแอดมินคนอื่นแล้ว (already reviewed by another admin)");
       else return void (msg.textContent = err.message);
     }
@@ -105,7 +114,7 @@ function reviewControls(t) {
   };
   notForm.onsubmit = (e) => {
     e.preventDefault();
-    submit({ decision: reason.value, note: note.value, next_due_on: due.value });
+    submit({ decision: reason.value, note: note.value, next_due_on: due.value }, reason.value === "มีปรับแก้" ? [...files.files] : []);
   };
   const approve = el("button", { type: "button", className: "small", textContent: "อนุมัติ (Approved)" });
   approve.onclick = () => submit({ decision: "approved" });
@@ -384,7 +393,9 @@ async function initAssignForm(onCreated) {
         buildings: picked, title: $("title").value, details: $("details").value,
         tags, owners, due_on: $("dueOn").value,
       });
-      $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน`;
+      const files = [...$("assignFiles").files];
+      const failed = files.length ? await uploadBriefFiles(made.map((t) => t.id), files, (t) => { $("createMsg").textContent = t; }) : [];
+      $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน` + (failed.length ? ` · ❌ แนบไฟล์ไม่สำเร็จ: ${failed.join(" · ")} (แนบใหม่ได้ตอนส่งกลับแก้ไข หรือใน Drive)` : files.length ? " · แนบไฟล์แล้ว" : "");
       $("createForm").reset();
       filterBuildings([]);
       onCreated();

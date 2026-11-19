@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Invoice</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="../js/app.js?v=20261121"></script>
-  <script src="../js/work.js?v=20261122"></script>
+  <script src="../js/app.js?v=20261122"></script>
+  <script src="../js/work.js?v=20261123"></script>
   <link rel="stylesheet" href="../css/app.css?v=20261136">
 </head>
 <body>
@@ -143,43 +143,10 @@
       api("invoiceFiles", { id: inv.id }).then(draw, (err) => box.replaceChildren(el("p", { className: "error", textContent: err.message })));
     }
 
-    // computer: open the tab before the wait, so the pop-up blocker allows it; LINE app: openFile after (see Button D)
-    async function openInvoiceFile(inv, f, btn, msg) {
-      const win = !liff.isInClient() ? window.open("about:blank", "_blank") : null;
-      btn.disabled = true;
-      msg.textContent = "กำลังเตรียมไฟล์…";
-      try {
-        const { previewUrl } = await api("invoiceFileUrl", { id: inv.id, fileId: f.id });
-        if (win) win.location = previewUrl; else openFile(previewUrl);
-        msg.textContent = "";
-      } catch (err) { win?.close(); msg.textContent = "❌ " + err.message; }
-      btn.disabled = false;
-    }
-
-    // Print: on a computer the file is loaded into a hidden frame and the print dialog opens right here.
-    // Phones (and the LINE app) can't print a frame: the file opens instead, print from its share / ⋮ menu.
-    async function printInvoiceFile(inv, f, btn, msg) {
-      if (liff.isInClient() || matchMedia("(pointer: coarse)").matches) {
-        await openInvoiceFile(inv, f, btn, msg);
-        msg.textContent = "สั่งพิมพ์จากเมนูของหน้าที่เปิด (แชร์ / ⋮ → พิมพ์)";
-        return;
-      }
-      btn.disabled = true;
-      msg.textContent = "กำลังเตรียมพิมพ์…";
-      try {
-        const { previewUrl } = await api("invoiceFileUrl", { id: inv.id, fileId: f.id });
-        const res = await fetch(previewUrl);
-        if (!res.ok) throw new Error("โหลดไฟล์ไม่ได้ (" + res.status + ")");
-        const url = URL.createObjectURL(await res.blob()); // same-origin copy: only then may this page call print() on it
-        document.getElementById("printFrame")?.remove();
-        const frame = el("iframe", { id: "printFrame", title: "print", style: "position:fixed;width:0;height:0;border:0;right:0;bottom:0" });
-        frame.onload = () => { frame.contentWindow.focus(); frame.contentWindow.print(); msg.textContent = ""; };
-        if (f.mime.startsWith("image/")) frame.srcdoc = `<style>@page{margin:10mm}body{margin:0}img{display:block;max-width:100%;max-height:100vh;margin:auto}</style><img src="${url}">`;
-        else frame.src = url;
-        document.body.append(frame);
-      } catch (err) { msg.textContent = "❌ " + err.message; }
-      btn.disabled = false;
-    }
+    // 👁️ / 🖨️ on an invoice file: viewLinked / printLinked in js/app.js, with this invoice file's signed link
+    const invLinks = (inv, f) => () => api("invoiceFileUrl", { id: inv.id, fileId: f.id });
+    const openInvoiceFile = (inv, f, btn, msg) => viewLinked(invLinks(inv, f), btn, msg);
+    const printInvoiceFile = (inv, f, btn, msg) => printLinked(invLinks(inv, f), f.mime, btn, msg);
 
     /**
      * One by one, original files unchanged, all into the invoice's one Drive folder. A file with the same name as one

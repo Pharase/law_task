@@ -42,6 +42,10 @@ function taskItem(task, today, onChange, opts = {}) {
       el("strong", { textContent: "สิ่งที่ต้องแก้ไข: " }), el("span", { className: "pre", textContent: fix.fix_note ?? "" })),
   );
 
+  // ไฟล์จากแอดมิน (attached when assigning / sending back): view and print only; loaded when the card is opened
+  const brief = !opts.admin && briefBox(task);
+  if (brief) body.append(brief.box);
+
   if (task.sends.length) {
     body.append(el("p", { className: "label", textContent: "ประวัติ" }), el("ol", { className: "timeline" },
       ...task.sends.map((s) => el("li", {},
@@ -80,8 +84,47 @@ function taskItem(task, today, onChange, opts = {}) {
 
   const item = el("details", { className: "task" + (overdue ? " overdue" : "") }, summary, body);
   item.dataset.task = task.id;
-  if (files) item.addEventListener("toggle", () => { if (item.open) files.load(); });
+  if (files) item.addEventListener("toggle", () => { if (item.open) { files.load(); brief.load(); } });
   return item;
+}
+
+/** Admin attachments of a task for its owner: 👁️ view and 🖨️ print (viewLinked / printLinked in app.js). Hidden when none. */
+function briefBox(task) {
+  const box = el("div", { className: "task-files", hidden: true });
+  const msg = el("p", { className: "muted small-note upload-msg", role: "status" });
+  let loaded = false;
+  const links = (f) => () => api("briefFileUrl", { task_id: task.id, fileId: f.id });
+  const icon = (f) => (f.mime === "application/pdf" ? "📄 " : "🖼️ ");
+  return {
+    box,
+    load() {
+      if (loaded) return;
+      loaded = true;
+      api("briefFiles", { task_id: task.id }).then((files) => {
+        box.hidden = !files.length;
+        box.replaceChildren(el("p", { className: "label", textContent: "ไฟล์จากแอดมิน" }),
+          ...files.map((f) => el("div", { className: "inv-file" },
+            el("span", { className: "inv-file-name", textContent: icon(f) + f.name }),
+            el("button", { type: "button", className: "icon-btn", textContent: "👁️", title: "ดู", ariaLabel: "ดู " + f.name, onclick: (e) => viewLinked(links(f), e.currentTarget, msg) }),
+            el("button", { type: "button", className: "icon-btn", textContent: "🖨️", title: "พิมพ์", ariaLabel: "พิมพ์ " + f.name, onclick: (e) => printLinked(links(f), f.mime, e.currentTarget, msg) }))),
+          msg);
+      }, () => { loaded = false; }); // not shown on an error: the card still works, the next open tries again
+    },
+  };
+}
+
+/** Admin: attach files to tasks one by one (PDF / pictures); say(text) shows progress. Returns the failures as "name — why". */
+async function uploadBriefFiles(taskIds, files, say) {
+  const failed = [];
+  let n = 0;
+  for (const id of taskIds) for (const file of files) {
+    say(`กำลังแนบไฟล์ ${++n}/${taskIds.length * files.length}: ${file.name}`);
+    const form = new FormData();
+    form.append("task_id", id);
+    form.append("file", file);
+    try { await api("uploadBriefFile", form); } catch (err) { failed.push(`${file.name} — ${err.message}`); }
+  }
+  return failed;
 }
 
 /**

@@ -467,3 +467,46 @@ function keepState(box, draw) {
   for (const d of box.querySelectorAll("details")) { const k = key(d); if (was.has(k) && d.open !== was.get(k)) d.open = was.get(k); }
   scrollTo(scrollX, y);
 }
+
+// ---- 👁️ / 🖨️ a file opened by a signed link (invoice files, admin attachments on tasks) ----
+/** View: getLinks() -> { previewUrl }. Computer: the tab opens before the wait (pop-up blocker); LINE app: openFile after. */
+async function viewLinked(getLinks, btn, msg) {
+  const win = !liff.isInClient() ? window.open("about:blank", "_blank") : null;
+  btn.disabled = true;
+  msg.textContent = "กำลังเตรียมไฟล์…";
+  try {
+    const { previewUrl } = await getLinks();
+    if (win) win.location = previewUrl; else openFile(previewUrl);
+    msg.textContent = "";
+  } catch (err) { win?.close(); msg.textContent = "❌ " + err.message; }
+  btn.disabled = false;
+}
+
+/**
+ * Print: on a computer the file is loaded into a hidden frame and the print dialog opens right here.
+ * Phones (and the LINE app) can't print a frame: the file opens instead, print from its share / ⋮ menu.
+ */
+async function printLinked(getLinks, mime, btn, msg) {
+  if (liff.isInClient() || matchMedia("(pointer: coarse)").matches) {
+    await viewLinked(getLinks, btn, msg);
+    if (!msg.textContent) msg.textContent = "สั่งพิมพ์จากเมนูของหน้าที่เปิด (แชร์ / ⋮ → พิมพ์)";
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = "กำลังเตรียมพิมพ์…";
+  try {
+    const { previewUrl } = await getLinks();
+    const res = await fetch(previewUrl);
+    if (!res.ok) throw new Error("โหลดไฟล์ไม่ได้ (" + res.status + ")");
+    const url = URL.createObjectURL(await res.blob()); // same-origin copy: only then may this page call print() on it
+    document.getElementById("printFrame")?.remove();
+    const frame = document.createElement("iframe");
+    Object.assign(frame, { id: "printFrame", title: "print" });
+    frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
+    frame.onload = () => { frame.contentWindow.focus(); frame.contentWindow.print(); msg.textContent = ""; };
+    if (mime.startsWith("image/")) frame.srcdoc = `<style>@page{margin:10mm}body{margin:0}img{display:block;max-width:100%;max-height:100vh;margin:auto}</style><img src="${url}">`;
+    else frame.src = url;
+    document.body.append(frame);
+  } catch (err) { msg.textContent = "❌ " + err.message; }
+  btn.disabled = false;
+}

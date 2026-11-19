@@ -1,16 +1,14 @@
 // Invoice tab: admins see and edit all invoices; a หัวหน้างาน sees only invoices of the buildings they look after
 // (filtered on the server, see visibleInvoices). Filter tabs บ้านจัดสรร / อาคารชุด come from the building's type.
 // Attachments (📎): files in Google Drive <INVOICE_FOLDER_ID>/<invoiceFolderName>/, added and deleted by admins only.
-// Anyone who sees the invoice can open them: each Drive file is copied once per version to the private
-// `invoice-files` bucket (path = fileId/modifiedMs.ext) and opened by a signed link, like the monthly reports.
+// Anyone who sees the invoice can open them, through a signed copy (driveCopy.ts).
 import { base64 } from "./archive.ts";
 import { BUILDING_TYPES, type Invoice, invoiceCells, invoiceFolderName, parseInvoices, visibleInvoices } from "./invoices.ts";
 import { batch, isUnknownOp, scriptTooOld, sheet } from "./sheet.ts";
-import { db, HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
+import { HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
+import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import type { Row } from "./sheetRows.ts";
 
-const cache = db.storage.from("invoice-files");
-type DriveFile = { id: string; name: string; mime: string; size: number; modified: string };
 
 async function loadInvoices() {
   const { tabs } = await sheet("read", { tabs: ["Invoices", "Buildings"] });
@@ -66,33 +64,10 @@ export async function memberInvoiceActions(action: string, body: any, me: Me): P
       const inv = await invoiceFor(me, body.id);
       const file = (await driveFiles(inv)).find((f) => f.id === String(body.fileId ?? ""));
       if (!file) throw new HttpError(404, "file not found");
-      const ext = MIME_EXT[file.mime];
-      if (!ext) throw new HttpError(400, "เปิดในแอปได้เฉพาะ PDF หรือรูป (JPG, PNG, WEBP) · open it in Google Drive");
-      const version = `${new Date(file.modified).getTime()}.${ext}`, path = `${file.id}/${version}`;
-      const step = <T>(what: string, r: { data: T; error: unknown }): T => {
-        if (r.error) throw new HttpError(502, `เปิดไฟล์ไม่ได้ (${what}): ${(r.error as { message?: string }).message ?? r.error}`);
-        return r.data;
-      };
-      const cached = step("storage list", await cache.list(file.id)) as { name: string }[];
-      if (!cached.some((o) => o.name === version)) {
-        const { base64: b64 } = await sheet("invoiceFileData", { id: inv.id, fileId: file.id }, 60_000);
-        if (!b64) throw new HttpError(502, "เปิดไฟล์ไม่ได้ (Drive): the script returned no file");
-        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-        step("storage upload", await cache.upload(path, bytes, { contentType: file.mime, upsert: true }));
-        const old = cached.filter((o) => o.name !== version).map((o) => `${file.id}/${o.name}`);
-        if (old.length) await cache.remove(old);
-      }
-      const { signedUrl } = step("signed link", await cache.createSignedUrl(path, 3600)) as { signedUrl: string };
-      return { previewUrl: signedUrl, downloadUrl: `${signedUrl}&download=${encodeURIComponent(file.name)}` };
+      return driveFileLinks(file, async () => (await sheet("invoiceFileData", { id: inv.id, fileId: file.id }, 60_000)).base64);
     }
   }
   return undefined;
-}
-
-/** Removes the app's cached copies of a Drive file that was deleted or replaced. */
-async function dropCache(fileId: string) {
-  const cached = (await cache.list(fileId)).data ?? [];
-  if (cached.length) await cache.remove(cached.map((o) => `${fileId}/${o.name}`));
 }
 
 // deno-lint-ignore no-explicit-any
@@ -125,7 +100,7 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       const { replaced = [] } = await sheet("invoiceUpload", {
         id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
       }, 60_000).catch(scriptTooOld);
-      await Promise.all((replaced as string[]).map(dropCache));
+      await Promise.all((replaced as string[]).map(dropCopies));
       return driveFiles(inv);
     }
 
@@ -133,7 +108,7 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       const inv = await invoiceFor(me, body.id);
       const fileId = String(body.fileId ?? "");
       await sheet("invoiceFileDelete", { id: inv.id, fileId }); // to Drive's trash: restorable there for 30 days
-      await dropCache(fileId);
+      await dropCopies(fileId);
       return driveFiles(inv);
     }
   }

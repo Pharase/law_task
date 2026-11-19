@@ -6,10 +6,11 @@ import { batch, isUnknownOp, loadBuildingRows, scriptTooOld, loadBuildings, load
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
 import { archiveFiles, base64 } from "./archive.ts";
 import { taskFolderName } from "./driveName.ts";
+import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
 import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
-import { bucket, db, found, HttpError, type Me, must } from "./shared.ts";
+import { bucket, db, found, HttpError, MAX_BYTES, type Me, MIME_EXT, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
 const dueDate = (s: unknown) => { try { return checkDueDate(s, today()); } catch (e) { throw new HttpError(400, (e as Error).message); } };
@@ -80,6 +81,19 @@ async function taskDrive(task: Task): Promise<{ files: Row[]; url: string | null
   const r = await sheet("taskFiles", { id: task.id, folder: taskFolderName(task) }, 30_000)
     .catch((e) => { if (isUnknownOp(e)) return { files: [], url: null }; throw e; });
   return { files: ((r.files ?? []) as Row[]).sort((a, b) => a.modified.localeCompare(b.modified)), url: r.url ?? null };
+}
+
+/** The task, if `me` owns it or is an admin. */
+function seeTask(data: SheetData, id: number, me: Me): Task {
+  const task = taskIn(data, id);
+  if (task.owner !== me.line_user_id && me.role !== "admin") throw new HttpError(403, "not your task");
+  return task;
+}
+
+/** Admin attachments of a task, oldest first; [] until the script is redeployed. */
+async function briefFiles(task: Task): Promise<DriveFile[]> {
+  const r = await sheet("briefFiles", { id: task.id }, 30_000).catch((e) => { if (isUnknownOp(e)) return { files: [] }; throw e; });
+  return ((r.files ?? []) as DriveFile[]).sort((a, b) => a.modified.localeCompare(b.modified));
 }
 
 /** Files change only on your own task while it is open (กำลังดำเนินการ, including a fix round). */
@@ -169,6 +183,17 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         base64: base64(new Uint8Array(await file.arrayBuffer())),
       }, 90_000).catch(scriptTooOld);
       return taskDrive(task);
+    }
+
+    // ไฟล์จากแอดมิน: files an admin attached when assigning / sending back; the owner (and admins) view and print them only
+    case "briefFiles":
+      return briefFiles(seeTask(await loadSheet(), taskId(body), me));
+
+    case "briefFileUrl": {
+      const task = seeTask(await loadSheet(), taskId(body), me);
+      const file = (await briefFiles(task)).find((f) => f.id === String(body.fileId ?? ""));
+      if (!file) throw new HttpError(404, "file not found");
+      return driveFileLinks(file, async () => (await sheet("briefFileData", { id: task.id, fileId: file.id }, 60_000)).base64);
     }
 
     case "deleteTaskFile": {
@@ -299,6 +324,20 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         }
       } catch (e) { console.error("instant notice", e); }
       return loadTasks((t) => ids.has(t.id));
+    }
+
+    case "uploadBriefFile": { // admin attachment (assign / send back): PDF or picture, so members can view and print it in the app
+      const task = taskIn(await loadSheet(), taskId(body));
+      const file = body.file;
+      if (!(file instanceof File)) throw new HttpError(400, "no file");
+      if (!MIME_EXT[file.type]) throw new HttpError(400, "แนบได้เฉพาะ PDF หรือรูป (JPG, PNG, WEBP) เพื่อให้สมาชิกเปิดดูและพิมพ์ในแอปได้");
+      if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
+      const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      const { replaced = [] } = await sheet("briefUpload", {
+        id: task.id, folder: taskFolderName(task), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
+      }, 60_000).catch(scriptTooOld);
+      await Promise.all((replaced as string[]).map(dropCopies)); // same name = new version
+      return briefFiles(task);
     }
 
     case "listTasks":

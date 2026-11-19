@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adminDigest, memberDigest, shouldRunDigest } from "./digest.ts";
+import { adminDigest, approvedRecently, memberDigest, shouldRunDigest } from "./digest.ts";
 
 const t = (title: string) => ({ title, building: "อาคาร X", due: "2026-03-15" });
 const empty = { newTasks: [], dueSoon: [], overdue: [], sentBack: [], approved: [] };
@@ -65,4 +65,16 @@ test("due within 3 days: not sent yet, oldest assigned first, then nearest due; 
   assert.match(text, /ใกล้ครบกำหนด/);
   assert.match(text, /old-near \(B\) กำหนด .* · อีก 1 วัน/);
   assert.match(text, /today \(B\) กำหนด .* · วันนี้/);
+});
+
+test("approvedRecently: approvals reviewed yesterday or today (Bangkok) only", () => {
+  const s = (reviewed_at: string | null, outcome = "approved") => ({ outcome, reviewed_at });
+  const got = approvedRecently([
+    s("2026-11-18T02:00:00Z"), // yesterday 09:00 Bangkok
+    s("2026-11-17T17:30:00Z"), // 18 Nov 00:30 Bangkok = yesterday
+    s("2026-11-17T16:30:00Z"), // 17 Nov 23:30 Bangkok = two days ago
+    s("2026-11-19T00:30:00Z"), // this morning
+    s(null), s("2026-11-18T02:00:00Z", "fix"),
+  ], "2026-11-19");
+  assert.deepEqual(got.map((x) => x.reviewed_at), ["2026-11-18T02:00:00Z", "2026-11-17T17:30:00Z", "2026-11-19T00:30:00Z"]);
 });

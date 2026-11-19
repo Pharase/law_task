@@ -71,3 +71,16 @@ export function dueSoon(tasks: (T & { assigned: string })[], today: string): Soo
     .filter((t) => t.daysLeft >= 0 && t.daysLeft <= SOON_DAYS)
     .sort((a, b) => a.assigned.slice(0, 10).localeCompare(b.assigned.slice(0, 10)) || a.due.localeCompare(b.due));
 }
+
+/**
+ * "✅ อนุมัติแล้ว" in the morning summary: only approvals from yesterday (and this morning before the summary), by the
+ * Bangkok date of reviewed_at, so a missed or old approval never turns into a long list. Blank reviewed_at = left out.
+ */
+// deno-lint-ignore no-explicit-any
+export function approvedRecently<S extends Record<string, any>>(sends: S[], today: string): S[] {
+  return sends.filter((s) => {
+    if (s.outcome !== "approved" || !s.reviewed_at) return false;
+    const at = new Date(s.reviewed_at);
+    return !isNaN(at.getTime()) && daysBetween(bangkokDate(at), today) <= 1;
+  });
+}

@@ -1,6 +1,6 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
-import { adminDigest, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
+import { adminDigest, approvedRecently, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
 import { type BubbleTask, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
@@ -85,7 +85,7 @@ export async function digest() {
       sentBack: sends.filter((s) => s.outcome !== "approved").map((s) => ({
         ...asT(taskById.get(s.task_id)!), reason: s.outcome === "fix" ? "มีปรับแก้" : "กดผิด", note: s.fix_note,
       })),
-      approved: sends.filter((s) => s.outcome === "approved").map((s) => asT(taskById.get(s.task_id)!)),
+      approved: approvedRecently(sends, today).map((s) => asT(taskById.get(s.task_id)!)), // yesterday's only, never a long backlog
     });
     return text && { to: p.line_user_id, text, link: app, taskIds: newTasks.map((t) => t.id), sendIds: sends.map((s) => s.id) };
   }).filter(Boolean) as typeof outbox;

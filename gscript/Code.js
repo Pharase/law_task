@@ -59,6 +59,9 @@ function dispatch(body) {
     case "invoiceFileDelete": folderFile("inv", body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
     case "taskFiles": var tdir = itemFolder("task", body.id, String(body.folder || ""), false); return { files: folderFiles(tdir), url: tdir ? tdir.getUrl() : null };
     case "taskUpload": return folderUpload("task", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
+    case "briefFiles": return { files: folderFiles(briefFolder(body.id, "", false)) };
+    case "briefUpload": return folderUpload("brief", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
+    case "briefFileData": var bf = folderFile("brief", body.id, String(body.fileId || "")); return { name: bf.getName(), base64: Utilities.base64Encode(bf.getBlob().getBytes()) };
     case "taskFileDelete": folderFile("task", body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
     case "saveUpload": return saveUpload(String(body.folder || "unknown"), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
   }
@@ -281,6 +284,22 @@ function itemFolder(kind, id, name, create) {
   return dir;
 }
 
+// Admin attachments for a task (assign / send back for a fix): <task folder>/ไฟล์จากแอดมิน/, apart from the member's
+// own files so members can't delete them. `name` here is the TASK folder's name (made first if needed).
+function briefFolder(id, taskName, create) {
+  if (!(Number(id) > 0)) throw new Error("bad id");
+  var key = "brief_folder_" + Number(id), fid = PROPS.getProperty(key), dir = null;
+  if (fid) { try { dir = DriveApp.getFolderById(fid); if (dir.isTrashed()) dir = null; } catch (e) { dir = null; } }
+  if (!dir && create) {
+    dir = itemFolder("task", id, taskName, true).createFolder("ไฟล์จากแอดมิน");
+    PROPS.setProperty(key, dir.getId());
+  }
+  return dir;
+}
+function folderOf(kind, id, name, create) {
+  return kind === "brief" ? briefFolder(id, name, create) : itemFolder(kind, id, name, create);
+}
+
 function folderFiles(dir) {
   var out = [];
   if (!dir) return out;
@@ -295,7 +314,7 @@ function folderFiles(dir) {
 function folderUpload(kind, id, folder, name, mime, base64) {
   if (!base64) throw new Error("empty file");
   // a lock: two uploads to a new invoice / task at once must not make two folders
-  var dir = withLock(function () { return itemFolder(kind, id, folder, true); });
+  var dir = withLock(function () { return folderOf(kind, id, folder, true); });
   var made = dir.createFile(Utilities.newBlob(Utilities.base64Decode(base64), mime || undefined, name));
   // same name = a new version: the older copies go to the trash only now, after the new file is safely in Drive
   var same = dir.getFilesByName(name), replaced = [];
@@ -308,7 +327,7 @@ function folderUpload(kind, id, folder, name, mime, base64) {
 
 /** A file of this invoice's / task's folder only, so an id cannot reach any other Drive file. */
 function folderFile(kind, id, fileId) {
-  var dir = itemFolder(kind, id, "", false), f = DriveApp.getFileById(fileId), parents = f.getParents(), ok = false;
+  var dir = folderOf(kind, id, "", false), f = DriveApp.getFileById(fileId), parents = f.getParents(), ok = false;
   while (dir && parents.hasNext()) if (parents.next().getId() === dir.getId()) ok = true;
   if (!ok || f.isTrashed()) throw new Error("file is not in this folder");
   return f;
