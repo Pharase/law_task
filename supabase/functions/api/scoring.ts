@@ -32,14 +32,15 @@ export function taskScore(sends: Send[]): { onTime: number; accuracy: number; ta
 }
 
 /**
- * มอบหมาย on the performance page: the task was the owner's work during from..to — assigned by the period's end and
- * not approved before it started (so tasks carried over from earlier count too). Cancelled ones don't count.
- * Every task approved in the period counts here, so มอบหมาย is never below อนุมัติ.
+ * มอบหมาย on the performance page: the task belongs to the period of its FIRST due date (due_on), not the day it was
+ * assigned (assigned 1 Jan, due 2 Feb -> February). Still not approved by a later period -> it counts there too
+ * (carried over). Cancelled ones don't count. Every task approved in the period counts here (even one approved
+ * before its due month), so มอบหมาย is never below อนุมัติ.
  */
-export function workInPeriod(t: { state: string; createdOn: string; approvedOn: string | null }, from: string, to: string): boolean {
+export function workInPeriod(t: { state: string; firstDue: string; approvedOn: string | null }, from: string, to: string): boolean {
   if (t.state === "cancelled") return false;
-  if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return true; // even if created_at was hand-edited later
-  return t.createdOn <= to && !(t.approvedOn && t.approvedOn < from);
+  if (t.approvedOn && t.approvedOn >= from && t.approvedOn <= to) return true;
+  return t.firstDue <= to && !(t.approvedOn && t.approvedOn < from);
 }
 
 /**

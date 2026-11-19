@@ -123,7 +123,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       // Revoked people still count; admins never own tasks.
       const scored: ScoredTask[] = [];
       const items = new Map<string, unknown[]>(); // owner -> the tasks behind their scores (tap a name to see them)
-      // มอบหมาย: the owner's work in the period (assigned in it, or carried over and not approved yet); see workInPeriod
+      // มอบหมาย: the owner's work in the period (first due date in it, or carried over and not approved yet); see workInPeriod
       const assigned = new Map<string, number>();
       for (const t of data.tasks) {
         if (!role.has(t.owner) || role.get(t.owner)!.role === "admin") continue;
@@ -132,7 +132,7 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
         const ok = rows.filter((s) => s.outcome === "approved").at(-1);
         const approvedOn = t.state === "approved" ? String(ok?.reviewed_at || ok?.sent_on || t.current_due_on).slice(0, 10) : null;
         const createdOn = String(t.created_at).slice(0, 10);
-        if (workInPeriod({ state: t.state, createdOn, approvedOn }, from, to)) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
+        if (workInPeriod({ state: t.state, firstDue: t.due_on, approvedOn }, from, to)) assigned.set(t.owner, (assigned.get(t.owner) ?? 0) + 1);
         const c = periodCount({ state: t.state, createdOn, currentDue: t.current_due_on, approvedOn, sends }, from, to, today());
         if (!c) continue;
         const x: ScoredTask = { owner: t.owner, tags: t.tags, sends, ...(c === "full" ? {} : c) };

@@ -166,14 +166,17 @@ test("taskParts: per-task scores for the list under a name", async () => {
   assert.equal(taskParts({ owner: "U1", tags: [], sends: [s("2026-01-09", "2026-01-10", "pending")] }), null);
 });
 
-test("workInPeriod (มอบหมาย): assigned in the period or carried over; never below อนุมัติ", () => {
-  const from = "2026-11-01", to = "2026-11-30";
-  const w = (state: string, createdOn: string, approvedOn: string | null = null) => workInPeriod({ state, createdOn, approvedOn }, from, to);
-  assert.equal(w("on_process", "2026-11-05"), true); // assigned this month
-  assert.equal(w("approved", "2026-10-20", "2026-11-03"), true); // October task approved in November: counts in both
-  assert.equal(w("submitted", "2026-09-01"), true); // carried over, not approved yet
-  assert.equal(w("approved", "2026-10-01", "2026-10-25"), false); // finished before the month
-  assert.equal(w("on_process", "2026-12-01"), false); // assigned after the month
-  assert.equal(w("cancelled", "2026-11-05"), false);
-  assert.equal(w("approved", "2026-12-02", "2026-11-20"), true); // created_at hand-edited later: still counted with its approval
+test("workInPeriod (มอบหมาย): month of the first due date, or carried over; never below อนุมัติ", () => {
+  const w = (from: string, to: string, state: string, firstDue: string, approvedOn: string | null = null) =>
+    workInPeriod({ state, firstDue, approvedOn }, from, to);
+  const jan = ["2025-01-01", "2025-01-31"] as const, feb = ["2025-02-01", "2025-02-28"] as const, mar = ["2025-03-01", "2025-03-31"] as const;
+  // assigned 1/1/2025, due 2/2/2025: February's, not January's
+  assert.equal(w(...jan, "on_process", "2025-02-02"), false);
+  assert.equal(w(...feb, "on_process", "2025-02-02"), true);
+  assert.equal(w(...mar, "submitted", "2025-02-02"), true); // still not approved in March: carried over
+  assert.equal(w(...mar, "approved", "2025-02-02", "2025-02-20"), false); // approved in February: done
+  assert.equal(w(...mar, "approved", "2025-02-02", "2025-03-05"), true); // approved in March: counts with its อนุมัติ
+  assert.equal(w(...jan, "approved", "2025-02-02", "2025-01-25"), true); // approved early (January): counts in January
+  assert.equal(w(...feb, "approved", "2025-02-02", "2025-01-25"), false); // ...and not again in February
+  assert.equal(w(...feb, "cancelled", "2025-02-02"), false);
 });
