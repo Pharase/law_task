@@ -4,6 +4,7 @@ import { canSend, checkDueDate, reviewEffect, TAGS, validateReview, validFileIds
 import { periodCount, performanceRows, type ScoredTask, taskParts, visibleRows, workInPeriod } from "./scoring.ts";
 import { batch, isUnknownOp, loadBuildingRows, scriptTooOld, loadBuildings, loadPeople, loadSheet, type SheetData, sheet, type Step, syncMembers } from "./sheet.ts";
 import { isAllBuildings, outsideResponsibility } from "./responsibility.ts";
+import { freeName } from "./invoices.ts";
 import { archiveFiles, base64 } from "./archive.ts";
 import { taskFolderName } from "./driveName.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
@@ -80,6 +81,7 @@ async function memberName(name: unknown): Promise<string> {
 
 /** Actions for approved members (and admins). Returns undefined for actions it doesn't own. */
 const TASK_MAX_BYTES = 25 * 1024 * 1024; // the file travels base64 in one request to Apps Script (~50 MB cap)
+const GENERIC_PHOTO = /^image( \(\d+\))?\.(jpe?g|png|heic|heif)$/i; // the name iPhones give every photo picked from Photos
 
 /** Files in the task's Drive folder (oldest first) and the folder link; the script renames the folder if the task was edited. */
 async function taskDrive(task: Task): Promise<{ files: Row[]; url: string | null }> {
@@ -181,8 +183,10 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       if (!(file instanceof File)) throw new HttpError(400, "no file");
       if (!file.size) throw new HttpError(400, "file is empty");
       if (file.size > TASK_MAX_BYTES) throw new HttpError(400, "file is over 25 MB");
-      const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
-      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
+      let name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved).
+      // Except phone photos: iPhones name every picked photo "image.jpg", so those never replace another file.
+      if (GENERIC_PHOTO.test(name)) name = freeName(name, (await taskDrive(task)).files.map((f) => String(f.name)));
       await sheet("taskUpload", {
         id: task.id, folder: taskFolderName(task), name, mime: file.type || "application/octet-stream",
         base64: base64(new Uint8Array(await file.arrayBuffer())),
