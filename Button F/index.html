@@ -104,7 +104,7 @@
             inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "📎", title: "ไฟล์แนบ", ariaLabel: "ไฟล์แนบ " + inv.subject,
               onclick: (e) => toggleFiles(inv, e.currentTarget, row) }),
             // rows typed in the sheet without an id (id <= 0) are read-only: fix them in the sheet
-            isAdmin && inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openForm(inv) }))));
+            isAdmin && inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openInvForm(inv) }))));
       return row;
     }
 
@@ -265,7 +265,7 @@
         options: () => [...new Set([...LAWYERS, ...data.invoices.map((i) => i.lawyer).filter(Boolean)])].map((value) => ({ value })) }),
     ];
 
-    function openForm(inv) {
+    function openInvForm(inv) {
       const f = $("invForm");
       f.reset();
       $("formMsg").textContent = "";
@@ -285,7 +285,7 @@
     }
 
     $("q").oninput = render;
-    $("addBtn").onclick = () => openForm(null);
+    $("addBtn").onclick = () => openInvForm(null);
     $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
     $("invForm").onsubmit = async (e) => {
       e.preventDefault();
