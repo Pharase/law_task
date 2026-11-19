@@ -105,6 +105,7 @@
               onclick: (e) => toggleFiles(inv, e.currentTarget, row) }),
             // rows typed in the sheet without an id (id <= 0) are read-only: fix them in the sheet
             isAdmin && inv.id > 0 && el("button", { type: "button", className: "inv-edit", textContent: "✏️", title: "แก้ไข", ariaLabel: "แก้ไข " + inv.subject, onclick: () => openInvForm(inv) }))));
+      row.dataset.inv = inv.id; // for ?invoice=N (LINE button)
       return row;
     }
 
@@ -295,9 +296,10 @@
       if (!f.subject.value.trim()) return void ($("formMsg").textContent = "เลือกรายการเบิก · pick a subject");
       btn.disabled = true;
       try {
-        const { savedId, ...rest } = await api("saveInvoice", Object.fromEntries(new FormData(f)));
+        const { savedId, noticeError, ...rest } = await api("saveInvoice", Object.fromEntries(new FormData(f)));
         data = rest;
         render();
+        if (noticeError) alert(noticeError); // saved; only the LINE message to the หัวหน้าทีม failed
         f.elements.id.value = savedId; // if an upload fails, Save again edits this invoice instead of adding another
         const files = [...$("fFiles").files];
         const { failed } = files.length ? await uploadInvoiceFiles(savedId, files, (t) => { $("formMsg").textContent = t; }) : { failed: [] };
@@ -311,6 +313,23 @@
       btn.disabled = false;
     };
 
+    // ?invoice=N: opened from the LINE message's กดเพื่อดูรายละเอียด button: show that invoice with its 📎 files open.
+    // Dropped from the URL so a reload doesn't jump again.
+    function showLinked() {
+      const id = Number(new URLSearchParams(location.search).get("invoice"));
+      if (!id) return;
+      history.replaceState(null, "", location.pathname);
+      if (!data.invoices.some((i) => i.id === id)) return;
+      tab = "all";
+      $("q").value = "";
+      render();
+      const row = $("invList").querySelector(`[data-inv="${id}"]`);
+      const group = row.closest("details");
+      if (group) group.open = true;
+      row.querySelector('[title="ไฟล์แนบ"]').click();
+      row.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
     start("member").then(async (me) => {
       isAdmin = me.role === "admin";
       $("addBtn").hidden = !isAdmin;
@@ -319,6 +338,7 @@
       $("status").hidden = true;
       $("page").hidden = false;
       render();
+      showLinked();
       // the list refreshes by itself (every minute and when you come back); it waits while the form or a 📎 panel is open
       autoRefresh({ box: $("invList").closest(".card"), load: () => api("listInvoices"), draw: (d) => { data = d; render(); },
         busy: () => !!document.querySelector(".inv-files:not([hidden])") }).seen(data);

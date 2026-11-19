@@ -59,7 +59,7 @@ export function taskMessages(tasks: BubbleTask[], hero?: string | null, app = LI
 export const MAX_TASKS_PER_PUSH = PER_CAROUSEL * MAX_MESSAGES;
 
 /** Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link. */
-export function linkMessage(text: string, link: string, hero?: string | null) {
+export function linkMessage(text: string, link: string, hero?: string | null, label = "ดูรายการงานทั้งหมดที่นี่") {
   return {
     type: "flex", altText: text.slice(0, 400),
     contents: {
@@ -67,7 +67,7 @@ export function linkMessage(text: string, link: string, hero?: string | null) {
       ...(hero && { hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" } }),
       body: { type: "box", layout: "vertical", contents: [{ type: "text", text: text.slice(0, 2000), wrap: true, size: "sm" }] },
       footer: { type: "box", layout: "vertical", contents: [
-        { type: "button", style: "primary", height: "sm", action: { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: link } },
+        { type: "button", style: "primary", height: "sm", action: { type: "uri", label, uri: link } },
       ] },
     },
   };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { INVOICE_STATUS, invoiceCells, invoiceFolderName, parseInvoices } from "./invoices.ts";
+import { INVOICE_STATUS, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices } from "./invoices.ts";
 
 const types = new Map([["B1", "บ้านจัดสรร"], ["B2", "อาคารชุด"], ["B3", ""]]);
 const row = (over: Record<string, string> = {}) => ({
@@ -104,4 +104,13 @@ test("invoiceFolderName: Bangkok date-building-subject-lawyer, Drive-unsafe char
   assert.equal(invoiceFolderName(inv), "2026-11-17-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส-ตั้ม");
   assert.equal(invoiceFolderName({ ...inv, lawyer: null }), "2026-11-17-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส");
   assert.equal(invoiceFolderName({ ...inv, created_at: "", billed_on: "2026-11-01" }), "2026-11-01-ไฮคอนโด ท่าศาลา 2-คชจ ชั้นโนติส-ตั้ม");
+});
+
+test("invoiceNotice: LINE text only when the status changes to รอนิติชำระเงิน or เสร็จสิ้น", () => {
+  assert.match(invoiceNotice("รอนิติชำระเงิน", "รอทนายวางบิล")!, /วางบิลใหม่/);
+  assert.match(invoiceNotice("เสร็จสิ้น", "รอทนายส่งใบเสร็จ")!, /ส่งใบเสร็จ/);
+  assert.match(invoiceNotice("รอนิติชำระเงิน")!, /วางบิลใหม่/); // a new invoice saved at that step
+  assert.equal(invoiceNotice("เสร็จสิ้น", "เสร็จสิ้น"), null); // edited without a status change
+  assert.equal(invoiceNotice("รอทนายวางบิล", "รอนิติชำระเงิน"), null);
+  assert.equal(invoiceNotice("รอทนายส่งใบเสร็จ"), null);
 });

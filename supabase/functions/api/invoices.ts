@@ -20,6 +20,14 @@ export type Invoice = {
 };
 
 const DATE_FIELDS = ["billed_on", "transfer_on", "receipt_on"] as const;
+
+/** LINE text for the building's หัวหน้าทีม when an invoice moves to `status` (from `before`, undefined = new); null = no message. */
+const NOTICE: Partial<Record<string, string>> = {
+  "รอนิติชำระเงิน": "ทนายความมีวางบิลใหม่นะคะ สามารถดูรายละเอียดและดาวน์โหลดใบวางบิลได้ที่นี่หรือเมนู Invoice",
+  "เสร็จสิ้น": "ทนายความส่งใบเสร็จให้เรียบร้อยแล้วนะคะ สามารถดูรายละเอียดและดาวน์โหลดใบเสร็จได้ที่นี่หรือเมนู Invoice",
+};
+export const invoiceNotice = (status: string, before?: string): string | null => (status !== before && NOTICE[status]) || null;
+
 const cell = (r: Row, k: string) => String(r[k] ?? "").trim();
 /** "1,500.50", "฿1,500", "1500 บาท" -> number; null unless a number >= 0. */
 const money = (s: string) => {

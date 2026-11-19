@@ -3,8 +3,9 @@
 // Attachments (📎): files in Google Drive <INVOICE_FOLDER_ID>/<invoiceFolderName>/, added and deleted by admins only.
 // Anyone who sees the invoice can open them, through a signed copy (driveCopy.ts).
 import { base64 } from "./archive.ts";
-import { BUILDING_TYPES, type Invoice, invoiceCells, invoiceFolderName, parseInvoices, visibleInvoices } from "./invoices.ts";
-import { batch, isUnknownOp, scriptTooOld, sheet } from "./sheet.ts";
+import { BUILDING_TYPES, type Invoice, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices, visibleInvoices } from "./invoices.ts";
+import { batch, isUnknownOp, loadPeople, scriptTooOld, sheet } from "./sheet.ts";
+import { notifyInvoice } from "./notify-api.ts";
 import { HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import type { Row } from "./sheetRows.ts";
@@ -74,11 +75,12 @@ export async function memberInvoiceActions(action: string, body: any, me: Me): P
 export async function adminInvoiceActions(action: string, body: any, me: Me): Promise<unknown> {
   switch (action) {
     case "saveInvoice": {
-      const { buildings } = await loadInvoices();
+      const { buildings, invoices } = await loadInvoices();
       let cells;
       try { cells = invoiceCells(body, buildings.map((b) => b.name)); } catch (e) { throw new HttpError(400, (e as Error).message); }
       const now = new Date().toISOString();
       let id = Number(body.id);
+      const before = id ? invoices.find((i) => i.id === id)?.status : undefined;
       if (id) {
         // edit: the row is matched by id; a row deleted by hand meanwhile gives 404 from sheet()
         await batch([{ op: "update", tab: "Invoices", id, patch: { ...cells, updated_at: now } }]);
@@ -86,7 +88,14 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
         const results = await batch([{ op: "append", tab: "Invoices", rows: [{ ...cells, created_by: me.line_user_id, created_at: now }] }]);
         id = Number(results?.[0]?.[0]?.id);
       }
-      return { ...await loadInvoices(), savedId: id }; // savedId: the form uploads its files to this invoice next
+      // status moved to รอนิติชำระเงิน / เสร็จสิ้น: LINE to the building's หัวหน้าทีม (owner in Buildings = their app name)
+      const text = invoiceNotice(cells.status, before);
+      const owner = text && buildings.find((b) => b.name === cells.building)?.owner;
+      const noticeError = !text ? null : !owner ? "นิติบุคคลนี้ยังไม่มีหัวหน้าทีม (ชีต Buildings คอลัมน์ owner) จึงไม่ได้ส่ง LINE"
+        : await notifyInvoice((await loadPeople()).filter((p) => p.name === owner && p.role !== "revoked").map((p) => p.line_user_id), text, id)
+          .catch((e) => String(e));
+      // savedId: the form uploads its files to this invoice next
+      return { ...await loadInvoices(), savedId: id, noticeError: noticeError && "บันทึกแล้ว แต่ส่ง LINE ไม่ได้: " + noticeError };
     }
 
     case "uploadInvoiceFile": {

@@ -137,6 +137,25 @@ export async function notifyNewTasks(groups: { to: string; tasks: BubbleTask[] }
   return done;
 }
 
+/**
+ * Invoice status notice to a building's หัวหน้าทีม, sent right away (an admin just saved it). The button opens the
+ * invoice in the app. Returns null when sent, else why not (the save itself still counts).
+ */
+export async function notifyInvoice(to: string[], text: string, invoiceId: number): Promise<string | null> {
+  const { token, liffUrl: app } = await loadLine();
+  if (!token) return "ยังไม่ได้ตั้ง Channel access token (ตั้งค่า → Linkage)";
+  if (!to.length) return "ไม่พบบัญชี LINE ของหัวหน้าทีมของนิติบุคคลนี้";
+  const message = linkMessage(text, `${app}/Button%20F/?invoice=${invoiceId}`, null, "กดเพื่อดูรายละเอียด");
+  const today = bangkokDate(new Date());
+  const errors: string[] = [];
+  for (const id of to) {
+    const error = await pushMessages(id, [message], token).catch((e) => String(e));
+    await db.from("notify_log").insert({ run_date: today, line_user_id: id, ok: !error, error: error ? "invoice: " + error : null });
+    if (error) errors.push(error);
+  }
+  return errors.length ? errors.join(" · ") : null;
+}
+
 const CATCH_UP_DAYS = 4; // a task assigned Friday evening still gets its bubble on Monday; older unsent ones are left to the daily summary
 
 /**
