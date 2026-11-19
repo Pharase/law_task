@@ -28,9 +28,14 @@ async function loadTasks(pred: (t: Task) => boolean, data?: SheetData): Promise<
   const live = files.filter((f) => !f.deleted_at);
   const urls = live.length ? must(await bucket.createSignedUrls(live.map((f) => f.path), 3600)) : [];
   const urlOf = new Map(live.map((f, i) => [f.id, urls[i]?.signedUrl]));
+  const mine = sends.filter((s) => picked.some((t) => t.id === s.task_id));
+  // how each send was delivered (paper / drive); sends from before this choice existed have none
+  const how = new Map<number, string>(mine.length
+    ? must(await db.from("send_delivery").select("send_id, delivery").in("send_id", mine.map((s) => s.id))).map((d: Row) => [d.send_id, d.delivery])
+    : []);
   return picked.map(({ sheetRow: _r, ...t }) => ({
     ...t,
-    sends: sends.filter((s) => s.task_id === t.id).sort((a, b) => a.id - b.id),
+    sends: mine.filter((s) => s.task_id === t.id).sort((a, b) => a.id - b.id).map((s) => ({ ...s, delivery: how.get(s.id) ?? null })),
     files: files.filter((f) => f.task_id === t.id)
       .map(({ path: _p, ...f }) => (f.deleted_at ? { ...f, url: f.drive_url } : { ...f, url: urlOf.get(f.id) })),
   }));
@@ -204,20 +209,34 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
 
     case "sendTask": {
       const id = taskId(body);
-      await submitTask(id, me.line_user_id, validFileIds(body.file_ids)); // non-uuids dropped: a bad id must not 500 after the send is saved
+      await submitTask(id, me.line_user_id, body.delivery, validFileIds(body.file_ids)); // non-uuids dropped: a bad id must not 500 after the send is saved
       return { ...await one(id), tags: [] }; // no score tags for members
     }
   }
   return undefined;
 }
 
+export const DELIVERY = ["paper", "drive"] as const; // ส่งเอกสารตัวจริง / ส่งไฟล์ออนไลน์ (Drive)
+export const PICK_DELIVERY = "กรุณาส่งงานในแอป และเลือกวิธีส่งเอกสาร: ส่งเอกสารตัวจริง หรือ ส่งไฟล์ออนไลน์ (Drive)";
+
 /**
  * ส่งงาน: the web app's button and the LINE bubble's button both land here. Throws 404 (no task),
- * 403 (not this person's on-process task) or 409 (already sent). Returns the task as it was before sending.
+ * 403 (not this person's on-process task), 409 (already sent) or 400 (no delivery picked; 'drive' without a file
+ * uploaded since the previous send). Returns the task as it was before sending.
  */
-export async function submitTask(id: number, userId: string, fileIds: string[] = []): Promise<Task> {
-  const task = taskIn(await loadSheet(), id);
+export async function submitTask(id: number, userId: string, delivery: unknown, fileIds: string[] = []): Promise<Task> {
+  const data = await loadSheet();
+  const task = taskIn(data, id);
   if (!canSend(task, userId)) throw new HttpError(403, "you can only send your own task while it is กำลังดำเนินการ (on process)");
+  if (!(DELIVERY as readonly unknown[]).includes(delivery)) throw new HttpError(400, PICK_DELIVERY);
+  if (delivery === "drive") {
+    // a file for THIS send: on a fix round the folder still holds the earlier send's files
+    const prev = data.sends.filter((s) => s.task_id === id).map((s) => s.sent_at).sort().at(-1) ?? "";
+    const { files } = await taskDrive(task);
+    if (!files.some((f) => !prev || String(f.modified) > prev)) {
+      throw new HttpError(400, prev ? "เลือกส่งไฟล์ออนไลน์: แนบไฟล์ใหม่ของรอบนี้ก่อน แล้วกดส่งงาน" : "เลือกส่งไฟล์ออนไลน์: แนบไฟล์ก่อน แล้วกดส่งงาน");
+    }
+  }
   // One locked batch: the flip and the send row land together; a double tap finds state != on_process and gets 409.
   const r = await batch([
     { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
@@ -226,6 +245,8 @@ export async function submitTask(id: number, userId: string, fileIds: string[] =
     }] },
   ]);
   if (!r) throw new HttpError(409, "already sent");
+  const { error } = await db.from("send_delivery").insert({ send_id: Number(r[1][0].id), delivery });
+  if (error) console.error("send_delivery", error); // the send itself is saved; only its label is missing
   if (fileIds.length) {
     // Only the sender's own, still-unattached files move; anything else is silently ignored.
     const moved: Row[] = must(await db.from("files").update({ task_id: id, send_id: Number(r[1][0].id) })

@@ -12,8 +12,10 @@ async function pressSend(id: number, userId: string): Promise<string> {
   const p = (await db.from("profiles").select("role").eq("line_user_id", userId).maybeSingle()).data;
   if (!p || (p.role !== "member" && p.role !== "admin")) return postbackReply(null, false); // revoked / unknown: like a missing task
   try {
-    return postbackReply(await submitTask(id, userId), true);
+    // old bubbles' postback button can't ask paper or Drive: submitTask refuses (400) and the reply says to send in the app
+    return postbackReply(await submitTask(id, userId, null), true);
   } catch (e) {
+    if (e instanceof HttpError && e.status === 400) return e.message;
     if (!(e instanceof HttpError) || ![403, 404, 409].includes(e.status)) throw e;
     // not sent now: say where the task is (only to its owner; anyone else hears "not found")
     const t = (await loadSheet()).tasks.find((x) => x.id === id);

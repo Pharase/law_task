@@ -1,5 +1,8 @@
 // Member Work dashboard (spec "Member view"). Needs js/app.js (api, uploadFile, $).
 const OUTCOME_TEXT = { pending: "รอตรวจ", approved: "อนุมัติ", void: "กดผิด", fix: "มีปรับแก้" };
+// how a send was delivered (picked when pressing ส่งงาน); older sends have none
+const DELIVERY_TEXT = { paper: "📄 เอกสารตัวจริง", drive: "☁️ ไฟล์ออนไลน์ (Drive)" };
+const deliveryNote = (s) => (DELIVERY_TEXT[s.delivery] ? " · " + DELIVERY_TEXT[s.delivery] : "");
 const bkkToday =() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 // dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
 const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
@@ -49,7 +52,7 @@ function taskItem(task, today, onChange, opts = {}) {
   if (task.sends.length) {
     body.append(el("p", { className: "label", textContent: "ประวัติ" }), el("ol", { className: "timeline" },
       ...task.sends.map((s) => el("li", {},
-        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)}) → ${OUTCOME_TEXT[s.outcome] ?? s.outcome}`,
+        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → ${OUTCOME_TEXT[s.outcome] ?? s.outcome}`,
         s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null,
       ))));
   }
@@ -67,19 +70,27 @@ function taskItem(task, today, onChange, opts = {}) {
 
   if (task.state === "on_process" && !opts.admin) {
     const msg = el("p", { role: "status" });
+    // required: paper document, or files in the task's Drive folder (uploaded above; the server checks there is one for this send)
+    const name = "delivery-" + task.id;
+    const choice = el("fieldset", { className: "delivery" }, el("legend", { textContent: "วิธีส่งเอกสาร (เลือก 1 อย่าง)" }),
+      ...Object.entries({ paper: "📄 ส่งเอกสารตัวจริง", drive: "☁️ ส่งไฟล์ออนไลน์ (Drive) · แนบไฟล์ด้านบนก่อน" }).map(([value, text]) =>
+        el("label", { className: "inline" }, el("input", { type: "radio", name, value }), " " + text)));
     const btn = el("button", { type: "button", textContent: "ส่งงาน (Send)" });
     btn.onclick = async () => {
+      const delivery = choice.querySelector("input:checked")?.value;
+      if (!delivery) return void (msg.textContent = "เลือกวิธีส่งเอกสารก่อน: ส่งเอกสารตัวจริง หรือ ส่งไฟล์ออนไลน์");
+      if (delivery === "drive" && files && files.count() === 0) return void (msg.textContent = "เลือกส่งไฟล์ออนไลน์: แนบไฟล์ก่อน แล้วกดส่งงาน");
       btn.disabled = true;
       try {
         msg.textContent = "กำลังส่ง…";
-        await api("sendTask", { task_id: task.id, file_ids: [] });
+        await api("sendTask", { task_id: task.id, delivery, file_ids: [] });
         onChange();
       } catch (err) {
         msg.textContent = "Error: " + err.message;
         btn.disabled = false;
       }
     };
-    body.append(btn, msg);
+    body.append(choice, btn, msg);
   }
 
   const item = el("details", { className: "task" + (overdue ? " overdue" : "") }, summary, body);
@@ -136,9 +147,9 @@ function taskFilesBox(task) {
   const canEdit = task.state === "on_process";
   const box = el("div", { className: "task-files" });
   const msg = el("p", { className: "muted small-note upload-msg", role: "status" });
-  let loaded = false;
+  let loaded = false, shown = -1;
   const fail = (err) => { msg.textContent = "❌ " + err.message; };
-  const draw = ({ files }) => box.replaceChildren(
+  const draw = ({ files }) => (shown = files.length, box.replaceChildren(
     el("p", { className: "label", textContent: canEdit ? "แนบไฟล์งาน (แนบก่อน แล้วกดส่งงาน)" : "ไฟล์งาน" }),
     files.length
       ? el("div", {}, ...files.map((f) => el("div", { className: "inv-file" },
@@ -150,7 +161,7 @@ function taskFilesBox(task) {
         } }))))
       : el("p", { className: "muted", textContent: "ไม่มีไฟล์แนบ" }),
     ...(canEdit ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []),
-    msg);
+    msg));
   const pick = el("input", { type: "file", multiple: true, onchange: async () => {
     const picked = [...pick.files], failed = [];
     pick.value = "";
@@ -167,6 +178,7 @@ function taskFilesBox(task) {
   } });
   return {
     box,
+    count: () => shown,
     load() {
       if (loaded) return;
       loaded = true;

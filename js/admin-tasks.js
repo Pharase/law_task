@@ -38,7 +38,7 @@ function adminTaskBody(t) {
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
     taskFolderButton(t), // every task, so old (history) tasks' sent files can be opened too
     t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
-      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)}) → ${OUTCOME_TEXT[s.outcome]}`,
+      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → ${OUTCOME_TEXT[s.outcome]}`,
       s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
     files.length > 0 && el("ul", {}, ...files),
   );
