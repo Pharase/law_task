@@ -28,6 +28,18 @@ const NOTICE: Partial<Record<string, string>> = {
 };
 export const invoiceNotice = (status: string, before?: string): string | null => (status !== before && NOTICE[status]) || null;
 
+/** The step at which the building's หัวหน้าทีม may add files to an invoice (admins: any step). */
+export const MEMBER_UPLOAD_STATUS: InvoiceStatus = "รอนิติชำระเงิน";
+
+/** `name`, or "name (2).ext", "(3)"... if taken: an upload with a taken name would replace (trash) that file. */
+export function freeName(name: string, taken: string[]): string {
+  const used = new Set(taken.map((t) => t.toLowerCase()));
+  const dot = name.lastIndexOf("."), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+  let out = name;
+  for (let n = 2; used.has(out.toLowerCase()); n++) out = `${base} (${n})${ext}`;
+  return out;
+}
+
 const cell = (r: Row, k: string) => String(r[k] ?? "").trim();
 /** "1,500.50", "฿1,500", "1500 บาท" -> number; null unless a number >= 0. */
 const money = (s: string) => {

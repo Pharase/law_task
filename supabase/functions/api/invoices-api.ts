@@ -1,9 +1,10 @@
 // Invoice tab: admins see and edit all invoices; a หัวหน้างาน sees only invoices of the buildings they look after
 // (filtered on the server, see visibleInvoices). Filter tabs บ้านจัดสรร / อาคารชุด come from the building's type.
-// Attachments (📎): files in Google Drive <INVOICE_FOLDER_ID>/<invoiceFolderName>/, added and deleted by admins only.
+// Attachments (📎): files in Google Drive <INVOICE_FOLDER_ID>/<invoiceFolderName>/, added and deleted by admins; the
+// building's หัวหน้าทีม may also add (never replace or delete) while the invoice is at รอนิติชำระเงิน.
 // Anyone who sees the invoice can open them, through a signed copy (driveCopy.ts).
 import { base64 } from "./archive.ts";
-import { BUILDING_TYPES, type Invoice, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices, visibleInvoices } from "./invoices.ts";
+import { BUILDING_TYPES, type Invoice, invoiceCells, freeName, invoiceFolderName, invoiceNotice, MEMBER_UPLOAD_STATUS, parseInvoices, visibleInvoices } from "./invoices.ts";
 import { batch, isUnknownOp, loadPeople, scriptTooOld, sheet } from "./sheet.ts";
 import { notifyInvoice } from "./notify-api.ts";
 import { HttpError, MAX_BYTES, type Me, MIME_EXT } from "./shared.ts";
@@ -67,6 +68,28 @@ export async function memberInvoiceActions(action: string, body: any, me: Me): P
       if (!file) throw new HttpError(404, "file not found");
       return driveFileLinks(file, async () => (await sheet("invoiceFileData", { id: inv.id, fileId: file.id }, 60_000)).base64);
     }
+
+    case "uploadInvoiceFile": {
+      // admins: any invoice. หัวหน้าทีม of the building: only at รอนิติชำระเงิน (e.g. the payment slip), and they can't
+      // replace or delete a file: a name already in the folder gets " (2)" instead of replacing that file.
+      const inv = await invoiceFor(me, body.id);
+      const isAdmin = me.role === "admin";
+      if (!isAdmin && (inv.status !== MEMBER_UPLOAD_STATUS || !(await listFor(me)).buildings.some((b) => b.name === inv.building))) {
+        throw new HttpError(403, `แนบไฟล์ได้เฉพาะใบแจ้งหนี้สถานะ "${MEMBER_UPLOAD_STATUS}" ของนิติบุคคลที่คุณดูแล`);
+      }
+      const file = body.file;
+      if (!(file instanceof File)) throw new HttpError(400, "no file");
+      if (!MIME_EXT[file.type]) throw new HttpError(400, "only JPG, PNG, WEBP or PDF");
+      if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
+      let name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      if (!isAdmin) name = freeName(name, (await driveFiles(inv)).map((f) => f.name));
+      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
+      const { replaced = [] } = await sheet("invoiceUpload", {
+        id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
+      }, 60_000).catch(scriptTooOld);
+      await Promise.all((replaced as string[]).map(dropCopies));
+      return driveFiles(inv);
+    }
   }
   return undefined;
 }
@@ -96,21 +119,6 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
           .catch((e) => String(e));
       // savedId: the form uploads its files to this invoice next
       return { ...await loadInvoices(), savedId: id, noticeError: noticeError && "บันทึกแล้ว แต่ส่ง LINE ไม่ได้: " + noticeError };
-    }
-
-    case "uploadInvoiceFile": {
-      const inv = await invoiceFor(me, body.id);
-      const file = body.file;
-      if (!(file instanceof File)) throw new HttpError(400, "no file");
-      if (!MIME_EXT[file.type]) throw new HttpError(400, "only JPG, PNG, WEBP or PDF");
-      if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
-      const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
-      // same file name = new version: the script keeps only the newest (the old one is trashed after the new one is saved)
-      const { replaced = [] } = await sheet("invoiceUpload", {
-        id: inv.id, folder: invoiceFolderName(inv), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
-      }, 60_000).catch(scriptTooOld);
-      await Promise.all((replaced as string[]).map(dropCopies));
-      return driveFiles(inv);
     }
 
     case "deleteInvoiceFile": {

@@ -110,7 +110,7 @@
     }
 
     // 📎 Files of one invoice (Google Drive folder), collapsed until tapped. Everyone who sees the invoice can open
-    // (and print from the viewer); admins also add and delete.
+    // (and print from the viewer); admins also add and delete; the หัวหน้าทีม adds at รอนิติชำระเงิน.
     const fileIcon = (f) => (f.mime === "application/pdf" ? "📄 " : f.mime.startsWith("image/") ? "🖼️ " : "📁 ");
     function toggleFiles(inv, btn, row) {
       let box = row.querySelector(".inv-files");
@@ -119,6 +119,9 @@
       row.append(box);
       btn.setAttribute("aria-expanded", "true");
       const msg = el("p", { className: "muted small-note upload-msg", role: "status" });
+      // หัวหน้าทีม (non-admins only get their own buildings in data.buildings) add files at รอนิติชำระเงิน, e.g. the payment slip;
+      // only admins delete (the server enforces both, and never lets a member's upload replace a file)
+      const canUpload = isAdmin || (inv.status === "รอนิติชำระเงิน" && data.buildings.some((b) => b.name === inv.building));
       const draw = (files) => box.replaceChildren(
         ...(files.length ? files.map((f) => el("div", { className: "inv-file" },
           el("span", { className: "inv-file-name", textContent: fileIcon(f) + f.name }),
@@ -132,7 +135,7 @@
             try { draw(await api("deleteInvoiceFile", { id: inv.id, fileId: f.id })); } catch (err) { msg.textContent = "❌ " + err.message; e.currentTarget.disabled = false; }
           } })))
           : [el("p", { className: "muted", textContent: "ไม่มีไฟล์แนบ" })]),
-        ...(isAdmin ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []), // replaceChildren would print a bare false as text
+        ...(canUpload ? [el("button", { type: "button", className: "small secondary", textContent: "+ แนบไฟล์", onclick: () => pick.click() })] : []), // replaceChildren would print a bare false as text
         msg);
       const pick = el("input", { type: "file", multiple: true, accept: "application/pdf,image/jpeg,image/png,image/webp", onchange: async () => {
         const picked = [...pick.files];

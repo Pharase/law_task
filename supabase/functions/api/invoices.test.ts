@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { INVOICE_STATUS, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices } from "./invoices.ts";
+import { freeName, INVOICE_STATUS, invoiceCells, invoiceFolderName, invoiceNotice, parseInvoices } from "./invoices.ts";
 
 const types = new Map([["B1", "บ้านจัดสรร"], ["B2", "อาคารชุด"], ["B3", ""]]);
 const row = (over: Record<string, string> = {}) => ({
@@ -113,4 +113,11 @@ test("invoiceNotice: LINE text only when the status changes to รอนิต�
   assert.equal(invoiceNotice("เสร็จสิ้น", "เสร็จสิ้น"), null); // edited without a status change
   assert.equal(invoiceNotice("รอทนายวางบิล", "รอนิติชำระเงิน"), null);
   assert.equal(invoiceNotice("รอทนายส่งใบเสร็จ"), null);
+});
+
+test("freeName: a taken name gets (2), (3)... so a member's upload never replaces a file", () => {
+  assert.equal(freeName("slip.pdf", []), "slip.pdf");
+  assert.equal(freeName("slip.pdf", ["SLIP.pdf"]), "slip (2).pdf");
+  assert.equal(freeName("slip.pdf", ["slip.pdf", "slip (2).pdf"]), "slip (3).pdf");
+  assert.equal(freeName("file", ["file"]), "file (2)");
 });
