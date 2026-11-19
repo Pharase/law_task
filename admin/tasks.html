@@ -20,10 +20,11 @@
       <p class="muted">These rows are hidden from the app until they are fixed in the Google Sheet.</p>
       <ul id="warnList"></ul>
     </section>
-    <section class="card">
-      <h2>รอตรวจ · Waiting for review <span id="reviewCount" class="badge"></span></h2>
+    <!-- collapsed until tapped; the count stays visible on the closed bar -->
+    <details class="card fold">
+      <summary><h2>รอตรวจ · Waiting for review <span id="reviewCount" class="badge"></span></h2></summary>
       <div id="reviewList"></div>
-    </section>
+    </details>
 
     <section class="card">
       <div class="row card-head">
