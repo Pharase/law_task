@@ -359,7 +359,9 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
       if (!(file instanceof File)) throw new HttpError(400, "no file");
       if (!MIME_EXT[file.type]) throw new HttpError(400, "แนบได้เฉพาะ PDF หรือรูป (JPG, PNG, WEBP) เพื่อให้สมาชิกเปิดดูและพิมพ์ในแอปได้");
       if (file.size > MAX_BYTES) throw new HttpError(400, "file is over 10 MB");
-      const name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      let name = file.name.replace(/[\/\\\r\n]+/g, " ").trim().slice(0, 150) || "file";
+      // iPhones name every picked photo "image.jpg": those get "image (2).jpg" instead of replacing the last one
+      if (GENERIC_PHOTO.test(name)) name = freeName(name, (await briefFiles(task)).map((f) => f.name));
       const { replaced = [] } = await sheet("briefUpload", {
         id: task.id, folder: taskFolderName(task), name, mime: file.type, base64: base64(new Uint8Array(await file.arrayBuffer())),
       }, 60_000).catch(scriptTooOld);

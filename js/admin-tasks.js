@@ -82,6 +82,27 @@ async function locked(box, fn) {
   try { await fn(); } catch (err) { btns.forEach((b) => { b.disabled = false; }); throw err; }
 }
 
+/**
+ * A file input whose picks add up: on phones (LINE's picker) a pick often gives one file, and a new pick would replace
+ * the last one. Each pick joins a list under the input, with ✕ to take one out. files() -> the list; clear() empties it.
+ */
+function filePile(input) {
+  let list = [];
+  const box = el("div", { className: "task-files" });
+  const draw = () => box.replaceChildren(...list.map((f, i) => el("div", { className: "inv-file" },
+    el("span", { className: "inv-file-name", textContent: (f.type === "application/pdf" ? "📄 " : "🖼️ ") + f.name }),
+    el("button", { type: "button", className: "icon-btn", textContent: "✕", title: "เอาออก", ariaLabel: "เอาออก " + f.name,
+      onclick: () => { list.splice(i, 1); draw(); } }))));
+  input.addEventListener("change", () => {
+    const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified; // picked twice
+    list.push(...[...input.files].filter((f) => !list.some((x) => same(x, f))));
+    input.value = ""; // so the next pick adds, and picking the same file again still fires
+    draw();
+  });
+  input.after(box, el("p", { className: "muted small-note", textContent: "เลือกได้หลายไฟล์ · กดเลือกอีกครั้งเพื่อเพิ่มไฟล์" }));
+  return { files: () => [...list], clear: () => { list = []; draw(); } };
+}
+
 function reviewControls(t) {
   const msg = el("p", { role: "alert", className: "error" });
   const reason = el("select", { required: true }, option("", "เลือกเหตุผล"), option("กดผิด", "กดผิด"), option("มีปรับแก้", "มีปรับแก้"));
@@ -91,6 +112,7 @@ function reviewControls(t) {
   const files = el("input", { type: "file", multiple: true, accept: "application/pdf,image/jpeg,image/png,image/webp" });
   const fixBox = el("div", { hidden: true }, el("label", { textContent: "สิ่งที่ต้องแก้ไข" }), note, el("label", { textContent: "กำหนดส่งแก้" }), due,
     el("label", { textContent: "แนบไฟล์ให้ผู้รับงาน (PDF / รูป, ไม่เกิน 10 MB ต่อไฟล์)" }), files);
+  const pile = filePile(files);
   const notForm = el("form", { hidden: true }, el("label", { textContent: "เหตุผล" }), reason, fixBox, el("button", { textContent: "ยืนยันไม่อนุมัติ" }));
   reason.onchange = () => {
     const fix = reason.value === "มีปรับแก้";
@@ -114,7 +136,7 @@ function reviewControls(t) {
   };
   notForm.onsubmit = (e) => {
     e.preventDefault();
-    submit({ decision: reason.value, note: note.value, next_due_on: due.value }, reason.value === "มีปรับแก้" ? [...files.files] : []);
+    submit({ decision: reason.value, note: note.value, next_due_on: due.value }, reason.value === "มีปรับแก้" ? pile.files() : []);
   };
   const approve = el("button", { type: "button", className: "small", textContent: "อนุมัติ (Approved)" });
   approve.onclick = () => submit({ decision: "approved" });
@@ -382,6 +404,7 @@ async function initAssignForm(onCreated) {
   $("owners").addEventListener("change", () => filterBuildings());
 
   let saving = false; // one save at a time: a double tap / second click while saving does nothing
+  const assignPile = filePile($("assignFiles"));
   $("createForm").onsubmit = async (e) => {
     e.preventDefault();
     if (saving) return;
@@ -399,10 +422,11 @@ async function initAssignForm(onCreated) {
         buildings: picked, title: $("title").value, details: $("details").value,
         tags, owners, due_on: $("dueOn").value,
       });
-      const files = [...$("assignFiles").files];
+      const files = assignPile.files();
       const failed = files.length ? await uploadBriefFiles(made.map((t) => t.id), files, (t) => { $("createMsg").textContent = t; }) : [];
       $("createMsg").textContent = `มอบหมายแล้ว ${made.length} งาน` + (failed.length ? ` · ❌ แนบไฟล์ไม่สำเร็จ: ${failed.join(" · ")} (แนบใหม่ได้ตอนส่งกลับแก้ไข หรือใน Drive)` : files.length ? " · แนบไฟล์แล้ว" : "");
       $("createForm").reset();
+      assignPile.clear();
       filterBuildings([]);
       onCreated();
     } catch (err) { $("createMsg").textContent = "Error: " + err.message; }
