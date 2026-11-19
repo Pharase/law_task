@@ -157,11 +157,13 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       const assigned = new Map([...items].map(([owner, list]) => [owner, list.length]));
       const names = Object.fromEntries(scored.map((x) => [x.owner, role.get(x.owner)!.name]));
       const rows = performanceRows(scored, names).map((r) => ({ ...r, assigned: assigned.get(r.line_user_id) ?? 0 })); // scaled against everyone, then trimmed for members
-      // people with tasks assigned in the period but nothing scored yet: a row with their counts, no scores
-      for (const [owner, n] of assigned) {
+      // everyone else without a score: people with work in the period (revoked ones too), and every current member even
+      // with nothing this period (0, no scores, listed last) so the table always shows the whole team
+      const others = new Set([...assigned.keys(), ...data.people.filter((p) => p.role === "member").map((p) => p.line_user_id)]);
+      for (const owner of others) {
         const p = role.get(owner);
         if (!p || p.role === "admin" || rows.some((r) => r.line_user_id === owner)) continue;
-        rows.push({ line_user_id: owner, name: p.name, tasks: 0, assigned: n, overall: null, overall5: null, onTime: null, onTime5: null, byTag: {} } as unknown as typeof rows[number]);
+        rows.push({ line_user_id: owner, name: p.name, tasks: 0, assigned: assigned.get(owner) ?? 0, overall: null, overall5: null, onTime: null, onTime5: null, byTag: {} } as unknown as typeof rows[number]);
       }
       // members: their own row (and task list) only, filtered here on the server
       return { from, to, rows: visibleRows(rows, me).map((r) => ({ ...r, items: items.get(r.line_user_id) ?? [] })) };
