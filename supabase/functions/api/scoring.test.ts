@@ -180,3 +180,16 @@ test("workInPeriod (มอบหมาย): month of the first due date, or carr
   assert.equal(w(...feb, "approved", "2025-02-02", "2025-01-25"), false); // ...and not again in February
   assert.equal(w(...feb, "cancelled", "2025-02-02"), false);
 });
+
+test("a task with no score tag counts in คะแนนตรงเวลา only", () => {
+  const late = [s("2026-01-14", "2026-01-10", "approved")]; // 4 days late: 8.6667
+  const m = memberScores([{ owner: "U1", tags: [], sends: late }]).U1;
+  assert.deepEqual(m.byTag, {});
+  near(m.onTime * 10, 8.6667);
+  near(m.overall * 10, 8.6667); // คะแนนรวม = ตรงเวลา alone
+  assert.equal(m.tasks, 1); // still an อนุมัติ task
+  // next to a tagged task: it adds to ตรงเวลา but to no tag score
+  const both = memberScores([{ owner: "U1", tags: [], sends: late }, { owner: "U1", tags: ["การประสานงาน"], sends: [s("2026-01-10", "2026-01-10", "approved")] }]).U1;
+  near(both.onTime * 10, (8.6667 + 10) / 2);
+  near(both.byTag["การประสานงาน"] * 10, 10);
+});

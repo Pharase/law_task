@@ -387,7 +387,8 @@ async function initAssignForm(onCreated) {
     if (saving) return;
     const tags = checked("tag"), owners = checked("owner");
     const picked = checked("bld");
-    if (!tags.length || !owners.length || !picked.length) return void ($("createMsg").textContent = "เลือกผู้รับงาน นิติบุคคล และหมวดหมู่ อย่างน้อยอย่างละ 1");
+    // หมวดหมู่ is optional: a task with none counts in คะแนนตรงเวลา only
+    if (!owners.length || !picked.length) return void ($("createMsg").textContent = "เลือกผู้รับงาน และนิติบุคคล อย่างน้อยอย่างละ 1");
     const btn = e.submitter ?? $("createForm").querySelector("button:not([type=button])");
     const label = btn.textContent;
     saving = true;

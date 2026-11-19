@@ -57,7 +57,8 @@ export function parseTasks(rows: Row[], buildings: Set<string>, people: Person[]
     const building = cell(r, "building");
     if (!buildings.has(building)) { fail(`building "${building}" is not in the Buildings tab`); continue; }
     const tags = cell(r, "tags").split(",").map((t) => t.trim()).filter(Boolean);
-    if (!tags.length || !tags.every((t) => (TAGS as readonly string[]).includes(t))) { fail("tags must be from the 4 fixed tags"); continue; }
+    // empty = no score tag: the task counts in คะแนนตรงเวลา only
+    if (!tags.every((t) => (TAGS as readonly string[]).includes(t))) { fail("tags must be from the 4 fixed tags (or empty)"); continue; }
     const state = cell(r, "state") as State;
     if (!STATES.includes(state)) { fail(`unknown state "${state}"`); continue; }
     const due_on = normDate(cell(r, "due_on"));

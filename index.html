@@ -7,7 +7,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/app.js?v=20261122"></script>
   <script src="js/work.js?v=20261123"></script>
-  <script src="js/admin-tasks.js?v=20261137"></script>
+  <script src="js/admin-tasks.js?v=20261138"></script>
   <link rel="stylesheet" href="css/app.css?v=20261136">
 </head>
 <body>
@@ -64,7 +64,8 @@
         <input id="title" maxlength="200" required>
         <label for="details">รายละเอียด · Details</label>
         <textarea id="details" rows="3"></textarea>
-        <fieldset><legend>หมวดหมู่ · Tags</legend><div id="tags"></div></fieldset>
+        <fieldset><legend>หมวดหมู่ · Tags (ไม่บังคับ)</legend><div id="tags"></div>
+          <p class="muted small-note">ไม่เลือกหมวดหมู่ = งานนี้นับเฉพาะคะแนนตรงเวลา</p></fieldset>
         <label for="dueOn">กำหนดส่ง · Due date</label>
         <input type="date" id="dueOn" required>
         <!-- given to every task this form creates; the member can view and print them (not change them) -->

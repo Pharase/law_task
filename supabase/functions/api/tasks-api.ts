@@ -46,9 +46,10 @@ const taskId = (body: Row) => {
   return id;
 };
 
+/** Score tags (หมวดหมู่): any of the 4, or none — a task with no tag counts in คะแนนตรงเวลา only. */
 function checkTags(tags: unknown): string[] {
-  if (!Array.isArray(tags) || !tags.length || !tags.every((t) => (TAGS as readonly string[]).includes(t))) {
-    throw new HttpError(400, "pick at least one tag from the list");
+  if (!Array.isArray(tags) || !tags.every((t) => (TAGS as readonly string[]).includes(t))) {
+    throw new HttpError(400, "tags must be from the list");
   }
   return [...new Set(tags as string[])];
 }

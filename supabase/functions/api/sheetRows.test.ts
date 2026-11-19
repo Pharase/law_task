@@ -46,7 +46,6 @@ for (const [name, over] of [
   ["bad current_due_on", { current_due_on: "x" }],
   ["unknown state", { state: "done" }],
   ["unknown tag", { tags: "อื่นๆ" }],
-  ["no tag", { tags: "" }],
   ["unknown building", { building: "Nowhere" }],
   ["bad id", { id: "abc" }],
   ["bad fix_round", { fix_round: "-1" }],
@@ -168,4 +167,10 @@ test("writtenTabs: write ops name their tabs (null = all), reads and Drive ops w
   assert.deepEqual(writtenTabs("replaceMembers", {}), ["Members"]);
   assert.equal(writtenTabs("setup", {}), null);
   for (const op of ["read", "taskUpload", "invoiceFiles", "listReports", "saveUpload"]) assert.equal(writtenTabs(op, {}), undefined, op);
+});
+
+test("a task with no tag is valid (it counts in คะแนนตรงเวลา only)", () => {
+  const { tasks, bad } = parse({ tags: "" });
+  assert.equal(bad.length, 0);
+  assert.deepEqual(tasks[0].tags, []);
 });
