@@ -1,6 +1,6 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
-import { adminDigest, approvedRecently, dueSoon, isWorkingHours, memberDigest, shouldRunDigest, type T } from "./digest.ts";
+import { adminDigest, approvedRecently, isWorkingHours, memberDigest, shouldRunDigest, splitActive, type T } from "./digest.ts";
 import { type BubbleTask, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
@@ -78,14 +78,19 @@ export async function digest() {
     const active = mine.filter((t) => t.state === "on_process").sort(byAssigned);
     const sends = reviewed.filter((s) => taskById.get(s.task_id)?.owner === p.line_user_id);
     const newTasks = active.filter((t) => !t.member_notified_at);
+    const activeIds = new Set(active.map((t) => t.id));
+    // one entry per task (the latest send wins): sent back only while still in progress, approved only once it isn't
+    const latest = (list: Row[]) => [...new Map(list.map((s) => [s.task_id, s])).values()];
+    const back = latest(sends.filter((s) => s.outcome !== "approved" && activeIds.has(s.task_id)));
+    const split = splitActive(active.map((t) => ({ ...asT(t), id: t.id, assigned: String(t.created_at) })),
+      new Set(newTasks.map((t) => t.id)), new Set(back.map((s) => s.task_id)), today);
     const text = memberDigest({
-      newTasks: newTasks.map(asT),
-      dueSoon: dueSoon(active.map((t) => ({ ...asT(t), assigned: String(t.created_at) })), today),
-      overdue: active.filter((t) => t.current_due_on < today).map(asT),
-      sentBack: sends.filter((s) => s.outcome !== "approved").map((s) => ({
+      ...split,
+      sentBack: back.map((s) => ({
         ...asT(taskById.get(s.task_id)!), reason: s.outcome === "fix" ? "มีปรับแก้" : "กดผิด", note: s.fix_note,
       })),
-      approved: approvedRecently(sends, today).map((s) => asT(taskById.get(s.task_id)!)), // yesterday's only, never a long backlog
+      approved: latest(approvedRecently(sends, today).filter((s) => !activeIds.has(s.task_id))) // yesterday's only, never a long backlog
+        .map((s) => asT(taskById.get(s.task_id)!)),
     });
     return text && { to: p.line_user_id, text, link: app, taskIds: newTasks.map((t) => t.id), sendIds: sends.map((s) => s.id) };
   }).filter(Boolean) as typeof outbox;

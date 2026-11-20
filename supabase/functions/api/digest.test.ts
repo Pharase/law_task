@@ -67,6 +67,18 @@ test("due within 3 days: not sent yet, oldest assigned first, then nearest due; 
   assert.match(text, /today \(B\) กำหนด .* · วันนี้/);
 });
 
+test("splitActive: every task in exactly one section (sent back > overdue > due soon > new)", async () => {
+  const { splitActive } = await import("./digest.ts");
+  const mk = (id: number, due: string) => ({ id, title: "t" + id, building: "B", due, assigned: "2026-03-01" });
+  const s = splitActive(
+    [mk(1, "2026-03-09"), mk(2, "2026-03-11"), mk(3, "2026-03-30"), mk(4, "2026-03-09"), mk(5, "2026-03-30")],
+    new Set([1, 2, 3, 4]), new Set([4]), "2026-03-10", // all new except 5; 4 was sent back
+  );
+  assert.deepEqual(s.overdue.map((t) => t.id), [1]);
+  assert.deepEqual(s.dueSoon.map((t) => t.id), [2]);
+  assert.deepEqual(s.newTasks.map((t) => t.id), [3]);
+});
+
 test("approvedRecently: approvals reviewed yesterday or today (Bangkok) only", () => {
   const s = (reviewed_at: string | null, outcome = "approved") => ({ outcome, reviewed_at });
   const got = approvedRecently([

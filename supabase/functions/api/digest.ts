@@ -66,10 +66,24 @@ export function isWorkingHours(now: Date, w: Settings["instant"] = DEFAULT_SETTI
 const SOON_DAYS = 3;
 
 /** Not-yet-sent tasks due today up to 3 days ahead: oldest assigned first, then the nearest due date. */
-export function dueSoon(tasks: (T & { assigned: string })[], today: string): Soon[] {
+export function dueSoon<X extends T & { assigned: string }>(tasks: X[], today: string): (X & { daysLeft: number })[] {
   return tasks.map((t) => ({ ...t, daysLeft: daysBetween(today, t.due) }))
     .filter((t) => t.daysLeft >= 0 && t.daysLeft <= SOON_DAYS)
     .sort((a, b) => a.assigned.slice(0, 10).localeCompare(b.assigned.slice(0, 10)) || a.due.localeCompare(b.due));
+}
+
+/**
+ * In-progress tasks split so each one lands in exactly one summary section, first match wins:
+ * sent back (backIds, shown by the caller with its note) → overdue → due soon → new.
+ */
+export function splitActive<X extends T & { id: number; assigned: string }>(
+  active: X[], newIds: Set<number>, backIds: Set<number>, today: string,
+) {
+  const free = active.filter((t) => !backIds.has(t.id));
+  const overdue = free.filter((t) => t.due < today);
+  const soon = dueSoon(free, today);
+  const taken = new Set([...overdue, ...soon].map((t) => t.id));
+  return { overdue, dueSoon: soon, newTasks: free.filter((t) => newIds.has(t.id) && !taken.has(t.id)) };
 }
 
 /**
