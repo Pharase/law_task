@@ -57,7 +57,8 @@ test("linkMessage: text in the bubble, ดูรายการงานทั�
   const m = linkMessage("สรุปงานวันนี้\n\nงานใหม่ 2", LIFF_URL);
   assert.equal(m.type, "flex");
   assert.equal(m.altText, "สรุปงานวันนี้\n\nงานใหม่ 2");
-  assert.equal(m.contents.body.contents[0].text, "สรุปงานวันนี้\n\nงานใหม่ 2");
+  // deno-lint-ignore no-explicit-any
+  assert.deepEqual(m.contents.body.contents.map((c: any) => c.text), ["สรุปงานวันนี้", "งานใหม่ 2"]); // one per line, blank line = gap
   assert.deepEqual(m.contents.footer.contents[0].action, { type: "uri", label: "ดูรายการงานทั้งหมดที่นี่", uri: LIFF_URL });
 });
 

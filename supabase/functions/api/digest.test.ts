@@ -14,11 +14,26 @@ test("sent back shows reason and note", () => {
   assert.match(text, /ร่างหนังสือ/);
 });
 
-test("long lists are capped at 10 with +N more", () => {
-  const text = memberDigest({ ...empty, newTasks: Array.from({ length: 13 }, (_, i) => t("งาน " + i)) })!;
-  assert.match(text, /งาน 9/);
-  assert.doesNotMatch(text, /งาน 10\b/);
-  assert.match(text, /\+3/);
+test("lists show the 3 nearest due, then *กับอีก N งาน", () => {
+  const days = [20, 12, 25, 11, 13]; // nearest three: 11, 12, 13
+  const text = memberDigest({ ...empty, overdue: days.map((d) => ({ ...t("งาน " + d), due: `2026-03-${d}` })) })!;
+  assert.match(text, /งาน 11[\s\S]*งาน 12[\s\S]*งาน 13/);
+  assert.doesNotMatch(text, /งาน 20|งาน 25/);
+  assert.match(text, /\*กับอีก 2 งาน$/);
+  const three = memberDigest({ ...empty, overdue: [t("a"), t("b"), t("c")] })!;
+  assert.doesNotMatch(three, /กับอีก/);
+});
+
+test("linkMessage: header lines get a neon pill, blank lines are dropped", async () => {
+  const { linkMessage } = await import("./linebot.ts");
+  const { NEON } = await import("./digest.ts");
+  const text = memberDigest({ ...empty, overdue: [t("x")] })!;
+  // deno-lint-ignore no-explicit-any
+  const body: any[] = linkMessage(text, "https://x", null, undefined, NEON).contents.body.contents;
+  assert.equal(body.length, 3); // สรุปงานวันนี้, header pill, the task
+  assert.equal(body[1].backgroundColor, NEON["‼️ เลยกำหนด"]);
+  assert.equal(body[1].margin, "lg");
+  assert.ok(body.every((c) => c.type === "box" || c.text));
 });
 
 test("only weekdays after 09:00 Bangkok, once per day", () => {

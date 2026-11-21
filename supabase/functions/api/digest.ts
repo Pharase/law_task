@@ -4,15 +4,26 @@ import { DEFAULT_SETTINGS, type Settings } from "./settings.ts";
 
 export type T = { title: string; building: string; due: string };
 export type Soon = T & { assigned: string; daysLeft: number };
-const MAX_ITEMS = 10;
+const MAX_ITEMS = 3;
+
+/** Section header start -> neon background, so each status stands out in the LINE bubble (black bold text on it). */
+export const NEON: Record<string, string> = {
+  "📌 งานใหม่": "#00E5FF",
+  "⏳ ใกล้ครบกำหนด": "#FFF01F",
+  "‼️ เลยกำหนด": "#FF3131",
+  "↩️ ถูกส่งกลับ": "#FF9F1C",
+  "✅ อนุมัติแล้ว": "#39FF14",
+  "📥 งานรอตรวจ": "#E040FB",
+};
 
 const thDate = (s: string) =>
   new Date(s + "T00:00:00+07:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "Asia/Bangkok" });
 
-function section(header: string, items: string[]): string | null {
+/** Header + the 3 nearest-due items; more than 3 ends with "*กับอีก N งาน". */
+function section<X extends T>(header: string, items: X[], fmt: (t: X) => string): string | null {
   if (!items.length) return null;
-  const shown = items.slice(0, MAX_ITEMS).map((x) => "• " + x);
-  if (items.length > MAX_ITEMS) shown.push(`+${items.length - MAX_ITEMS} รายการ`);
+  const shown = [...items].sort((a, b) => a.due.localeCompare(b.due)).slice(0, MAX_ITEMS).map((t) => "• " + fmt(t));
+  if (items.length > MAX_ITEMS) shown.push(`*กับอีก ${items.length - MAX_ITEMS} งาน`);
   return [header, ...shown].join("\n");
 }
 
@@ -23,18 +34,18 @@ export function memberDigest(x: {
   sentBack: (T & { note: string | null; reason: string })[]; approved: T[];
 }): string | null {
   const parts = [
-    section("📌 งานใหม่", x.newTasks.map(line)),
-    section("⏳ ใกล้ครบกำหนด (ภายใน 3 วัน) · ยังไม่ส่ง", x.dueSoon.map((t) => `${line(t)} · ${t.daysLeft ? `อีก ${t.daysLeft} วัน` : "วันนี้"}`)),
-    section("‼️ เลยกำหนด", x.overdue.map(line)),
-    section("↩️ ถูกส่งกลับ", x.sentBack.map((t) => `${line(t)} · ${t.reason}${t.note ? `: ${t.note}` : ""}`)),
-    section("✅ อนุมัติแล้ว", x.approved.map((t) => `${t.title} (${t.building})`)),
+    section("📌 งานใหม่", x.newTasks, line),
+    section("⏳ ใกล้ครบกำหนด (ภายใน 3 วัน) · ยังไม่ส่ง", x.dueSoon, (t) => `${line(t)} · ${t.daysLeft ? `อีก ${t.daysLeft} วัน` : "วันนี้"}`),
+    section("‼️ เลยกำหนด", x.overdue, line),
+    section("↩️ ถูกส่งกลับ", x.sentBack, (t) => `${line(t)} · ${t.reason}${t.note ? `: ${t.note}` : ""}`),
+    section("✅ อนุมัติแล้ว", x.approved, (t) => `${t.title} (${t.building})`),
   ].filter(Boolean);
   return parts.length ? ["สรุปงานวันนี้", ...parts].join("\n\n") : null;
 }
 
 export function adminDigest(x: { waiting: (T & { owner: string })[]; backupDue: number; quotaLow: boolean }): string | null {
   const parts = [
-    section(`📥 งานรอตรวจ ${x.waiting.length} งาน`, x.waiting.map((t) => `${t.title} · ${t.owner} (${t.building})`)),
+    section(`📥 งานรอตรวจ ${x.waiting.length} งาน`, x.waiting, (t) => `${t.title} · ${t.owner} (${t.building})`),
     x.backupDue > 0 ? `🗄️ มี ${x.backupDue} ไฟล์อายุเกิน 1 ปีรอดาวน์โหลดสำรองก่อนลบ` : null,
     x.quotaLow ? "⚠️ โควตา LINE ใกล้หมด สมาชิกอาจไม่ได้รับสรุปวันนี้" : null,
   ].filter(Boolean);
