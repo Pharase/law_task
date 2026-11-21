@@ -6,6 +6,67 @@ const deliveryNote = (s) => (DELIVERY_TEXT[s.delivery] ? " · " + DELIVERY_TEXT[
 // history line's outcome (รอตรวจ / อนุมัติ / ...) in neon, one colour per outcome (css .outcome-neon)
 const outcomeTag = (s) => el("span", { className: "outcome-neon " + s.outcome, textContent: OUTCOME_TEXT[s.outcome] ?? s.outcome });
 const bkkToday =() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+// Bangkok day of a timestamp ("" for none)
+const bkkDay = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)) : "");
+
+const dayDiff = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5); // yyyy-mm-dd strings
+
+/** C · where a task is: step 0-3 of มอบหมาย → ส่งงาน → ตรวจ → อนุมัติ (4 = all done), a colour, and one word with the days that matter. */
+function taskStatus(t) {
+  const today = bkkToday();
+  if (t.state === "cancelled") return { step: -1, k: "dim", word: "ยกเลิก" };
+  if (t.state === "approved") {
+    const ok = t.sends.filter((s) => s.outcome === "approved").at(-1);
+    return { step: 4, k: "green", word: "อนุมัติ" + (ok ? " " + thDate(ok.reviewed_at ? bkkDay(ok.reviewed_at) : ok.sent_on) : "") };
+  }
+  if (t.state === "submitted") return { step: 2, k: "yellow", word: `รอตรวจ ${dayDiff(t.sends.at(-1)?.sent_on ?? today, today)} วัน` };
+  const left = dayDiff(today, t.current_due_on);
+  if (left < 0) return { step: 1, k: "red", word: `เลยกำหนด ${-left} วัน` };
+  return { step: 1, k: t.fix_round ? "orange" : "cyan", word: `${t.fix_round ? "กำลังแก้" : "กำลังทำ"} · ${left ? `อีก ${left} วัน` : "ครบกำหนดวันนี้"}` };
+}
+
+/** C · status strip on every task row: a 4-part mini bar and the status word, in the status colour. */
+function statusStrip(t) {
+  const s = taskStatus(t);
+  const bar = el("span", { className: "mini", ariaHidden: "true" },
+    ...[0, 1, 2, 3].map((i) => el("i", { className: s.step === 4 || i < s.step ? "on" : i === s.step ? "now" : "" })));
+  return el("span", { className: `strip k-${s.k}` }, bar, el("span", { className: "strip-word", textContent: s.word }));
+}
+
+/**
+ * B · the task's story in order: assigned, each send (on time, or N days late against that round's due date), each
+ * review, then the due date still ahead (dashed) or how late it is now.
+ */
+function journey(t) {
+  const today = bkkToday();
+  const ev = [{ d: bkkDay(t.created_at), k: "cyan", main: "มอบหมายงาน", sub: `กำหนดส่ง ${thDate(t.due_on)}` }];
+  t.sends.forEach((s, i) => {
+    const late = s.due_on ? dayDiff(s.due_on, s.sent_on) : null;
+    ev.push({ d: s.sent_on, k: "pink", main: i ? `ส่งงาน ครั้งที่ ${i + 1}` : "ส่งงาน", sub: DELIVERY_TEXT[s.delivery] ?? "",
+      tag: late === null ? null : late > 0 ? ["red", `ช้า ${late} วัน`] : ["green", "ตรงเวลา"] });
+    const on = s.reviewed_at ? bkkDay(s.reviewed_at) : s.sent_on; // lines set by hand have no review time
+    if (s.outcome === "fix") ev.push({ d: on, k: "orange", main: "ส่งกลับแก้ไข", sub: `กำหนดใหม่ ${thDate(s.next_due_on)}`, note: s.fix_note });
+    else if (s.outcome === "void") ev.push({ d: on, k: "dim", main: "กดผิด (ไม่นับการส่งนี้)", note: s.fix_note });
+    else if (s.outcome === "approved") ev.push({ d: on, k: "green", main: "อนุมัติ", note: s.fix_note });
+    else ev.push({ d: today, k: "yellow", now: true, main: "รอตรวจ", sub: `รอมา ${dayDiff(s.sent_on, today)} วัน` });
+  });
+  if (t.state === "on_process") {
+    const left = dayDiff(today, t.current_due_on);
+    ev.push(left < 0
+      ? { d: t.current_due_on, k: "red", now: true, main: `เลยกำหนด ${-left} วัน` }
+      : { d: t.current_due_on, k: "cyan", now: true, ghost: true, main: "กำหนดส่ง", sub: left ? `อีก ${left} วัน` : "วันนี้" });
+  }
+  if (t.state === "cancelled") ev.push({ d: "", k: "dim", main: "ยกเลิกงาน" });
+  return el("ol", { className: "journey" }, ...ev.map((e) => el("li", { className: `k-${e.k}${e.now ? " now" : ""}` },
+    el("span", { className: "j-date", textContent: e.d ? thDate(e.d) : "" }),
+    el("span", { className: "j-dot" + (e.ghost ? " ghost" : ""), ariaHidden: "true" }),
+    el("div", { className: "j-text" },
+      el("strong", { textContent: e.main }),
+      e.tag && el("span", { className: `j-tag k-${e.tag[0]}`, textContent: e.tag[1] }),
+      e.sub && el("span", { className: "muted", textContent: " · " + e.sub }),
+      e.note && el("div", { className: "muted pre", textContent: e.note })))));
+}
+
 // dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
 const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
 
@@ -23,15 +84,15 @@ function lastFix(task) {
 
 // opts.status: status text shown as a tag; opts.admin: show the owner and no Send controls (admins don't own tasks).
 function taskItem(task, today, onChange, opts = {}) {
-  const overdue = task.state === "on_process" && task.current_due_on < today;
+  const overdue = task.state === "on_process" && task.current_due_on < today; // the card's red edge (css .task.overdue)
   const fix = task.state === "on_process" ? lastFix(task) : null;
   const summary = el("summary", {},
+    statusStrip(task), // where it is at a glance (overdue days included, so no separate เลยกำหนด badge)
     el("strong", { textContent: task.title }),
     el("span", { className: "muted", textContent: ` · ${task.building}${opts.admin ? " · " + task.owner_name : ""}` }),
     // hidden once the card is open: the detail shows the due date under the tags instead
     el("span", { className: "muted nowrap due-head", textContent: ` · กำหนดส่ง ${thDate(task.current_due_on)}` }),
     opts.status && el("span", { className: "badge", textContent: opts.status }),
-    overdue && el("span", { className: "badge late", textContent: "เลยกำหนด" }),
     task.fix_round > 0 && el("span", { className: "badge", textContent: `รอบแก้ ${task.fix_round}` }),
     task.fix_round > 5 && el("span", { className: "badge late", textContent: "เกิน 5 รอบแก้ไข" }),
   );
@@ -51,13 +112,7 @@ function taskItem(task, today, onChange, opts = {}) {
   const brief = !opts.admin && briefBox(task);
   if (brief) body.append(brief.box);
 
-  if (task.sends.length) {
-    body.append(el("p", { className: "label", textContent: "ประวัติ" }), el("ol", { className: "timeline" },
-      ...task.sends.map((s) => el("li", {},
-        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
-        s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null,
-      ))));
-  }
+  body.append(el("p", { className: "label", textContent: "ความคืบหน้า" }), journey(task));
 
   if (task.files.length) {
     body.append(el("p", { className: "label", textContent: "ไฟล์แนบ" }), el("ul", {},

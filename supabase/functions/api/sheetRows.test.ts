@@ -198,24 +198,27 @@ test("taskFromSends: the last line by date decides; fixes count; only the last m
   assert.throws(() => taskFromSends([s(1, "2026-11-01", "pending"), s(2, "2026-11-02", "approved")]), /ล่าสุด/);
 });
 
-test("taskFlow: counts per stage for this Bangkok month; cancelled tasks never count", () => {
+test("taskFlow: open tasks + this month's approvals; each column adds up; cancelled never counts", () => {
   const t = (id: number, state: string, created_at: string, current_due_on = "2026-11-30", fix_round = 0, owner = "u1", building = "B1") =>
     ({ id, state: state as "on_process", owner, building, created_at, current_due_on, fix_round });
   const tasks = [
-    t(1, "on_process", "2026-11-02T03:00:00Z", "2026-11-18"),         // overdue
-    t(2, "on_process", "2026-11-05T03:00:00Z", "2026-11-25", 1, "u2"),  // fixing
-    t(3, "submitted", "2026-10-31T18:00:00Z", "2026-11-10", 0, "u2", "B2"), // 1 Nov 01:00 Bangkok = this month
-    t(4, "approved", "2026-10-01", "2026-10-15"),
-    t(5, "approved", "2026-10-20", "2026-11-01"),
+    t(1, "on_process", "2026-11-02T03:00:00Z", "2026-11-18"),                // new, doing, late
+    t(2, "on_process", "2026-10-05T03:00:00Z", "2026-11-25", 1, "u2"),        // carried, doing (fix round), ok
+    t(3, "submitted", "2026-10-31T18:00:00Z", "2026-11-10", 0, "u2", "B2"),   // 1 Nov 01:00 Bangkok = new; sent late
+    t(4, "approved", "2026-10-01", "2026-10-15"),                             // approved last month: left out
+    t(5, "approved", "2026-10-20", "2026-11-01"),                             // carried, approved this month, late
     t(6, "cancelled", "2026-11-10"),
   ];
   const sends = [
     { id: 1, task_id: 3, outcome: "pending" as const, sent_on: "2026-11-15", due_on: "2026-11-10", reviewed_at: null },
     { id: 2, task_id: 4, outcome: "approved" as const, sent_on: "2026-10-14", due_on: "2026-10-15", reviewed_at: "2026-10-16T02:00:00Z" },
-    { id: 3, task_id: 5, outcome: "approved" as const, sent_on: "2026-11-03", due_on: "2026-11-01", reviewed_at: "" }, // late, approved by hand
+    { id: 3, task_id: 5, outcome: "approved" as const, sent_on: "2026-11-03", due_on: "2026-11-01", reviewed_at: "" },
   ];
-  assert.deepEqual(taskFlow(tasks, sends, "2026-11-21"), {
-    month: "2026-11", assigned: 3, people: 2, buildings: 2, doing: 2, overdue: 1, fixing: 1,
-    waiting: 1, longestWait: 6, approved: 1, approvedLate: 1,
-  });
+  const f = taskFlow(tasks, sends, "2026-11-21");
+  assert.deepEqual(f.nodes, { new: 2, carried: 2, doing: 2, waiting: 1, approved: 1, ok: 1, late: 3 });
+  assert.equal(f.total, 4);
+  const link = (a: string, b: string) => f.links.find(([x, y]) => x === a && y === b)?.[2] ?? 0;
+  assert.deepEqual([link("new", "doing"), link("new", "waiting"), link("carried", "doing"), link("carried", "approved")], [1, 1, 1, 1]);
+  assert.deepEqual([link("doing", "late"), link("doing", "ok"), link("waiting", "late"), link("approved", "late")], [1, 1, 1, 1]);
+  assert.deepEqual([f.people, f.buildings, f.fixing, f.longestWait], [2, 2, 1, 6]);
 });

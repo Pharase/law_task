@@ -43,88 +43,107 @@ function adminTaskBody(t) {
   );
 }
 
-const dayDiff = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5); // yyyy-mm-dd strings
-
-/** C · where a task is: step 0-3 of มอบหมาย → ส่งงาน → ตรวจ → อนุมัติ (4 = all done), a colour, and one word with the days that matter. */
-function taskStatus(t) {
-  const today = bkkToday();
-  if (t.state === "cancelled") return { step: -1, k: "dim", word: "ยกเลิก" };
-  if (t.state === "approved") {
-    const ok = t.sends.filter((s) => s.outcome === "approved").at(-1);
-    return { step: 4, k: "green", word: "อนุมัติ" + (ok ? " " + thDate(ok.reviewed_at ? bkkDay(ok.reviewed_at) : ok.sent_on) : "") };
-  }
-  if (t.state === "submitted") return { step: 2, k: "yellow", word: `รอตรวจ ${dayDiff(t.sends.at(-1)?.sent_on ?? today, today)} วัน` };
-  const left = dayDiff(today, t.current_due_on);
-  if (left < 0) return { step: 1, k: "red", word: `เลยกำหนด ${-left} วัน` };
-  return { step: 1, k: t.fix_round ? "orange" : "cyan", word: `${t.fix_round ? "กำลังแก้" : "กำลังทำ"} · ${left ? `อีก ${left} วัน` : "ครบกำหนดวันนี้"}` };
+/** SVG element with attributes (el() makes HTML elements, which SVG can't use). */
+function svgEl(tag, attrs = {}, ...kids) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  e.append(...kids.filter(Boolean));
+  return e;
 }
 
-/** C · status strip on every task row: a 4-part mini bar and the status word, in the status colour. */
-function statusStrip(t) {
-  const s = taskStatus(t);
-  const bar = el("span", { className: "mini", ariaHidden: "true" },
-    ...[0, 1, 2, 3].map((i) => el("i", { className: s.step === 4 || i < s.step ? "on" : i === s.step ? "now" : "" })));
-  return el("span", { className: `strip k-${s.k}` }, bar, el("span", { className: "strip-word", textContent: s.word }));
-}
+// ภาพรวมงานทีม: the Sankey's nodes, top row to bottom row (server taskFlow says which tasks are in each)
+const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"], ["ok", "late"]];
+const FLOW_NODE = {
+  new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
+  carried: { label: "ค้างจากก่อนหน้า", color: "#9aa3b5" },
+  doing: { label: "กำลังทำ / แก้ไข", color: "#ff9f1c", state: "on_process" },
+  waiting: { label: "รอตรวจ", color: "#fff01f", review: true },
+  approved: { label: "อนุมัติเดือนนี้", color: "#39ff14", state: "approved" },
+  ok: { label: "ตรงเวลา", color: "#02d7f4" },
+  late: { label: "ช้า / เลยกำหนด", color: "#ff4d5e" },
+};
 
 /**
- * B · the task's story in order: assigned, each send (on time, or N days late against that round's due date), each
- * review, then the due date still ahead (dashed) or how late it is now.
+ * F · ภาพรวมงานทีม as a top-to-bottom Sankey: where the tasks came from → their stage now → on time or late. A band's
+ * width is its number of tasks. Bars keep a minimum width so their label fits (a small count is drawn wider than its
+ * share; the number on it stays exact). Tap กำลังทำ / รอตรวจ / อนุมัติ to see those tasks.
  */
-function journey(t) {
-  const today = bkkToday();
-  const ev = [{ d: bkkDay(t.created_at), k: "cyan", main: "มอบหมายงาน", sub: `กำหนดส่ง ${thDate(t.due_on)}` }];
-  t.sends.forEach((s, i) => {
-    const late = s.due_on ? dayDiff(s.due_on, s.sent_on) : null;
-    ev.push({ d: s.sent_on, k: "pink", main: i ? `ส่งงาน ครั้งที่ ${i + 1}` : "ส่งงาน", sub: DELIVERY_TEXT[s.delivery] ?? "",
-      tag: late === null ? null : late > 0 ? ["red", `ช้า ${late} วัน`] : ["green", "ตรงเวลา"] });
-    const on = s.reviewed_at ? bkkDay(s.reviewed_at) : s.sent_on; // lines set by hand have no review time
-    if (s.outcome === "fix") ev.push({ d: on, k: "orange", main: "ส่งกลับแก้ไข", sub: `กำหนดใหม่ ${thDate(s.next_due_on)}`, note: s.fix_note });
-    else if (s.outcome === "void") ev.push({ d: on, k: "dim", main: "กดผิด (ไม่นับการส่งนี้)", note: s.fix_note });
-    else if (s.outcome === "approved") ev.push({ d: on, k: "green", main: "อนุมัติ", note: s.fix_note });
-    else ev.push({ d: today, k: "yellow", now: true, main: "รอตรวจ", sub: `รอมา ${dayDiff(s.sent_on, today)} วัน` });
+function drawFlow(f) {
+  if (!f.total) return void $("flow").replaceChildren(el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" }));
+  const W = 340, BAR = 34, ROW_GAP = 82, GAP = 12, MIN_W = 76;
+  const at = {}; // node -> { x, y, w, n }
+  FLOW_ROWS.forEach((row, r) => {
+    const keys = row.filter((k) => f.nodes[k] > 0);
+    const avail = W - GAP * (keys.length - 1);
+    let w = keys.map((k) => Math.max(MIN_W, (f.nodes[k] / f.total) * avail));
+    const over = w.reduce((a, b) => a + b, 0) - avail, room = w.reduce((a, b) => a + (b - MIN_W), 0);
+    if (over > 0 && room > 0) w = w.map((x) => MIN_W + (x - MIN_W) * (1 - over / room)); // give the minimums' extra back from the big ones
+    let x = (W - w.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
+    keys.forEach((k, i) => { at[k] = { x, y: r * (BAR + ROW_GAP), w: w[i], n: f.nodes[k] }; x += w[i] + GAP; });
   });
-  if (t.state === "on_process") {
-    const left = dayDiff(today, t.current_due_on);
-    ev.push(left < 0
-      ? { d: t.current_due_on, k: "red", now: true, main: `เลยกำหนด ${-left} วัน` }
-      : { d: t.current_due_on, k: "cyan", now: true, ghost: true, main: "กำหนดส่ง", sub: left ? `อีก ${left} วัน` : "วันนี้" });
+  const H = (FLOW_ROWS.length - 1) * (BAR + ROW_GAP) + BAR;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงานทีม" });
+  const defs = svgEl("defs");
+  svg.append(defs);
+
+  // bands: each end takes its share of the bar it touches, in left-to-right order so bands don't cross needlessly
+  const order = (k) => at[k].x;
+  const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
+  const outX = {}, inX = {};
+  const portOut = new Map(), portIn = new Map();
+  for (const l of [...links].sort((p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]))) {
+    const a = at[l[0]], w = (l[2] / a.n) * a.w;
+    outX[l[0]] = outX[l[0]] ?? a.x;
+    portOut.set(l, [outX[l[0]], w]);
+    outX[l[0]] += w;
   }
-  if (t.state === "cancelled") ev.push({ d: "", k: "dim", main: "ยกเลิกงาน" });
-  return el("ol", { className: "journey" }, ...ev.map((e) => el("li", { className: `k-${e.k}${e.now ? " now" : ""}` },
-    el("span", { className: "j-date", textContent: e.d ? thDate(e.d) : "" }),
-    el("span", { className: "j-dot" + (e.ghost ? " ghost" : ""), ariaHidden: "true" }),
-    el("div", { className: "j-text" },
-      el("strong", { textContent: e.main }),
-      e.tag && el("span", { className: `j-tag k-${e.tag[0]}`, textContent: e.tag[1] }),
-      e.sub && el("span", { className: "muted", textContent: " · " + e.sub }),
-      e.note && el("div", { className: "muted pre", textContent: e.note })))));
+  for (const l of [...links].sort((p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]))) {
+    const b = at[l[1]], w = (l[2] / b.n) * b.w;
+    inX[l[1]] = inX[l[1]] ?? b.x;
+    portIn.set(l, [inX[l[1]], w]);
+    inX[l[1]] += w;
+  }
+  links.forEach((l, i) => {
+    const [xa, wa] = portOut.get(l), [xb, wb] = portIn.get(l);
+    const ya = at[l[0]].y + BAR, yb = at[l[1]].y, ym = (ya + yb) / 2;
+    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: 0, y1: ya, x2: 0, y2: yb, gradientUnits: "userSpaceOnUse" },
+      svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
+    svg.append(svgEl("path", {
+      class: "band", fill: `url(#flowg${i})`,
+      d: `M${xa},${ya} C${xa},${ym} ${xb},${ym} ${xb},${yb} L${xb + wb},${yb} C${xb + wb},${ym} ${xa + wa},${ym} ${xa + wa},${ya} Z`,
+    }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
+  });
+
+  // bars with the count and name inside; the three stage bars are buttons
+  for (const [k, p] of Object.entries(at)) {
+    const node = FLOW_NODE[k];
+    const g = svgEl("g", { class: "node" },
+      svgEl("rect", { x: p.x, y: p.y, width: p.w, height: BAR, rx: 7, fill: node.color, style: `--k:${node.color}` }),
+      svgEl("text", { x: p.x + p.w / 2, y: p.y + 15, class: "num" }, String(p.n)),
+      svgEl("text", { x: p.x + p.w / 2, y: p.y + 28, class: "lab" }, node.label));
+    const go = node.review ? () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" })
+      : node.state ? () => showFlowList(node.state) : null;
+    if (go) {
+      g.classList.add("node-btn");
+      g.setAttribute("role", "button");
+      g.setAttribute("tabindex", "0");
+      g.setAttribute("aria-label", `${node.label} ${p.n} งาน: ดูรายการ`);
+      g.addEventListener("click", go);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    }
+    svg.append(g);
+  }
+  $("flow").replaceChildren(svg, el("p", { className: "muted small-note flow-sub", textContent:
+    `${f.people} คน · ${f.buildings} นิติ · แก้อยู่ ${f.fixing} งาน` + (f.nodes.waiting ? ` · รอตรวจนานสุด ${f.longestWait} วัน` : "") }));
 }
 
-/** F · team flow at the top of the page (server taskFlow): tap a box to see its tasks. */
-function drawFlow(f) {
-  const box = (k, num, label, sub, go, hint) => {
-    const b = el("button", { type: "button", className: `flow-box k-${k}`, title: hint },
-      el("span", { className: "flow-num", textContent: num }), el("span", { className: "flow-lab", textContent: label }),
-      el("span", { className: "flow-sub" }, ...sub));
-    b.onclick = go;
-    return b;
-  };
-  const arrow = () => el("span", { className: "flow-to", textContent: "→", ariaHidden: "true" });
-  const showList = (state) => {
-    $("fState").value = state;
-    $("fOverdue").checked = false;
-    allPage = 0;
-    loadList().catch((e) => { $("allList").textContent = "Error: " + e.message; });
-    $("allCard").scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-  $("flow").replaceChildren(
-    box("cyan", f.assigned, "มอบหมายเดือนนี้", [`${f.people} คน · ${f.buildings} นิติ`], () => showList(""), "ดูงานทั้งหมด"), arrow(),
-    box("orange", f.doing, "กำลังทำ / แก้ไข", [f.overdue ? el("b", { textContent: `เลยกำหนด ${f.overdue}` }) : "ไม่มีเลยกำหนด", ` · แก้อยู่ ${f.fixing}`],
-      () => showList("on_process"), "ดูงานที่กำลังดำเนินการ"), arrow(),
-    box("yellow", f.waiting, "งานรอตรวจ", [f.waiting ? `รอนานสุด ${f.longestWait} วัน` : "ไม่มีงานค้างตรวจ"],
-      () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }), "ไปที่งานรอตรวจ"), arrow(),
-    box("green", f.approved, "อนุมัติเดือนนี้", [`ตรงเวลา ${f.approved - f.approvedLate} · ช้า ${f.approvedLate}`], () => showList("approved"), "ดูงานที่อนุมัติ"));
+/** A stage bar was tapped: show those tasks in the all-tasks list. */
+function showFlowList(state) {
+  $("fState").value = state;
+  $("fOverdue").checked = false;
+  allPage = 0;
+  loadList().catch((e) => { $("allList").textContent = "Error: " + e.message; });
+  $("allCard").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 const flowData = () => api("taskFlow");
 async function loadFlow() { drawFlow(await flowData()); }
@@ -822,7 +841,6 @@ async function initResponsibilities(onChange) {
 // ---- Reports (admins): tasks assigned vs sends over time, one line each, for everyone or one person ----
 // Colors checked with the dataviz validator on the dark card surface (#0b0d10): blue = assigned, orange = sent.
 const AC_SERIES = [{ key: "a", label: "มอบหมาย · Assigned", color: "#3987e5" }, { key: "s", label: "ส่งงาน · Sent", color: "#d95926" }];
-const bkkDay = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)) : "");
 const TH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
 /** Day keys "YYYY-MM-DD" of the chosen month / quarter, stopping at today while it is still running (Bangkok). */

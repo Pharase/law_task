@@ -127,8 +127,13 @@ export function scoredSends(task: Pick<Task, "due_on">, sends: SendRow[]): Send[
 const bkkDay = (s: string) => (/T/.test(s) ? bangkokDate(new Date(s)) : s.slice(0, 10));
 
 /**
- * Team flow at the top of the admin task page: tasks per stage. "This month" = the Bangkok month of `today`:
- * assigned by created_at, approved by the approving review (reviewed_at, else the send date). Cancelled tasks don't count.
+ * Team flow (Sankey) at the top of the admin task page. The tasks it covers: every open task (on process or waiting
+ * for review, whenever assigned) plus the tasks approved this Bangkok month (by the approving review's reviewed_at,
+ * else its send date). Cancelled tasks never count. Each task sits in one node per column:
+ *   origin  new (assigned this month) | carried (assigned earlier)
+ *   stage   doing (on process, incl. fix rounds) | waiting (รอตรวจ) | approved
+ *   timing  ok | late: doing = past its current due date; waiting / approved = that send was after its due date
+ * links = [from, to, count] between neighbouring columns, so every column adds up to `total`.
  */
 export function taskFlow(
   tasks: Pick<Task, "id" | "state" | "owner" | "building" | "created_at" | "current_due_on" | "fix_round">[],
@@ -136,25 +141,36 @@ export function taskFlow(
   today: string,
 ) {
   const month = today.slice(0, 7);
-  const live = tasks.filter((t) => t.state !== "cancelled");
-  const mine = (id: number, outcome: string) => sends.filter((s) => s.task_id === id && s.outcome === outcome).sort((a, b) => a.id - b.id).at(-1);
-  const assigned = live.filter((t) => bkkDay(String(t.created_at)).slice(0, 7) === month);
-  const doing = live.filter((t) => t.state === "on_process");
-  const waiting = live.filter((t) => t.state === "submitted");
-  const approved = live.filter((t) => t.state === "approved").map((t) => mine(t.id, "approved"))
-    .filter((s) => s && bkkDay(String(s.reviewed_at || s.sent_on)).slice(0, 7) === month);
+  const last = (id: number, outcome: string) => sends.filter((s) => s.task_id === id && s.outcome === outcome).sort((a, b) => a.id - b.id).at(-1);
+  const rows: { origin: string; stage: string; timing: string; owner: string; building: string; wait?: number; fix: boolean }[] = [];
+  for (const t of tasks) {
+    const origin = bkkDay(String(t.created_at)).slice(0, 7) === month ? "new" : "carried";
+    const base = { origin, owner: t.owner, building: t.building, fix: t.fix_round > 0 };
+    if (t.state === "on_process") rows.push({ ...base, stage: "doing", timing: t.current_due_on < today ? "late" : "ok" });
+    else if (t.state === "submitted") {
+      const s = last(t.id, "pending");
+      const due = s?.due_on || t.current_due_on;
+      rows.push({ ...base, stage: "waiting", timing: s && s.sent_on > due ? "late" : "ok", wait: daysBetween(s?.sent_on ?? today, today) });
+    } else if (t.state === "approved") {
+      const s = last(t.id, "approved");
+      if (!s || bkkDay(String(s.reviewed_at || s.sent_on)).slice(0, 7) !== month) continue;
+      rows.push({ ...base, stage: "approved", timing: s.due_on && s.sent_on > s.due_on ? "late" : "ok" });
+    }
+  }
+  const count = new Map<string, number>();
+  const bump = (k: string) => count.set(k, (count.get(k) ?? 0) + 1);
+  for (const r of rows) { bump(r.origin); bump(r.stage); bump(r.timing); bump(`${r.origin}>${r.stage}`); bump(`${r.stage}>${r.timing}`); }
+  const links = [...count].filter(([k]) => k.includes(">")).map(([k, n]) => [...k.split(">"), n] as [string, string, number]);
+  const n = (k: string) => count.get(k) ?? 0;
   return {
     month,
-    assigned: assigned.length,
-    people: new Set(assigned.map((t) => t.owner)).size,
-    buildings: new Set(assigned.map((t) => t.building)).size,
-    doing: doing.length,
-    overdue: doing.filter((t) => t.current_due_on < today).length,
-    fixing: doing.filter((t) => t.fix_round > 0).length,
-    waiting: waiting.length,
-    longestWait: Math.max(0, ...waiting.map((t) => daysBetween(mine(t.id, "pending")?.sent_on ?? today, today))),
-    approved: approved.length,
-    approvedLate: approved.filter((s) => s!.due_on && s!.sent_on > s!.due_on).length,
+    total: rows.length,
+    nodes: { new: n("new"), carried: n("carried"), doing: n("doing"), waiting: n("waiting"), approved: n("approved"), ok: n("ok"), late: n("late") },
+    links,
+    people: new Set(rows.map((r) => r.owner)).size,
+    buildings: new Set(rows.map((r) => r.building)).size,
+    fixing: rows.filter((r) => r.stage === "doing" && r.fix).length,
+    longestWait: Math.max(0, ...rows.map((r) => r.wait ?? 0)),
   };
 }
 

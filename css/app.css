@@ -568,17 +568,19 @@ details[open] > summary .due-head { display: none; }
 .journey li.now strong { color: var(--k); }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
-/* F · team flow: one box per stage, tap to see its tasks */
-.flow { display: flex; align-items: stretch; gap: 8px; }
-.flow-box { flex: 1 1 0; min-width: 0; display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 14px; font: inherit; color: var(--ink); cursor: pointer;
-  border: 1px solid var(--k); background: color-mix(in srgb, var(--k) 10%, transparent); }
-.flow-box:hover, .flow-box:focus-visible { background: color-mix(in srgb, var(--k) 20%, transparent); }
-.flow-num { font-size: 1.8em; font-weight: 600; line-height: 1.1; color: var(--k); font-variant-numeric: tabular-nums; }
-.flow-lab { font-size: .88em; font-weight: 500; }
-.flow-sub { font-size: .76em; color: var(--ink-2); }
-.flow-sub b { color: #ff4d5e; font-weight: 600; }
-.flow-to { align-self: center; color: var(--ink-3); }
-@media (max-width: 520px) { .flow { display: grid; grid-template-columns: 1fr 1fr; } .flow-to { display: none; } .journey li { grid-template-columns: 74px 14px 1fr; } }
+/* F · ภาพรวมงานทีม: top-to-bottom Sankey (js drawFlow); bars carry their count and name, stage bars are buttons */
+.sankey { display: block; width: 100%; max-width: 440px; height: auto; margin: 6px auto 0; font-family: var(--font); }
+.sankey .band { opacity: .42; transition: opacity .15s; }
+.sankey .band:hover { opacity: .7; }
+.sankey .node rect { filter: drop-shadow(0 0 6px var(--k)); }
+.sankey text { text-anchor: middle; fill: #000; pointer-events: none; }
+.sankey .num { font-size: 14px; font-weight: 700; }
+.sankey .lab { font-size: 10.5px; font-weight: 500; }
+.sankey .node-btn { cursor: pointer; outline: none; }
+.sankey .node-btn:hover rect { filter: drop-shadow(0 0 10px var(--k)) brightness(1.12); }
+.sankey .node-btn:focus-visible rect { stroke: #fff; stroke-width: 2.5; }
+.flow-sub { text-align: center; margin-top: 6px; }
+@media (max-width: 520px) { .journey li { grid-template-columns: 74px 14px 1fr; } }
 
 /* admin edit mode (🔓 แก้ไขข้อมูล): its controls show only on a card that has it on */
 .task:not(.editing) .edit-only { display: none; }
