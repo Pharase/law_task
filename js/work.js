@@ -275,8 +275,9 @@ function svgEl(tag, attrs = {}, ...kids) {
   return e;
 }
 
-// ภาพรวมงาน Sankey (Home): nodes per column, left to right; the server's taskFlow says which tasks are in each
-const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"], ["ok", "late"]];
+// ภาพรวมงาน Sankey (Home): nodes per column, left to right; the server's taskFlow says which tasks are in each.
+// ok / late are not a column: they are the filter above the chart (flowFilter)
+const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"]];
 const FLOW_NODE = {
   new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
   carried: { label: "ค้างจากก่อนหน้า", color: "#9aa3b5" },
@@ -289,7 +290,7 @@ const FLOW_NODE = {
 
 /**
  * Left-to-right Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
- * now → on time or late. Thin bars, the name and count beside them (left of the first column, right of the last, on a
+ * now. Thin bars, the name and count beside them (left of the first column, right of the last, on a
  * small card over the middle one). A bar's height and a band's width are its number of tasks; bars keep a minimum height
  * so two labels never overlap (the number shown stays exact). Bands fade from colour to colour; the pools
  * start close together and the flow fans out like roots. pick(key) makes bar + label a button; `selected` outlines one.
@@ -297,11 +298,11 @@ const FLOW_NODE = {
  */
 function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width = 0 } = {}) {
   const MIN_W = 396, MIN_H = 30, BAR = 12, PAD = 20, SPLIT = 4; // PAD: room above and below for the edge labels
-  const SPREAD = [0.05, 0.6, 1]; // per column: how much of the open space goes between its bars
   const FILL = 0.55; // bars take this share of the height; the rest is open space between them, so the flows branch like roots
   const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 340 : 300;
   const LABEL = W > 700 ? 130 : 112; // room for the outer columns' labels
-  const colX = [LABEL, (W - BAR) / 2, W - LABEL - BAR];
+  const last = FLOW_ROWS.length - 1, colX = FLOW_ROWS.map((_, c) => LABEL + (c / last) * (W - 2 * LABEL - BAR));
+  const spread = (c) => 0.05 + 0.95 * (c / last); // share of the open space between a column's bars: pools close, the end fanned out
   const at = {}; // node -> { x, y, h, n, c }
   FLOW_ROWS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
@@ -310,7 +311,7 @@ function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width
     const over = h.reduce((a, b) => a + b, 0) - avail, room = h.reduce((a, b) => a + (b - MIN_H), 0);
     if (over > 0 && room > 0) h = h.map((x) => MIN_H + (x - MIN_H) * (1 - over / room)); // the minimums' extra comes from the big ones
     // the pools start close together in the middle and the flow fans out to the right, like roots
-    const free = H - 2 * PAD - h.reduce((a, b) => a + b, 0), gap = keys.length > 1 ? Math.max(10, free * SPREAD[c]) / (keys.length - 1) : 0;
+    const free = H - 2 * PAD - h.reduce((a, b) => a + b, 0), gap = keys.length > 1 ? Math.max(10, free * spread(c)) / (keys.length - 1) : 0;
     let y = (H - h.reduce((a, b) => a + b, 0) - gap * (keys.length - 1)) / 2;
     keys.forEach((k, i) => { at[k] = { x: colX[c], y, h: h[i], n: f.nodes[k], c }; y += h[i] + gap; });
   });
@@ -350,10 +351,10 @@ function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width
   // bars, then their name and count: outside on the edges, on a card in the middle
   for (const [k, p] of Object.entries(at)) {
     const node = FLOW_NODE[k], mid = p.y + p.h / 2;
-    const [tx, anchor] = p.c === 0 ? [p.x - 8, "end"] : p.c === 2 ? [p.x + BAR + 8, "start"] : [p.x + BAR / 2, "middle"];
+    const [tx, anchor] = p.c === 0 ? [p.x - 8, "end"] : p.c === last ? [p.x + BAR + 8, "start"] : [p.x + BAR / 2, "middle"];
     const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
       svgEl("rect", { class: "bar", x: p.x, y: p.y, width: BAR, height: p.h, rx: 2 }));
-    if (p.c === 1) {
+    if (p.c !== 0 && p.c !== last) {
       const cw = Math.max(64, node.label.length * 7 + 16);
       g.append(svgEl("rect", { class: "tag", x: tx - cw / 2, y: mid - 19, width: cw, height: 38, rx: 6 }));
     }
@@ -373,6 +374,19 @@ function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width
   return svg;
 }
 
+/**
+ * The taskFlow narrowed to the tasks on time ("ok") or late ("late"); null = all. Each task sits in one pool and one
+ * stage, so a band's count is the overlap of its two ends.
+ */
+function flowFilter(f, timing) {
+  if (!timing) return f;
+  const keep = new Set(f.ids[timing] ?? []);
+  const ids = Object.fromEntries(Object.entries(f.ids).map(([k, v]) => [k, v.filter((id) => keep.has(id))]));
+  const nodes = Object.fromEntries(Object.entries(ids).map(([k, v]) => [k, v.length]));
+  const links = FLOW_ROWS[0].flatMap((a) => FLOW_ROWS[1].map((b) => [a, b, ids[a].filter((id) => ids[b].includes(id)).length]));
+  return { ...f, total: keep.size, nodes, ids, links };
+}
+
 /** The line under a Sankey: who and what it covers, fix rounds, the longest wait for review. */
 const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} นิติ`, `${f.total} งาน`, `แก้อยู่ ${f.fixing}`,
   f.nodes.waiting && `รอตรวจนานสุด ${f.longestWait} วัน`].filter(Boolean).join(" · ");
@@ -381,6 +395,7 @@ const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} น
 // turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
 let linkUsed = false;
 let homeKey = null; // the status group being looked at: kept when the list reloads or auto-refreshes
+let homeTiming = null; // the ทั้งหมด / ตรงเวลา / ช้า filter above the Sankey (null = all)
 let homeRedraw = null; // redraws the Sankey at the frame's new width (window resized / phone turned)
 let resizeTimer = 0;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => homeRedraw?.(), 150); });
@@ -406,7 +421,8 @@ async function renderHome(me, data) {
 
   $("dashTitle").textContent = `${isAdmin ? "ภาพรวมงานทีม" : "ภาพรวมงานของฉัน"} · ${new Date(today + "T00:00:00+07:00").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}`;
   const byId = new Map(all.map((t) => [t.id, t]));
-  const tasksOf = (k) => (flow.ids[k] ?? []).map((id) => byId.get(id)).filter(Boolean);
+  let view = flowFilter(flow, homeTiming);
+  const tasksOf = (k) => (view.ids[k] ?? []).map((id) => byId.get(id)).filter(Boolean);
   const statusText = Object.fromEntries(HOME_STATUS.map((s) => [s.key, s.label]));
   const pick = (k) => {
     homeKey = k;
@@ -417,22 +433,40 @@ async function renderHome(me, data) {
       ? tasks.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
       : [el("p", { className: "muted", textContent: "ไม่มีงาน" })]));
   };
+  // ทั้งหมด / ตรงเวลา / ช้า: narrows the chart and the list below it
+  const timing = (t) => {
+    homeTiming = t;
+    view = flowFilter(flow, t);
+    pick(has(homeKey) ? homeKey : firstKey());
+  };
+  const filterBar = () => el("div", { className: "flow-filter", role: "group", ariaLabel: "กรองตามเวลา" },
+    ...[[null, "ทั้งหมด", flow.total], ["ok", "ตรงเวลา", flowFilter(flow, "ok").total], ["late", "ช้า", flowFilter(flow, "late").total]].map(([t, label, n]) => {
+      const b = el("button", { type: "button", className: "chip", style: `--k:${t ? FLOW_NODE[t].color : "#f0f3f2"}` }, label + " ", el("b", { textContent: n }));
+      b.setAttribute("aria-pressed", String(homeTiming === t));
+      b.onclick = () => timing(t);
+      return b;
+    }));
   // every bar opens its tasks below; the tapped one is outlined
   const draw = (selected) => $("dashChart").replaceChildren(...(flow.total
-    ? [sankey(flow, { pick, selected, width: $("dashChart").clientWidth }), el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
+    ? [filterBar(), view.total
+      ? sankey(view, { pick, selected, width: $("dashChart").clientWidth })
+      : el("p", { className: "muted", textContent: "ไม่มีงานในกลุ่มนี้" }),
+    el("p", { className: "muted small-note flow-sub", textContent: homeTiming ? `${FLOW_NODE[homeTiming].label} ${view.total} จาก ${flow.total} งาน` : flowNote(flow, isAdmin) })]
     : [el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" })]));
 
   homeRedraw = () => draw(homeKey);
 
   // Open the list people most likely need: work to do, then waiting review, then the rest
-  const has = (k) => flow.nodes[k] > 0;
-  pick(homeKey && has(homeKey) ? homeKey : ["doing", "waiting", "approved", "new", "carried"].find(has) ?? "doing");
+  const has = (k) => !!k && view.nodes[k] > 0;
+  const firstKey = () => ["doing", "waiting", "approved", "new", "carried"].find(has) ?? "doing";
+  pick(has(homeKey) ? homeKey : firstKey());
 
   const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
   linkUsed = true;
   if (linkedId) history.replaceState(null, "", location.pathname);
   const stage = linkedId && ["doing", "waiting", "approved"].find((k) => (flow.ids[k] ?? []).includes(linkedId));
   if (stage) {
+    if (homeTiming) { homeTiming = null; view = flow; } // a linked task must be in the list
     pick(stage);
     const item = $("dashList").querySelector(`[data-task="${linkedId}"]`);
     item.open = true;
