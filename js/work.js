@@ -289,31 +289,30 @@ const FLOW_NODE = {
 
 /**
  * Left-to-right Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
- * now → on time or late. Nodes are blocks with the count and name inside (readable on phones); a block's height and a
- * band's width are its number of tasks. Blocks keep a minimum height so their text fits (a small count is drawn taller
- * than its share; the number on it stays exact). pick(key) makes blocks buttons; `selected` outlines one. `width` = the
- * frame's width in px: drawn 1:1 so it fills the frame with text at its normal size; narrower than MIN_W it scales down.
+ * now → on time or late. Thin bars, the name and count beside them (left of the first column, right of the last, on a
+ * small card over the middle one). A bar's height and a band's width are its number of tasks; bars keep a minimum height
+ * so two labels never overlap (the number shown stays exact). Bands take the colour of their outer end: where the task
+ * came from on the left, on time / late on the right. pick(key) makes bar + label a button; `selected` outlines one.
+ * `width` = the frame's width in px: drawn 1:1 so text stays its normal size; narrower than MIN_W it scales down.
  */
 function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width = 0 } = {}) {
-  const MIN_W = 396, GAP = 10, MIN_H = 40;
-  const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 320 : 260;
-  const BOX = Math.min(150, Math.max(92, Math.round(W * 0.14))); // blocks widen with the frame so they keep their weight next to the bands
-  const COL_GAP = (W - FLOW_ROWS.length * BOX) / (FLOW_ROWS.length - 1);
-  const at = {}; // node -> { x, y, h, n }
+  const MIN_W = 396, GAP = 14, MIN_H = 30, BAR = 12, PAD = 20; // PAD: room above and below for the edge labels
+  const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 340 : 300;
+  const LABEL = W > 700 ? 130 : 112; // room for the outer columns' labels
+  const colX = [LABEL, (W - BAR) / 2, W - LABEL - BAR];
+  const at = {}; // node -> { x, y, h, n, c }
   FLOW_ROWS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
-    const avail = H - GAP * (keys.length - 1);
+    const avail = H - 2 * PAD - GAP * (keys.length - 1);
     let h = keys.map((k) => Math.max(MIN_H, (f.nodes[k] / f.total) * avail));
     const over = h.reduce((a, b) => a + b, 0) - avail, room = h.reduce((a, b) => a + (b - MIN_H), 0);
     if (over > 0 && room > 0) h = h.map((x) => MIN_H + (x - MIN_H) * (1 - over / room)); // the minimums' extra comes from the big ones
     let y = (H - h.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
-    keys.forEach((k, i) => { at[k] = { x: c * (BOX + COL_GAP), y, h: h[i], n: f.nodes[k] }; y += h[i] + GAP; });
+    keys.forEach((k, i) => { at[k] = { x: colX[c], y, h: h[i], n: f.nodes[k], c }; y += h[i] + GAP; });
   });
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
-  const defs = svgEl("defs");
-  svg.append(defs);
 
-  // bands: each end takes its share of the block it touches, top to bottom so bands don't cross needlessly
+  // bands: each end takes its share of the bar it touches, top to bottom so bands don't cross needlessly
   const order = (k) => at[k].y;
   const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
   const port = (side, sortBy) => {
@@ -328,24 +327,27 @@ function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width
   };
   const from = port(0, (p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]));
   const to = port(1, (p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]));
-  links.forEach((l, i) => {
+  for (const l of links) {
     const [ya, ha] = from.get(l), [yb, hb] = to.get(l);
-    const xa = at[l[0]].x + BOX, xb = at[l[1]].x, xm = (xa + xb) / 2;
-    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: xa, y1: 0, x2: xb, y2: 0, gradientUnits: "userSpaceOnUse" },
-      svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
+    const xa = at[l[0]].x + BAR, xb = at[l[1]].x, xm = (xa + xb) / 2;
     svg.append(svgEl("path", {
-      class: "band", fill: `url(#flowg${i})`,
+      class: "band", fill: FLOW_NODE[at[l[0]].c === 0 ? l[0] : l[1]].color,
       d: `M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + hb} C${xm},${yb + hb} ${xm},${ya + ha} ${xa},${ya + ha} Z`,
     }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
-  });
+  }
 
-  // blocks with the count and name inside
+  // bars, then their name and count: outside on the edges, on a card in the middle
   for (const [k, p] of Object.entries(at)) {
     const node = FLOW_NODE[k], mid = p.y + p.h / 2;
+    const [tx, anchor] = p.c === 0 ? [p.x - 8, "end"] : p.c === 2 ? [p.x + BAR + 8, "start"] : [p.x + BAR / 2, "middle"];
     const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
-      svgEl("rect", { x: p.x, y: p.y, width: BOX, height: p.h, rx: 7 }),
-      svgEl("text", { x: p.x + BOX / 2, y: mid - 1, class: "num" }, String(p.n)),
-      svgEl("text", { x: p.x + BOX / 2, y: mid + 13, class: "lab" }, node.label));
+      svgEl("rect", { class: "bar", x: p.x, y: p.y, width: BAR, height: p.h, rx: 2 }));
+    if (p.c === 1) {
+      const cw = Math.max(64, node.label.length * 7 + 16);
+      g.append(svgEl("rect", { class: "tag", x: tx - cw / 2, y: mid - 19, width: cw, height: 38, rx: 6 }));
+    }
+    g.append(svgEl("text", { x: tx, y: mid - 3, class: "lab", "text-anchor": anchor }, node.label),
+      svgEl("text", { x: tx, y: mid + 13, class: "num", "text-anchor": anchor }, String(p.n)));
     if (pick && canPick(k)) {
       g.classList.add("node-btn");
       g.setAttribute("role", "button");

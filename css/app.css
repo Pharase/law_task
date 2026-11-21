@@ -544,18 +544,20 @@ details[open] > summary .due-head { display: none; }
 .journey li.now strong { color: var(--k); }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
-/* F · ภาพรวมงานทีม: top-to-bottom Sankey (js drawFlow); bars carry their count and name, stage bars are buttons */
+/* Home ภาพรวมงาน: left-to-right Sankey (js sankey); thin bars, names and counts beside them, a card over the middle ones */
 .sankey { display: block; width: 100%; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
-.sankey .band { opacity: .55; transition: opacity .15s; }
-.sankey .band:hover { opacity: .85; }
-/* blocks: a tint of their colour with a neon edge, so the bands between them stay the main shapes */
-.sankey .node rect { fill: color-mix(in srgb, var(--k) 22%, #0b0d10); stroke: var(--k); stroke-width: 1.5; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--k) 60%, transparent)); }
-.sankey text { text-anchor: middle; fill: var(--ink); pointer-events: none; }
-.sankey .num { font-size: 15px; font-weight: 700; fill: var(--k); }
-.sankey .lab { font-size: 11px; font-weight: 500; }
+.sankey .band { opacity: .3; transition: opacity .15s; }
+.sankey .band:hover { opacity: .55; }
+.sankey .bar { fill: var(--k); }
+.sankey .tag { fill: rgba(11, 13, 16, .88); stroke: color-mix(in srgb, var(--k) 55%, transparent); stroke-width: 1; }
+.sankey text { fill: var(--ink); pointer-events: none; }
+.sankey .num { font-size: 14px; font-weight: 700; fill: var(--k); }
+.sankey .lab { font-size: 12px; font-weight: 500; }
 .sankey .node-btn { cursor: pointer; outline: none; }
-.sankey .node-btn:hover rect { fill: color-mix(in srgb, var(--k) 34%, #0b0d10); }
-.sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; fill: color-mix(in srgb, var(--k) 34%, #0b0d10); }
+.sankey .node-btn text { pointer-events: auto; } /* the label is part of the button, not only the thin bar */
+.sankey .node-btn:hover .lab, .sankey .node.selected .lab { text-decoration: underline; }
+.sankey .node-btn:focus-visible .bar, .sankey .node.selected .bar { stroke: #fff; stroke-width: 2; }
+.sankey .node-btn:focus-visible .tag, .sankey .node.selected .tag { stroke: #fff; stroke-width: 1.5; }
 .flow-sub { text-align: center; margin-top: 6px; }
 /* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
 .flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; }
