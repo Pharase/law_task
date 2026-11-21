@@ -546,7 +546,7 @@ details[open] > summary .due-head { display: none; }
 
 /* Home ภาพรวมงาน: left-to-right Sankey (js sankey); thin bars, names and counts beside them, a card over the middle ones */
 .sankey { display: block; width: 100%; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
-.sankey .band { opacity: .3; transition: opacity .15s; }
+.sankey .band { opacity: .4; transition: opacity .15s; }
 .sankey .band:hover { opacity: .55; }
 .sankey .bar { fill: var(--k); }
 .sankey .tag { fill: rgba(11, 13, 16, .88); stroke: color-mix(in srgb, var(--k) 55%, transparent); stroke-width: 1; }
