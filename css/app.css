@@ -545,7 +545,9 @@ details[open] > summary .due-head { display: none; }
 /* admin edit mode (🔓 แก้ไขข้อมูล): its controls show only on a card that has it on */
 .task:not(.editing) .edit-only { display: none; }
 .task.editing { outline: 1px dashed #ff9f1c; outline-offset: 2px; }
-.line-form { margin: 8px 0; padding: 10px; border: 1px solid var(--line-2); border-radius: 10px; }
+.edit-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; } /* 📝 / 🕘 under the toggle, with room */
+.line-tools { float: right; display: inline-flex; gap: 6px; margin-left: 8px; } /* ✏️ 🗑 side by side at the right of a history line */
+.timeline li::after { content: ""; display: block; clear: both; }
 /* history: the send's outcome glows in its own colour */
 .outcome-neon { --c: 255, 240, 31; color: rgb(var(--c)); font-weight: 700; text-shadow: 0 0 6px rgba(var(--c), .75), 0 0 14px rgba(var(--c), .45); }
 .outcome-neon.approved { --c: 57, 255, 20; }

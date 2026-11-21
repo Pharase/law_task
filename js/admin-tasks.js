@@ -38,7 +38,7 @@ function adminTaskBody(t) {
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
     taskFolderButton(t), // every task, so old (history) tasks' sent files can be opened too
     t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
-      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s), lineTools(s),
+      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
       s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
     files.length > 0 && el("ul", {}, ...files),
   );
@@ -146,9 +146,27 @@ function reviewControls(t) {
   return box;
 }
 
-// Edit mode (🔓 แก้ไขข้อมูล): per task, off by default, kept through list refreshes. While it is off, every
-// .edit-only control of that card (task form, ✏️ / 🗑 on history lines, add a line) is hidden (css .task:not(.editing)).
+// Edit mode (🔓 แก้ไขข้อมูล): per task, off by default, kept through list refreshes. While it is off the card's
+// .edit-only part is hidden (css .task:not(.editing)); on, it offers two popups: task details, and the send history.
 const editMode = new Set();
+
+/** Small popup (the same look as Ex Doc's 📤): built when opened, removed when closed (✕, Esc or done). */
+function popup(title, ...kids) {
+  const close = el("button", { type: "button", className: "small secondary", textContent: "✕", ariaLabel: "ปิด" });
+  const dlg = el("dialog", { className: "card modal" },
+    el("div", { className: "row card-head" }, el("h2", { className: "grow", textContent: title }), close), ...kids);
+  close.onclick = () => dlg.close();
+  dlg.addEventListener("close", () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  return dlg;
+}
+
+/** A save went through: close every popup (the history popup under a line popup too) and redraw the lists. */
+function saved() {
+  document.querySelectorAll("dialog.modal[open]").forEach((d) => d.close());
+  loadAll();
+}
 
 /** Form for one history line (add, or ✏️ change): sent date, outcome; a note unless รอตรวจ; มีปรับแก้ also its new due date. */
 function lineForm(s, save) {
@@ -163,34 +181,63 @@ function lineForm(s, save) {
   const sync = () => { noteBox.hidden = outcome.value === "pending"; nextBox.hidden = outcome.value !== "fix"; next.required = !nextBox.hidden; };
   outcome.onchange = sync;
   sync();
-  const form = el("form", { hidden: true, className: "line-form" }, el("label", { textContent: "วันที่ส่ง" }), date,
+  const form = el("form", {}, el("label", { textContent: "วันที่ส่ง" }), date,
     el("label", { textContent: "ผลการตรวจ" }), outcome, noteBox, nextBox, how && el("label", { textContent: "วิธีส่ง" }), how,
     el("button", { textContent: "บันทึก" }));
   form.onsubmit = async (e) => {
     e.preventDefault();
     const line = { sent_on: date.value, outcome: outcome.value, fix_note: note.value, next_due_on: next.value };
-    try { await locked(form, () => save(how ? { ...line, delivery: how.value || null } : line)); loadAll(); }
+    try { await locked(form, () => save(how ? { ...line, delivery: how.value || null } : line)); saved(); }
     catch (err) { alert(err.message); }
   };
   return form;
 }
 
-/** ✏️ / 🗑 on a history line (edit mode only). The task's status is worked out again from the history on the server. */
-function lineTools(s) {
-  const form = lineForm(s, (x) => api("editSend", { send_id: s.id, ...x }));
-  const edit = el("button", { type: "button", className: "icon-btn", textContent: "✏️", title: "แก้ไขบรรทัดนี้", ariaLabel: "แก้ไขบรรทัดนี้" });
-  edit.onclick = () => { form.hidden = !form.hidden; };
-  const del = el("button", { type: "button", className: "icon-btn", textContent: "🗑", title: "ลบบรรทัดนี้", ariaLabel: "ลบบรรทัดนี้" });
-  const box = el("span", { className: "edit-only" }, " ", edit, del, form);
-  del.onclick = async () => {
-    if (!confirm(`ลบประวัติ "ส่ง ${thDate(s.sent_on)} → ${OUTCOME_TEXT[s.outcome]}"?\nสถานะงานจะคำนวณใหม่จากประวัติที่เหลือ`)) return;
-    try { await locked(box, () => api("deleteSend", { send_id: s.id })); loadAll(); } catch (err) { alert(err.message); }
+const lineText = (s) => `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)}) → ${OUTCOME_TEXT[s.outcome] ?? s.outcome}`;
+
+/** 🗑: nothing is deleted until the admin presses ยืนยันลบ in this popup. */
+function confirmDelete(s) {
+  const no = el("button", { type: "button", className: "small secondary", textContent: "ยกเลิก" });
+  const yes = el("button", { type: "button", className: "small danger", textContent: "🗑 ยืนยันลบ" });
+  const dlg = popup("ยืนยันการลบประวัติ",
+    el("p", { textContent: lineText(s) }),
+    s.fix_note ? el("p", { className: "muted pre", textContent: s.fix_note }) : null,
+    el("p", { className: "error small-note", textContent: "ลบแล้วกู้คืนไม่ได้ · สถานะงาน รอบแก้ และกำหนดส่งปัจจุบันจะคำนวณใหม่จากประวัติที่เหลือ" }),
+    el("div", { className: "row" }, no, yes));
+  no.onclick = () => dlg.close();
+  yes.onclick = async () => {
+    try { await locked(dlg, () => api("deleteSend", { send_id: s.id })); saved(); }
+    catch (err) { alert(err.message); }
   };
-  return box;
 }
 
-/** Edit mode: every field of the task, any state (old records too); the due date here is the original one. */
-function taskEditForm(t) {
+/** ✏️ / 🗑 at the right of a line in the history popup. The task's status is worked out again on the server. */
+function lineTools(s) {
+  const edit = el("button", { type: "button", className: "icon-btn", textContent: "✏️", title: "แก้ไขบรรทัดนี้", ariaLabel: "แก้ไขบรรทัดนี้" });
+  edit.onclick = () => popup("แก้ไขบรรทัดประวัติ", el("p", { className: "muted small-note", textContent: lineText(s) }),
+    lineForm(s, (x) => api("editSend", { send_id: s.id, ...x })));
+  const del = el("button", { type: "button", className: "icon-btn", textContent: "🗑", title: "ลบบรรทัดนี้", ariaLabel: "ลบบรรทัดนี้" });
+  del.onclick = () => confirmDelete(s);
+  return el("span", { className: "line-tools" }, edit, del);
+}
+
+/** 🕘 popup: every history line with ✏️ / 🗑, and ＋ to add one (e.g. the member says they already sent: รอตรวจ on that day). */
+function historyPopup(t) {
+  const add = el("button", { type: "button", className: "small secondary", textContent: "＋ เพิ่มประวัติการส่ง" });
+  add.onclick = () => popup("เพิ่มประวัติการส่ง", el("p", { className: "muted small-note", textContent: t.title }),
+    lineForm(null, (x) => api("addSend", { task_id: t.id, ...x })));
+  popup(`ประวัติการส่ง · ${t.title}`,
+    t.sends.length
+      ? el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {}, lineTools(s), // first: it floats right
+        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
+        s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null)))
+      : el("p", { className: "muted", textContent: "ยังไม่มีประวัติการส่ง" }),
+    el("p", { className: "muted small-note", textContent: "สถานะงาน รอบแก้ และกำหนดส่งปัจจุบันจะคำนวณใหม่จากประวัติหลังบันทึก" }),
+    add);
+}
+
+/** 📝 popup: every field of the task, any state (old records too); the due date here is the original one. */
+function taskEditPopup(t) {
   const title = el("input", { value: t.title, maxLength: 200, required: true });
   const details = el("textarea", { rows: 3, maxLength: 5000, value: t.details ?? "" });
   const names = buildings.map((b) => b.name);
@@ -199,7 +246,7 @@ function taskEditForm(t) {
   const tags = el("div", {}, ...TAG_LIST.map((tag) => el("label", { className: "inline" },
     el("input", { type: "checkbox", value: tag, checked: t.tags.includes(tag) }), " " + tag)));
   const due = el("input", { type: "date", value: t.due_on, required: true });
-  const form = el("form", { className: "line-form" }, el("label", { textContent: "หัวข้อ" }), title, el("label", { textContent: "รายละเอียด" }), details,
+  const form = el("form", {}, el("label", { textContent: "หัวข้อ" }), title, el("label", { textContent: "รายละเอียด" }), details,
     el("label", { textContent: "นิติบุคคล" }), building, el("label", { textContent: "หมวดหมู่" }), tags,
     el("label", { textContent: "กำหนดส่ง (เดิม)" }), due, el("button", { textContent: "บันทึกข้อมูลงาน" }));
   form.onsubmit = async (e) => {
@@ -208,10 +255,10 @@ function taskEditForm(t) {
     try {
       await locked(form, () => api("editTask", { task_id: t.id, full: true, title: title.value, details: details.value,
         building: building.value, tags: picked, due_on: due.value }));
-      loadAll();
+      saved();
     } catch (err) { alert(err.message); }
   };
-  return form;
+  popup("แก้ไขรายละเอียดงาน", form);
 }
 
 function editControls(t) {
@@ -235,13 +282,9 @@ function editControls(t) {
     };
     box.append(cancel);
   }
-  // add a line: e.g. the member says they already sent (รอตรวจ, on the day they sent), or a send missing from old records
-  const add = lineForm(null, (x) => api("addSend", { task_id: t.id, ...x }));
-  const addBtn = el("button", { type: "button", className: "small secondary", textContent: "＋ เพิ่มประวัติการส่ง" });
-  addBtn.onclick = () => { add.hidden = !add.hidden; };
-  box.append(el("div", { className: "edit-only" },
-    el("p", { className: "muted small-note", textContent: "โหมดแก้ไข: แก้ข้อมูลงานและประวัติได้ทุกบรรทัด สถานะงาน รอบแก้ และกำหนดส่งปัจจุบันจะคำนวณใหม่จากประวัติ" }),
-    taskEditForm(t), addBtn, add));
+  const details = el("button", { type: "button", className: "small secondary", textContent: "📝 แก้ไขรายละเอียดงาน", onclick: () => taskEditPopup(t) });
+  const history = el("button", { type: "button", className: "small secondary", textContent: "🕘 แก้ไขประวัติการส่ง", onclick: () => historyPopup(t) });
+  box.append(el("div", { className: "edit-only edit-tools" }, details, history));
   return box;
 }
 
