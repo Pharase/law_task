@@ -275,9 +275,7 @@ function svgEl(tag, attrs = {}, ...kids) {
   return e;
 }
 
-// ภาพรวมงาน Sankey (Home): nodes per column, left to right; the server's taskFlow says which tasks are in each.
-// ok / late are not a column: they are the filter above the chart (flowFilter)
-const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"]];
+// Tasks page blocks (admin/tasks.html drawFlow) name and colour their stages from here
 const FLOW_NODE = {
   new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
   carried: { label: "ค้างจากก่อนหน้า", color: "#9aa3b5" },
@@ -288,79 +286,107 @@ const FLOW_NODE = {
   late: { label: "ช้า / เลยกำหนด", color: "#ff4d5e" },
 };
 
+// Home ภาพรวมงาน: the work process, left to right, each task placed by its latest status
+const PROC_COLS = [["new", "carried"], ["doing"], ["ok", "late"], ["approved", "fix"]];
+const PROC_NODE = {
+  new: FLOW_NODE.new, carried: FLOW_NODE.carried,
+  doing: { label: "กำลังทำ", color: "#ff9f1c" },
+  ok: { label: "รอตรวจ · ตรงเวลา", color: "#02d7f4" },
+  late: { label: "รอตรวจ · ช้า", color: "#ff4d5e" },
+  approved: { label: "อนุมัติ", color: "#39ff14" },
+  fix: { label: "แก้ไข", color: "#ff7a45" },
+};
+const PROC_STAY = { doing: "ยังไม่ส่ง", ok: "รอตรวจอยู่", late: "รอตรวจอยู่" }; // tasks whose latest status is this step
+
 /**
- * Left-to-right Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
- * now. Thin bars, the name and count beside them (left of the first column, right of the last, on a
- * small card over the middle one). A bar's height and a band's width are its number of tasks; bars keep a minimum height
- * so two labels never overlap (the number shown stays exact). Bands fade from colour to colour; the pools
- * start close together and the flow fans out like roots. pick(key) makes bar + label a button; `selected` outlines one.
- * `width` = the frame's width in px: drawn 1:1 so text stays its normal size; narrower than MIN_W it scales down.
+ * The process of the tasks in taskFlow's two pools (open tasks + approved this month), by each task's latest status:
+ * every task enters กำลังทำ; one never sent (or only กดผิด) stays there; its latest send is on time or late against that
+ * send's due date (else the task's current one) and stays there while pending, or goes on to อนุมัติ / แก้ไข.
+ * Returns { total, nodes, links: [from, to, n] in drawing order, stays: { node: n }, ids: { node | "stay_"+node: id[] } }.
  */
-function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width = 0 } = {}) {
-  const MIN_W = 396, MIN_H = 30, BAR = 12, PAD = 20, SPLIT = 4; // PAD: room above and below for the edge labels
-  const FILL = 0.55; // bars take this share of the height; the rest is open space between them, so the flows branch like roots
-  const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 340 : 300;
-  const LABEL = W > 700 ? 130 : 112; // room for the outer columns' labels
-  const last = FLOW_ROWS.length - 1, colX = FLOW_ROWS.map((_, c) => LABEL + (c / last) * (W - 2 * LABEL - BAR));
-  const spread = (c) => 0.05 + 0.95 * (c / last); // share of the open space between a column's bars: pools close, the end fanned out
-  const at = {}; // node -> { x, y, h, n, c }
-  FLOW_ROWS.forEach((col, c) => {
+function processFlow(flow, tasks) {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const ids = {}, add = (k, id) => (ids[k] ??= []).push(id);
+  const count = new Map(), link = (a, b) => count.set(`${a}>${b}`, (count.get(`${a}>${b}`) ?? 0) + 1);
+  for (const origin of ["new", "carried"]) for (const id of flow.ids[origin] ?? []) {
+    const t = byId.get(id);
+    if (!t) continue;
+    add(origin, id); add("doing", id); link(origin, "doing");
+    const s = (t.sends ?? []).filter((x) => x.outcome !== "void").at(-1);
+    if (!s) { add("stay_doing", id); continue; }
+    const timing = s.sent_on > (s.due_on || t.current_due_on) ? "late" : "ok";
+    add(timing, id); link("doing", timing);
+    if (s.outcome === "pending") { add("stay_" + timing, id); continue; }
+    const end = s.outcome === "approved" ? "approved" : "fix";
+    add(end, id); link(timing, end);
+  }
+  const n = (k) => ids[k]?.length ?? 0;
+  const order = [["new", "doing"], ["carried", "doing"], ["doing", "ok"], ["doing", "late"], ["ok", "approved"], ["ok", "fix"], ["late", "approved"], ["late", "fix"]];
+  return {
+    total: n("doing"),
+    nodes: Object.fromEntries(Object.keys(PROC_NODE).map((k) => [k, n(k)])),
+    links: order.map(([a, b]) => [a, b, count.get(`${a}>${b}`) ?? 0]).filter((l) => l[2] > 0),
+    stays: Object.fromEntries(Object.keys(PROC_STAY).map((k) => [k, n("stay_" + k)])),
+    ids,
+  };
+}
+
+/**
+ * Left-to-right Sankey of processFlow: thin bars whose height is their number of tasks (one scale for the whole chart),
+ * pool names on the left, every other step's name and count above its bar. Bands fade from colour to colour; tasks still
+ * in a step end in a short grey stub (ยังไม่ส่ง / รอตรวจอยู่). pick(key) makes bar + label a button; `selected` outlines
+ * one. `width` = the frame's width in px, drawn 1:1; below MIN_W the frame scrolls sideways so text stays readable.
+ */
+function sankey(f, { pick = null, selected = null, width = 0 } = {}) {
+  const MIN_W = 600, BAR = 12, TOP = 30, BOT = 12, LEFT = 120, RIGHT = 80, STUB = 40;
+  const W = Math.max(MIN_W, Math.round(width)), PLOT = W > 800 ? 260 : 230;
+  const K = PLOT / f.total; // px per task
+  const GAP = [16, 0, 34, 34]; // room between a column's bars; 34 fits the label above the lower bar
+  const colX = PROC_COLS.map((_, c) => LEFT + (c / (PROC_COLS.length - 1)) * (W - LEFT - RIGHT - BAR));
+  const at = {};
+  PROC_COLS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
-    const avail = (H - 2 * PAD) * FILL;
-    let h = keys.map((k) => Math.max(MIN_H, (f.nodes[k] / f.total) * avail));
-    const over = h.reduce((a, b) => a + b, 0) - avail, room = h.reduce((a, b) => a + (b - MIN_H), 0);
-    if (over > 0 && room > 0) h = h.map((x) => MIN_H + (x - MIN_H) * (1 - over / room)); // the minimums' extra comes from the big ones
-    // the pools start close together in the middle and the flow fans out to the right, like roots
-    const free = H - 2 * PAD - h.reduce((a, b) => a + b, 0), gap = keys.length > 1 ? Math.max(10, free * spread(c)) / (keys.length - 1) : 0;
-    let y = (H - h.reduce((a, b) => a + b, 0) - gap * (keys.length - 1)) / 2;
-    keys.forEach((k, i) => { at[k] = { x: colX[c], y, h: h[i], n: f.nodes[k], c }; y += h[i] + gap; });
+    const tot = keys.reduce((a, k) => a + f.nodes[k] * K, 0) + GAP[c] * (keys.length - 1);
+    let y = c === 0 ? TOP + (PLOT - tot) / 2 : TOP; // the pools sit level with กำลังทำ
+    for (const k of keys) { at[k] = { x: colX[c], y, h: f.nodes[k] * K, n: f.nodes[k], c }; y += at[k].h + GAP[c]; }
   });
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
+  const H = Math.ceil(Math.max(...Object.values(at).map((p) => p.y + p.h))) + BOT;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
   const defs = svgEl("defs");
   svg.append(defs);
+  const grad = (id, a, b, x1, x2) => defs.append(svgEl("linearGradient", { id, x1, y1: 0, x2, y2: 0, gradientUnits: "userSpaceOnUse" },
+    svgEl("stop", { offset: 0, "stop-color": a }), svgEl("stop", { offset: 1, "stop-color": b })));
 
-  // bands: each end takes its share of the bar it touches, top to bottom so bands don't cross needlessly, with a SPLIT
-  // gap between neighbouring bands so they visibly part like roots
-  const order = (k) => at[k].y;
-  const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
-  const port = (side, sortBy) => {
-    const used = {}, out = new Map(), count = {};
-    for (const l of links) count[l[side]] = (count[l[side]] ?? 0) + 1;
-    for (const l of [...links].sort(sortBy)) {
-      const k = l[side], p = at[k], h = (l[2] / p.n) * (p.h - SPLIT * (count[k] - 1));
-      used[k] = used[k] ?? p.y;
-      out.set(l, [used[k], h]);
-      used[k] += h + SPLIT;
-    }
-    return out;
-  };
-  const from = port(0, (p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]));
-  const to = port(1, (p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]));
-  links.forEach((l, i) => {
-    const [ya, ha] = from.get(l), [yb, hb] = to.get(l);
-    const xa = at[l[0]].x + BAR, xb = at[l[1]].x, xm = (xa + xb) / 2;
-    // each band fades from the colour of the bar it leaves to the colour of the bar it reaches
-    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: xa, y1: 0, x2: xb, y2: 0, gradientUnits: "userSpaceOnUse" },
-      svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
+  // ports are handed out in the order the flows are listed (processFlow keeps them top to bottom), then the stub
+  const out = {}, inn = {};
+  f.links.forEach(([a, b, n], i) => {
+    const A = at[a], B = at[b], h = n * K, ya = out[a] ?? A.y, yb = inn[b] ?? B.y;
+    out[a] = ya + h; inn[b] = yb + h;
+    const xa = A.x + BAR, xb = B.x, xm = (xa + xb) / 2;
+    grad(`flowg${i}`, PROC_NODE[a].color, PROC_NODE[b].color, xa, xb);
     svg.append(svgEl("path", {
       class: "band", fill: `url(#flowg${i})`,
-      d: `M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + hb} C${xm},${yb + hb} ${xm},${ya + ha} ${xa},${ya + ha} Z`,
-    }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
+      d: `M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + h} C${xm},${yb + h} ${xm},${ya + h} ${xa},${ya + h} Z`,
+    }, svgEl("title", {}, `${PROC_NODE[a].label} → ${PROC_NODE[b].label}: ${n} งาน`)));
   });
+  for (const [k, n] of Object.entries(f.stays)) {
+    if (!n || !at[k]) continue;
+    const h = n * K, y = out[k] ?? at[k].y, x = at[k].x + BAR;
+    grad(`stay${k}`, PROC_NODE[k].color, "rgba(154,163,173,0)", x, x + STUB);
+    svg.append(svgEl("path", { class: "band", fill: `url(#stay${k})`, d: `M${x},${y} h${STUB} v${h} h${-STUB} Z` },
+      svgEl("title", {}, `${PROC_STAY[k]}: ${n} งาน`)),
+      svgEl("text", { x: x + STUB + 6, y: y + h / 2 + 4, class: "stay" }, `${PROC_STAY[k]} ${n}`));
+  }
 
-  // bars, then their name and count: outside on the edges, on a card in the middle
+  // bars; pools named on their left, every other step above its bar
   for (const [k, p] of Object.entries(at)) {
-    const node = FLOW_NODE[k], mid = p.y + p.h / 2;
-    const [tx, anchor] = p.c === 0 ? [p.x - 8, "end"] : p.c === last ? [p.x + BAR + 8, "start"] : [p.x + BAR / 2, "middle"];
+    const node = PROC_NODE[k];
     const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
-      svgEl("rect", { class: "bar", x: p.x, y: p.y, width: BAR, height: p.h, rx: 2 }));
-    if (p.c !== 0 && p.c !== last) {
-      const cw = Math.max(64, node.label.length * 7 + 16);
-      g.append(svgEl("rect", { class: "tag", x: tx - cw / 2, y: mid - 19, width: cw, height: 38, rx: 6 }));
-    }
-    g.append(svgEl("text", { x: tx, y: mid - 3, class: "lab", "text-anchor": anchor }, node.label),
-      svgEl("text", { x: tx, y: mid + 13, class: "num", "text-anchor": anchor }, String(p.n)));
-    if (pick && canPick(k)) {
+      svgEl("rect", { class: "bar", x: p.x, y: p.y, width: BAR, height: Math.max(2, p.h), rx: 2 }));
+    if (p.c === 0) g.append(svgEl("text", { x: p.x - 8, y: p.y + p.h / 2 - 2, class: "lab", "text-anchor": "end" }, node.label),
+      svgEl("text", { x: p.x - 8, y: p.y + p.h / 2 + 14, class: "num", "text-anchor": "end" }, String(p.n)));
+    else g.append(svgEl("text", { x: p.x, y: p.y - 9, class: "lab" }, `${node.label} `, svgEl("tspan", { class: "num" }, String(p.n))));
+    if (pick) {
       g.classList.add("node-btn");
       g.setAttribute("role", "button");
       g.setAttribute("tabindex", "0");
@@ -374,19 +400,6 @@ function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width
   return svg;
 }
 
-/**
- * The taskFlow narrowed to the tasks on time ("ok") or late ("late"); null = all. Each task sits in one pool and one
- * stage, so a band's count is the overlap of its two ends.
- */
-function flowFilter(f, timing) {
-  if (!timing) return f;
-  const keep = new Set(f.ids[timing] ?? []);
-  const ids = Object.fromEntries(Object.entries(f.ids).map(([k, v]) => [k, v.filter((id) => keep.has(id))]));
-  const nodes = Object.fromEntries(Object.entries(ids).map(([k, v]) => [k, v.length]));
-  const links = FLOW_ROWS[0].flatMap((a) => FLOW_ROWS[1].map((b) => [a, b, ids[a].filter((id) => ids[b].includes(id)).length]));
-  return { ...f, total: keep.size, nodes, ids, links };
-}
-
 /** The line under a Sankey: who and what it covers, fix rounds, the longest wait for review. */
 const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} นิติ`, `${f.total} งาน`, `แก้อยู่ ${f.fixing}`,
   f.nodes.waiting && `รอตรวจนานสุด ${f.longestWait} วัน`].filter(Boolean).join(" · ");
@@ -394,8 +407,7 @@ const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} น
 // ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
 // turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
 let linkUsed = false;
-let homeKey = null; // the status group being looked at: kept when the list reloads or auto-refreshes
-let homeTiming = null; // the ทั้งหมด / ตรงเวลา / ช้า filter above the Sankey (null = all)
+let homeKey = null; // the step being looked at: kept when the list reloads or auto-refreshes
 let homeRedraw = null; // redraws the Sankey at the frame's new width (window resized / phone turned)
 let resizeTimer = 0;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => homeRedraw?.(), 150); });
@@ -408,7 +420,7 @@ async function renderHome(me, data) {
   const today = bkkToday();
   const isAdmin = me.role === "admin";
   const reload = () => renderHome(me);
-  // the tasks (with sends, for the cards) and the Sankey's counts; the server scopes both to the member for members
+  // the tasks (with sends, for the cards and each task's latest status) and the pools; the server scopes both for members
   const [raw, flow] = await Promise.all([data ?? homeTasks(me), api("taskFlow")]);
   const all = raw.filter((t) => t.state !== "cancelled");
   if (isAdmin && $("trackDot")) {
@@ -420,53 +432,38 @@ async function renderHome(me, data) {
   }
 
   $("dashTitle").textContent = `${isAdmin ? "ภาพรวมงานทีม" : "ภาพรวมงานของฉัน"} · ${new Date(today + "T00:00:00+07:00").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}`;
+  const proc = processFlow(flow, all);
   const byId = new Map(all.map((t) => [t.id, t]));
-  let view = flowFilter(flow, homeTiming);
-  const tasksOf = (k) => (view.ids[k] ?? []).map((id) => byId.get(id)).filter(Boolean);
+  // กำลังทำ holds every task, so tapping it lists the ones not sent yet
+  const idsOf = (k) => proc.ids[k === "doing" ? "stay_doing" : k] ?? [];
+  const titleOf = (k) => (k === "doing" ? "กำลังทำ · ยังไม่ส่ง" : PROC_NODE[k].label);
   const statusText = Object.fromEntries(HOME_STATUS.map((s) => [s.key, s.label]));
   const pick = (k) => {
     homeKey = k;
-    const tasks = tasksOf(k).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
+    const tasks = idsOf(k).map((id) => byId.get(id)).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
     draw(k);
-    $("dashListTitle").textContent = `${FLOW_NODE[k].label} (${tasks.length})`;
+    $("dashListTitle").textContent = `${titleOf(k)} (${tasks.length})`;
     $("dashList").replaceChildren(...(tasks.length
       ? tasks.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
       : [el("p", { className: "muted", textContent: "ไม่มีงาน" })]));
   };
-  // ทั้งหมด / ตรงเวลา / ช้า: narrows the chart and the list below it
-  const timing = (t) => {
-    homeTiming = t;
-    view = flowFilter(flow, t);
-    pick(has(homeKey) ? homeKey : firstKey());
-  };
-  const filterBar = () => el("div", { className: "flow-filter", role: "group", ariaLabel: "กรองตามเวลา" },
-    ...[[null, "ทั้งหมด", flow.total], ["ok", "ตรงเวลา", flowFilter(flow, "ok").total], ["late", "ช้า", flowFilter(flow, "late").total]].map(([t, label, n]) => {
-      const b = el("button", { type: "button", className: "chip", style: `--k:${t ? FLOW_NODE[t].color : "#f0f3f2"}` }, label + " ", el("b", { textContent: n }));
-      b.setAttribute("aria-pressed", String(homeTiming === t));
-      b.onclick = () => timing(t);
-      return b;
-    }));
   // every bar opens its tasks below; the tapped one is outlined
-  const draw = (selected) => $("dashChart").replaceChildren(...(flow.total
-    ? [filterBar(), view.total
-      ? sankey(view, { pick, selected, width: $("dashChart").clientWidth })
-      : el("p", { className: "muted", textContent: "ไม่มีงานในกลุ่มนี้" }),
-    el("p", { className: "muted small-note flow-sub", textContent: homeTiming ? `${FLOW_NODE[homeTiming].label} ${view.total} จาก ${flow.total} งาน` : flowNote(flow, isAdmin) })]
+  const draw = (selected) => $("dashChart").replaceChildren(...(proc.total
+    ? [el("div", { className: "sankey-wrap" }, sankey(proc, { pick, selected, width: $("dashChart").clientWidth })),
+      el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
     : [el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" })]));
 
   homeRedraw = () => draw(homeKey);
 
-  // Open the list people most likely need: work to do, then waiting review, then the rest
-  const has = (k) => !!k && view.nodes[k] > 0;
-  const firstKey = () => ["doing", "waiting", "approved", "new", "carried"].find(has) ?? "doing";
-  pick(has(homeKey) ? homeKey : firstKey());
+  // Open the list people most likely need: not sent yet, sent back, then waiting review, then the rest
+  const has = (k) => !!k && idsOf(k).length > 0;
+  pick(has(homeKey) ? homeKey : ["doing", "fix", "late", "ok", "approved", "new", "carried"].find(has) ?? "doing");
 
   const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
   linkUsed = true;
   if (linkedId) history.replaceState(null, "", location.pathname);
-  const stage = linkedId && ["doing", "waiting", "approved"].find((k) => (flow.ids[k] ?? []).includes(linkedId));
+  const stage = linkedId && ["doing", "fix", "approved", "late", "ok"].find((k) => idsOf(k).includes(linkedId));
   if (stage) {
-    if (homeTiming) { homeTiming = null; view = flow; } // a linked task must be in the list
     pick(stage);
     const item = $("dashList").querySelector(`[data-task="${linkedId}"]`);
     item.open = true;

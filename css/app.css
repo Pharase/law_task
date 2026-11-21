@@ -544,27 +544,21 @@ details[open] > summary .due-head { display: none; }
 .journey li.now strong { color: var(--k); }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
-/* Home ภาพรวมงาน: left-to-right Sankey (js sankey); thin bars, names and counts beside them, a card over the middle ones */
-.sankey { display: block; width: 100%; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
+/* Home ภาพรวมงาน: the work process as a left-to-right Sankey (js sankey); below 600px the frame scrolls sideways */
+.sankey-wrap { overflow-x: auto; }
+.sankey { display: block; width: 100%; min-width: 600px; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
 .sankey .band { opacity: .4; transition: opacity .15s; }
 .sankey .band:hover { opacity: .55; }
 .sankey .bar { fill: var(--k); }
-.sankey .tag { fill: rgba(11, 13, 16, .88); stroke: color-mix(in srgb, var(--k) 55%, transparent); stroke-width: 1; }
 .sankey text { fill: var(--ink); pointer-events: none; }
 .sankey .num { font-size: 14px; font-weight: 700; fill: var(--k); }
 .sankey .lab { font-size: 12px; font-weight: 500; }
+.sankey .stay { font-size: 11px; fill: var(--ink-2); } /* ยังไม่ส่ง / รอตรวจอยู่ beside a stub */
 .sankey .node-btn { cursor: pointer; outline: none; }
 .sankey .node-btn text { pointer-events: auto; } /* the label is part of the button, not only the thin bar */
 .sankey .node-btn:hover .lab, .sankey .node.selected .lab { text-decoration: underline; }
 .sankey .node-btn:focus-visible .bar, .sankey .node.selected .bar { stroke: #fff; stroke-width: 2; }
-.sankey .node-btn:focus-visible .tag, .sankey .node.selected .tag { stroke: #fff; stroke-width: 1.5; }
 .flow-sub { text-align: center; margin-top: 6px; }
-/* ทั้งหมด / ตรงเวลา / ช้า above the Home Sankey: filters the chart and the list */
-.flow-filter { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
-.flow-filter .chip { width: auto; margin: 0; padding: 3px 10px; border-radius: 999px; font: inherit; font-size: .8em; cursor: pointer; color: var(--ink-2);
-  background: transparent; border: 1px solid color-mix(in srgb, var(--k) 45%, transparent); }
-.flow-filter .chip b { color: var(--k); font-weight: 600; }
-.flow-filter .chip[aria-pressed="true"] { color: var(--ink); background: color-mix(in srgb, var(--k) 18%, transparent); border-color: var(--k); }
 /* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
 .flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; }
 .flow-arrow { align-self: center; color: var(--ink-2); font-size: 1.1em; opacity: .7; }
