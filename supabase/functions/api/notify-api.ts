@@ -1,6 +1,6 @@
 // Daily LINE summary sender (spec "Notifications"). Public + idempotent: at most one run per Bangkok weekday after 09:00.
 import { bangkokDate } from "./dates.ts";
-import { adminDigest, approvedRecently, isWorkingHours, memberDigest, NEON, shouldRunDigest, splitActive, type T } from "./digest.ts";
+import { adminDigest, approvedRecently, isWorkingHours, memberDigest, shouldRunDigest, splitActive, type T } from "./digest.ts";
 import { type BubbleTask, linkMessage, MAX_TASKS_PER_PUSH, taskMessages } from "./linebot.ts";
 import { cutoff } from "./retention.ts";
 import { batch, loadSheet, type Step } from "./sheet.ts";
@@ -37,7 +37,7 @@ async function pushMessages(to: string, messages: unknown[], token: string): Pro
   return r.ok ? null : `push ${r.status}: ${(await r.text()).slice(0, 200)}`;
 }
 const push = (to: string, text: string, link: string, token: string, hero?: string | null) =>
-  pushMessages(to, [linkMessage(text, link, hero, undefined, NEON)], token);
+  pushMessages(to, [linkMessage(text, link, hero)], token);
 
 const asT = (t: Row): T => ({ title: t.title, building: t.building, due: t.current_due_on });
 // oldest assigned first, then the nearest due date (the same order as "ใกล้ครบกำหนด")
@@ -208,8 +208,8 @@ function sampleMessages(heroes: { taskHero: string | null; adminHero: string | n
     linkMessage(memberDigest({
       newTasks: [t], dueSoon: [{ ...t, assigned: today, daysLeft: 0 }], overdue: [t],
       sentBack: [{ ...t, reason: "มีปรับแก้", note: "ตัวอย่างสิ่งที่ต้องแก้" }], approved: [t],
-    })!, app, null, undefined, NEON),
-    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${app}/admin/tasks.html`, heroes.adminHero, undefined, NEON),
+    })!, app),
+    linkMessage(adminDigest({ waiting: [{ ...t, owner: "พนักงานตัวอย่าง" }], backupDue: 1, quotaLow: true })!, `${app}/admin/tasks.html`, heroes.adminHero),
   ];
 }
 

@@ -58,28 +58,14 @@ export function taskMessages(tasks: BubbleTask[], hero?: string | null, app = LI
 }
 export const MAX_TASKS_PER_PUSH = PER_CAROUSEL * MAX_MESSAGES;
 
-/**
- * Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link.
- * highlight: line start -> background colour; those lines become bold pills (the summary's status headers).
- */
-export function linkMessage(text: string, link: string, hero?: string | null, label = "ดูรายการงานทั้งหมดที่นี่", highlight: Record<string, string> = {}) {
-  const lines = text.slice(0, 2000).split("\n");
-  // LINE refuses empty text, so blank lines become a gap before the next line
-  const body = lines.map((l, i) => {
-    if (!l) return null;
-    const margin = i > 0 && !lines[i - 1] ? { margin: "lg" } : {};
-    const bg = Object.entries(highlight).find(([k]) => l.startsWith(k))?.[1];
-    return bg
-      ? { type: "box", layout: "vertical", backgroundColor: bg, cornerRadius: "md", paddingAll: "sm", ...margin,
-        contents: [{ type: "text", text: l, wrap: true, size: "sm", weight: "bold", color: "#000000" }] }
-      : { type: "text", text: l, wrap: true, size: "sm", ...margin };
-  }).filter(Boolean);
+/** Text push (daily สรุปงานวันนี้, test message) as a bubble: the text, then a button to the app instead of a bare link. */
+export function linkMessage(text: string, link: string, hero?: string | null, label = "ดูรายการงานทั้งหมดที่นี่") {
   return {
     type: "flex", altText: text.slice(0, 400),
     contents: {
       type: "bubble",
       ...(hero && { hero: { type: "image", url: hero, size: "full", aspectMode: "fit", aspectRatio: "1:1", backgroundColor: "#FFFFFF" } }),
-      body: { type: "box", layout: "vertical", spacing: "xs", contents: body },
+      body: { type: "box", layout: "vertical", contents: [{ type: "text", text: text.slice(0, 2000), wrap: true, size: "sm" }] },
       footer: { type: "box", layout: "vertical", contents: [
         { type: "button", style: "primary", height: "sm", action: { type: "uri", label, uri: link } },
       ] },

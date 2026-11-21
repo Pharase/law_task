@@ -6,16 +6,6 @@ export type T = { title: string; building: string; due: string };
 export type Soon = T & { assigned: string; daysLeft: number };
 const MAX_ITEMS = 3;
 
-/** Section header start -> neon background, so each status stands out in the LINE bubble (black bold text on it). */
-export const NEON: Record<string, string> = {
-  "📌 งานใหม่": "#00E5FF",
-  "⏳ ใกล้ครบกำหนด": "#FFF01F",
-  "‼️ เลยกำหนด": "#FF3131",
-  "↩️ ถูกส่งกลับ": "#FF9F1C",
-  "✅ อนุมัติแล้ว": "#39FF14",
-  "📥 งานรอตรวจ": "#E040FB",
-};
-
 const thDate = (s: string) =>
   new Date(s + "T00:00:00+07:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "Asia/Bangkok" });
 

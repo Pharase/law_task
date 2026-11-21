@@ -24,17 +24,6 @@ test("lists show the 3 nearest due, then *กับอีก N งาน", () =>
   assert.doesNotMatch(three, /กับอีก/);
 });
 
-test("linkMessage: header lines get a neon pill, blank lines are dropped", async () => {
-  const { linkMessage } = await import("./linebot.ts");
-  const { NEON } = await import("./digest.ts");
-  const text = memberDigest({ ...empty, overdue: [t("x")] })!;
-  // deno-lint-ignore no-explicit-any
-  const body: any[] = linkMessage(text, "https://x", null, undefined, NEON).contents.body.contents;
-  assert.equal(body.length, 3); // สรุปงานวันนี้, header pill, the task
-  assert.equal(body[1].backgroundColor, NEON["‼️ เลยกำหนด"]);
-  assert.equal(body[1].margin, "lg");
-  assert.ok(body.every((c) => c.type === "box" || c.text));
-});
 
 test("only weekdays after 09:00 Bangkok, once per day", () => {
   assert.equal(shouldRunDigest(new Date("2026-03-02T01:59:00Z"), null), false); // Mon 08:59
