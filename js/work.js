@@ -247,18 +247,15 @@ function taskFilesBox(task) {
 
 
 // ---- Home dashboard (members: own tasks; admins: whole team) ----
-// Donut = tasks ASSIGNED this month (Bangkok), by status. Older unfinished tasks sit in "งานคงค้างอื่นๆ"; older finished ones leave Home.
-// Colors checked with the dataviz palette validator (dark glass surface #221d19, ring order incl. the wrap-around pair);
-// all pass 3:1 on the dark surface; the legend still names and counts every status.
+// The chart is the ภาพรวมงาน Sankey (sankey(), counts from the server taskFlow); HOME_STATUS only names each task card's badge.
 const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "ติดตามความคืบหน้าคดี", "การประสานงาน"];
 const HOME_STATUS = [
-  { key: "todo", label: "รอดำเนินการ", color: "#3987e5" },
-  { key: "fix", label: "รอแก้ไข", color: "#d55181" },
-  { key: "review", label: "รอตรวจสอบ", color: "#c98500" },
-  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา", color: "#199e70" },
-  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า", color: "#d95926" },
+  { key: "todo", label: "รอดำเนินการ" },
+  { key: "fix", label: "รอแก้ไข" },
+  { key: "review", label: "รอตรวจสอบ" },
+  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา" },
+  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า" },
 ];
-const bkkMonth = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)).slice(0, 7) : "");
 
 /** Status key for Home. "late" = the approved send came after that round's due date. */
 function homeStatus(t) {
@@ -270,39 +267,99 @@ function homeStatus(t) {
   return t.fix_round > 0 ? "fix" : "todo";
 }
 
-function donut(parts, total, onPick) {
-  const NS = "http://www.w3.org/2000/svg";
-  const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
-  const R = 48, C = 2 * Math.PI * R, GAP = 1.5; // ~2px surface gap between segments at 160px
-  const svg = svgEl("svg", { viewBox: "0 0 120 120", class: "donut", role: "img", "aria-label": `งานเดือนนี้ ${total}` });
-  svg.append(svgEl("circle", { cx: 60, cy: 60, r: R, class: "donut-track" }));
-  const shown = parts.filter((p) => p.n);
-  const segs = new Map();
-  let offset = 0;
-  for (const p of shown) {
-    const len = (p.n / total) * C;
-    const seg = svgEl("circle", {
-      cx: 60, cy: 60, r: R, class: "donut-seg", stroke: p.color, transform: "rotate(-90 60 60)",
-      "stroke-dasharray": `${Math.max(len - (shown.length > 1 ? GAP : 0), 0.5)} ${C}`, "stroke-dashoffset": -offset,
-    });
-    seg.addEventListener("click", () => onPick(p));
-    seg.addEventListener("mouseenter", () => center(p));
-    seg.addEventListener("mouseleave", () => center(null));
-    segs.set(p, seg);
-    svg.append(seg);
-    offset += len;
-  }
-  const big = svgEl("text", { x: 60, y: 58, class: "donut-num" });
-  const small = svgEl("text", { x: 60, y: 76, class: "donut-sub" });
-  svg.append(big, small);
-  function center(p) {
-    big.textContent = p ? p.n : total;
-    small.textContent = p ? `${p.label.split(" · ").at(-1)} ${Math.round((p.n / total) * 100)}%` : "งานเดือนนี้";
-    for (const [q, seg] of segs) seg.classList.toggle("dim", !!p && q !== p);
-  }
-  center(null);
-  return { svg, center };
+/** SVG element with attributes (el() makes HTML elements, which SVG can't use). */
+function svgEl(tag, attrs = {}, ...kids) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  e.append(...kids.filter(Boolean));
+  return e;
 }
+
+// ภาพรวมงาน Sankey (Home and admin/tasks.html): nodes per row, top to bottom; the server's taskFlow says which tasks are in each
+const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"], ["ok", "late"]];
+const FLOW_NODE = {
+  new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
+  carried: { label: "ค้างจากก่อนหน้า", color: "#9aa3b5" },
+  doing: { label: "กำลังทำ / แก้ไข", color: "#ff9f1c" },
+  waiting: { label: "รอตรวจ", color: "#fff01f" },
+  approved: { label: "อนุมัติเดือนนี้", color: "#39ff14" },
+  ok: { label: "ตรงเวลา", color: "#02d7f4" },
+  late: { label: "ช้า / เลยกำหนด", color: "#ff4d5e" },
+};
+
+/**
+ * Top-to-bottom Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
+ * now → on time or late. A band's width is its number of tasks; bars keep a minimum width so their label fits (a small
+ * count is drawn wider than its share; the number on it stays exact). pick(key) makes those bars buttons; `selected`
+ * outlines one.
+ */
+function sankey(f, { pick = null, canPick = () => !!pick, selected = null } = {}) {
+  const W = 340, BAR = 34, ROW_GAP = 82, GAP = 12, MIN_W = 76;
+  const at = {}; // node -> { x, y, w, n }
+  FLOW_ROWS.forEach((row, r) => {
+    const keys = row.filter((k) => f.nodes[k] > 0);
+    const avail = W - GAP * (keys.length - 1);
+    let w = keys.map((k) => Math.max(MIN_W, (f.nodes[k] / f.total) * avail));
+    const over = w.reduce((a, b) => a + b, 0) - avail, room = w.reduce((a, b) => a + (b - MIN_W), 0);
+    if (over > 0 && room > 0) w = w.map((x) => MIN_W + (x - MIN_W) * (1 - over / room)); // the minimums' extra comes from the big ones
+    let x = (W - w.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
+    keys.forEach((k, i) => { at[k] = { x, y: r * (BAR + ROW_GAP), w: w[i], n: f.nodes[k] }; x += w[i] + GAP; });
+  });
+  const H = (FLOW_ROWS.length - 1) * (BAR + ROW_GAP) + BAR;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
+  const defs = svgEl("defs");
+  svg.append(defs);
+
+  // bands: each end takes its share of the bar it touches, in left-to-right order so bands don't cross needlessly
+  const order = (k) => at[k].x;
+  const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
+  const port = (side, sortBy) => {
+    const used = {}, out = new Map();
+    for (const l of [...links].sort(sortBy)) {
+      const k = l[side], p = at[k], w = (l[2] / p.n) * p.w;
+      used[k] = used[k] ?? p.x;
+      out.set(l, [used[k], w]);
+      used[k] += w;
+    }
+    return out;
+  };
+  const from = port(0, (p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]));
+  const to = port(1, (p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]));
+  links.forEach((l, i) => {
+    const [xa, wa] = from.get(l), [xb, wb] = to.get(l);
+    const ya = at[l[0]].y + BAR, yb = at[l[1]].y, ym = (ya + yb) / 2;
+    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: 0, y1: ya, x2: 0, y2: yb, gradientUnits: "userSpaceOnUse" },
+      svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
+    svg.append(svgEl("path", {
+      class: "band", fill: `url(#flowg${i})`,
+      d: `M${xa},${ya} C${xa},${ym} ${xb},${ym} ${xb},${yb} L${xb + wb},${yb} C${xb + wb},${ym} ${xa + wa},${ym} ${xa + wa},${ya} Z`,
+    }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
+  });
+
+  // bars with the count and name inside
+  for (const [k, p] of Object.entries(at)) {
+    const node = FLOW_NODE[k];
+    const g = svgEl("g", { class: "node" + (k === selected ? " selected" : "") },
+      svgEl("rect", { x: p.x, y: p.y, width: p.w, height: BAR, rx: 7, fill: node.color, style: `--k:${node.color}` }),
+      svgEl("text", { x: p.x + p.w / 2, y: p.y + 15, class: "num" }, String(p.n)),
+      svgEl("text", { x: p.x + p.w / 2, y: p.y + 28, class: "lab" }, node.label));
+    if (pick && canPick(k)) {
+      g.classList.add("node-btn");
+      g.setAttribute("role", "button");
+      g.setAttribute("tabindex", "0");
+      g.setAttribute("aria-label", `${node.label} ${p.n} งาน: ดูรายการ`);
+      if (k === selected) g.setAttribute("aria-pressed", "true");
+      g.addEventListener("click", () => pick(k));
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(k); } });
+    }
+    svg.append(g);
+  }
+  return svg;
+}
+
+/** The line under a Sankey: who and what it covers, fix rounds, the longest wait for review. */
+const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} นิติ`, `${f.total} งาน`, `แก้อยู่ ${f.fixing}`,
+  f.nodes.waiting && `รอตรวจนานสุด ${f.longestWait} วัน`].filter(Boolean).join(" · ");
 
 // ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
 // turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
@@ -314,10 +371,11 @@ const homeTasks = (me) => (me.role === "admin" ? api("listTasks", {}) : api("myT
 
 /** Draws Home from `data` (auto refresh) or a fresh load; returns the tasks it drew. */
 async function renderHome(me, data) {
-  const today = bkkToday(), month = today.slice(0, 7);
+  const today = bkkToday();
   const isAdmin = me.role === "admin";
   const reload = () => renderHome(me);
-  const raw = data ?? await homeTasks(me);
+  // the tasks (with sends, for the cards) and the Sankey's counts; the server scopes both to the member for members
+  const [raw, flow] = await Promise.all([data ?? homeTasks(me), api("taskFlow")]);
   const all = raw.filter((t) => t.state !== "cancelled");
   if (isAdmin && $("trackDot")) {
     // red dot on "ติดตามงาน": how many sent tasks wait for review (อนุมัติ / ไม่อนุมัติ)
@@ -326,57 +384,36 @@ async function renderHome(me, data) {
     $("trackDot").textContent = waiting > 99 ? "99+" : waiting;
     $("trackBtn").setAttribute("aria-label", `ติดตามงาน · Tracking: รอตรวจ ${waiting} งาน`);
   }
-  const thisMonth = all.filter((t) => bkkMonth(t.created_at) === month);
-  const older = all.filter((t) => bkkMonth(t.created_at) !== month && t.state !== "approved");
-  const parts = HOME_STATUS.map((s) => ({ ...s, tasks: thisMonth.filter((t) => homeStatus(t) === s.key) })).map((p) => ({ ...p, n: p.tasks.length }));
-  const backlog = { key: "older", label: "งานคงค้างอื่นๆ", color: "#9a9a94", tasks: older, n: older.length };
 
   $("dashTitle").textContent = `${isAdmin ? "ภาพรวมงานทีม" : "ภาพรวมงานของฉัน"} · ${new Date(today + "T00:00:00+07:00").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}`;
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const tasksOf = (k) => (flow.ids[k] ?? []).map((id) => byId.get(id)).filter(Boolean);
   const statusText = Object.fromEntries(HOME_STATUS.map((s) => [s.key, s.label]));
-  let selected = null;
-  const pick = (p) => {
-    selected = p;
-    homeKey = p.key;
-    for (const row of legend.children) row.classList.toggle("selected", row.dataset.key === p.key);
-    $("dashListTitle").textContent = `${p.label} (${p.n})`;
-    const sorted = [...p.tasks].sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
-    $("dashList").replaceChildren(...(sorted.length
-      ? sorted.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
+  const pick = (k) => {
+    homeKey = k;
+    const tasks = tasksOf(k).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
+    draw(k);
+    $("dashListTitle").textContent = `${FLOW_NODE[k].label} (${tasks.length})`;
+    $("dashList").replaceChildren(...(tasks.length
+      ? tasks.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
       : [el("p", { className: "muted", textContent: "ไม่มีงาน" })]));
   };
+  // every bar opens its tasks below; the tapped one is outlined
+  const draw = (selected) => $("dashChart").replaceChildren(...(flow.total
+    ? [sankey(flow, { pick, selected }), el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
+    : [el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" })]));
 
-  const chart = thisMonth.length ? donut(parts, thisMonth.length, pick) : null;
-  // The legend is also the table view: every status with its count and share, even when 0, plus the backlog row.
-  const row = (p, share) => {
-    const li = el("li", { tabIndex: 0 },
-      el("span", { className: "swatch" + (p === backlog ? " hollow" : ""), style: `--c:${p.color}` }),
-      el("span", { className: "grow", textContent: p.label }),
-      el("strong", { textContent: p.n }),
-      el("span", { className: "muted pct", textContent: share }));
-    li.dataset.key = p.key;
-    li.onclick = () => pick(p);
-    li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(p); } };
-    if (chart && p !== backlog) { li.onmouseenter = li.onfocus = () => chart.center(p); li.onmouseleave = li.onblur = () => chart.center(null); }
-    return li;
-  };
-  const legend = el("ul", { className: "legend" },
-    ...parts.map((p) => row(p, thisMonth.length ? `${Math.round((p.n / thisMonth.length) * 100)}%` : "-")),
-    row(backlog, ""));
-  legend.lastChild.classList.add("backlog");
-  $("dashChart").replaceChildren(chart ? chart.svg : el("p", { className: "muted donut-empty", textContent: "ยังไม่มีงานที่มอบหมายเดือนนี้" }), legend);
-
-  // Open the list people most likely need: work to fix or do first, then waiting review, then the backlog.
-  const before = homeKey && [...parts, backlog].find((p) => p.key === homeKey);
-  pick(before ?? [parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
+  // Open the list people most likely need: work to do, then waiting review, then the rest
+  const has = (k) => flow.nodes[k] > 0;
+  pick(homeKey && has(homeKey) ? homeKey : ["doing", "waiting", "approved", "new", "carried"].find(has) ?? "doing");
 
   const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
   linkUsed = true;
   if (linkedId) history.replaceState(null, "", location.pathname);
-  const linked = linkedId && all.find((t) => t.id === linkedId);
-  const group = linked && [...parts, backlog].find((p) => p.tasks.includes(linked));
-  if (group) {
-    pick(group);
-    const item = $("dashList").querySelector(`[data-task="${linked.id}"]`);
+  const stage = linkedId && ["doing", "waiting", "approved"].find((k) => (flow.ids[k] ?? []).includes(linkedId));
+  if (stage) {
+    pick(stage);
+    const item = $("dashList").querySelector(`[data-task="${linkedId}"]`);
     item.open = true;
     item.scrollIntoView({ behavior: "smooth", block: "start" });
   }

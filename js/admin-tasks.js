@@ -43,98 +43,13 @@ function adminTaskBody(t) {
   );
 }
 
-/** SVG element with attributes (el() makes HTML elements, which SVG can't use). */
-function svgEl(tag, attrs = {}, ...kids) {
-  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  e.append(...kids.filter(Boolean));
-  return e;
-}
-
-// ภาพรวมงานทีม: the Sankey's nodes, top row to bottom row (server taskFlow says which tasks are in each)
-const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"], ["ok", "late"]];
-const FLOW_NODE = {
-  new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
-  carried: { label: "ค้างจากก่อนหน้า", color: "#9aa3b5" },
-  doing: { label: "กำลังทำ / แก้ไข", color: "#ff9f1c", state: "on_process" },
-  waiting: { label: "รอตรวจ", color: "#fff01f", review: true },
-  approved: { label: "อนุมัติเดือนนี้", color: "#39ff14", state: "approved" },
-  ok: { label: "ตรงเวลา", color: "#02d7f4" },
-  late: { label: "ช้า / เลยกำหนด", color: "#ff4d5e" },
-};
-
-/**
- * F · ภาพรวมงานทีม as a top-to-bottom Sankey: where the tasks came from → their stage now → on time or late. A band's
- * width is its number of tasks. Bars keep a minimum width so their label fits (a small count is drawn wider than its
- * share; the number on it stays exact). Tap กำลังทำ / รอตรวจ / อนุมัติ to see those tasks.
- */
+/** F · ภาพรวมงานทีม on the tasks page: tap กำลังทำ / อนุมัติ to filter the list, รอตรวจ to jump to the review list. */
 function drawFlow(f) {
   if (!f.total) return void $("flow").replaceChildren(el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" }));
-  const W = 340, BAR = 34, ROW_GAP = 82, GAP = 12, MIN_W = 76;
-  const at = {}; // node -> { x, y, w, n }
-  FLOW_ROWS.forEach((row, r) => {
-    const keys = row.filter((k) => f.nodes[k] > 0);
-    const avail = W - GAP * (keys.length - 1);
-    let w = keys.map((k) => Math.max(MIN_W, (f.nodes[k] / f.total) * avail));
-    const over = w.reduce((a, b) => a + b, 0) - avail, room = w.reduce((a, b) => a + (b - MIN_W), 0);
-    if (over > 0 && room > 0) w = w.map((x) => MIN_W + (x - MIN_W) * (1 - over / room)); // give the minimums' extra back from the big ones
-    let x = (W - w.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
-    keys.forEach((k, i) => { at[k] = { x, y: r * (BAR + ROW_GAP), w: w[i], n: f.nodes[k] }; x += w[i] + GAP; });
-  });
-  const H = (FLOW_ROWS.length - 1) * (BAR + ROW_GAP) + BAR;
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงานทีม" });
-  const defs = svgEl("defs");
-  svg.append(defs);
-
-  // bands: each end takes its share of the bar it touches, in left-to-right order so bands don't cross needlessly
-  const order = (k) => at[k].x;
-  const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
-  const outX = {}, inX = {};
-  const portOut = new Map(), portIn = new Map();
-  for (const l of [...links].sort((p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]))) {
-    const a = at[l[0]], w = (l[2] / a.n) * a.w;
-    outX[l[0]] = outX[l[0]] ?? a.x;
-    portOut.set(l, [outX[l[0]], w]);
-    outX[l[0]] += w;
-  }
-  for (const l of [...links].sort((p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]))) {
-    const b = at[l[1]], w = (l[2] / b.n) * b.w;
-    inX[l[1]] = inX[l[1]] ?? b.x;
-    portIn.set(l, [inX[l[1]], w]);
-    inX[l[1]] += w;
-  }
-  links.forEach((l, i) => {
-    const [xa, wa] = portOut.get(l), [xb, wb] = portIn.get(l);
-    const ya = at[l[0]].y + BAR, yb = at[l[1]].y, ym = (ya + yb) / 2;
-    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: 0, y1: ya, x2: 0, y2: yb, gradientUnits: "userSpaceOnUse" },
-      svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
-    svg.append(svgEl("path", {
-      class: "band", fill: `url(#flowg${i})`,
-      d: `M${xa},${ya} C${xa},${ym} ${xb},${ym} ${xb},${yb} L${xb + wb},${yb} C${xb + wb},${ym} ${xa + wa},${ym} ${xa + wa},${ya} Z`,
-    }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
-  });
-
-  // bars with the count and name inside; the three stage bars are buttons
-  for (const [k, p] of Object.entries(at)) {
-    const node = FLOW_NODE[k];
-    const g = svgEl("g", { class: "node" },
-      svgEl("rect", { x: p.x, y: p.y, width: p.w, height: BAR, rx: 7, fill: node.color, style: `--k:${node.color}` }),
-      svgEl("text", { x: p.x + p.w / 2, y: p.y + 15, class: "num" }, String(p.n)),
-      svgEl("text", { x: p.x + p.w / 2, y: p.y + 28, class: "lab" }, node.label));
-    const go = node.review ? () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" })
-      : node.state ? () => showFlowList(node.state) : null;
-    if (go) {
-      g.classList.add("node-btn");
-      g.setAttribute("role", "button");
-      g.setAttribute("tabindex", "0");
-      g.setAttribute("aria-label", `${node.label} ${p.n} งาน: ดูรายการ`);
-      g.addEventListener("click", go);
-      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-    }
-    svg.append(g);
-  }
-  $("flow").replaceChildren(svg, el("p", { className: "muted small-note flow-sub", textContent:
-    `${f.people} คน · ${f.buildings} นิติ · แก้อยู่ ${f.fixing} งาน` + (f.nodes.waiting ? ` · รอตรวจนานสุด ${f.longestWait} วัน` : "") }));
+  const go = { doing: () => showFlowList("on_process"), approved: () => showFlowList("approved"),
+    waiting: () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }) };
+  $("flow").replaceChildren(sankey(f, { pick: (k) => go[k](), canPick: (k) => !!go[k] }),
+    el("p", { className: "muted small-note flow-sub", textContent: flowNote(f, true) }));
 }
 
 /** A stage bar was tapped: show those tasks in the all-tasks list. */

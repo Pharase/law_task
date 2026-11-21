@@ -133,7 +133,8 @@ const bkkDay = (s: string) => (/T/.test(s) ? bangkokDate(new Date(s)) : s.slice(
  *   origin  new (assigned this month) | carried (assigned earlier)
  *   stage   doing (on process, incl. fix rounds) | waiting (รอตรวจ) | approved
  *   timing  ok | late: doing = past its current due date; waiting / approved = that send was after its due date
- * links = [from, to, count] between neighbouring columns, so every column adds up to `total`.
+ * links = [from, to, count] between neighbouring columns, so every column adds up to `total`; ids = the task ids in
+ * each node (Home lists them when a bar is tapped).
  */
 export function taskFlow(
   tasks: Pick<Task, "id" | "state" | "owner" | "building" | "created_at" | "current_due_on" | "fix_round">[],
@@ -142,10 +143,10 @@ export function taskFlow(
 ) {
   const month = today.slice(0, 7);
   const last = (id: number, outcome: string) => sends.filter((s) => s.task_id === id && s.outcome === outcome).sort((a, b) => a.id - b.id).at(-1);
-  const rows: { origin: string; stage: string; timing: string; owner: string; building: string; wait?: number; fix: boolean }[] = [];
+  const rows: { id: number; origin: string; stage: string; timing: string; owner: string; building: string; wait?: number; fix: boolean }[] = [];
   for (const t of tasks) {
     const origin = bkkDay(String(t.created_at)).slice(0, 7) === month ? "new" : "carried";
-    const base = { origin, owner: t.owner, building: t.building, fix: t.fix_round > 0 };
+    const base = { id: t.id, origin, owner: t.owner, building: t.building, fix: t.fix_round > 0 };
     if (t.state === "on_process") rows.push({ ...base, stage: "doing", timing: t.current_due_on < today ? "late" : "ok" });
     else if (t.state === "submitted") {
       const s = last(t.id, "pending");
@@ -167,6 +168,8 @@ export function taskFlow(
     total: rows.length,
     nodes: { new: n("new"), carried: n("carried"), doing: n("doing"), waiting: n("waiting"), approved: n("approved"), ok: n("ok"), late: n("late") },
     links,
+    ids: Object.fromEntries(["new", "carried", "doing", "waiting", "approved", "ok", "late"]
+      .map((k) => [k, rows.filter((r) => r.origin === k || r.stage === k || r.timing === k).map((r) => r.id)])),
     people: new Set(rows.map((r) => r.owner)).size,
     buildings: new Set(rows.map((r) => r.building)).size,
     fixing: rows.filter((r) => r.stage === "doing" && r.fix).length,

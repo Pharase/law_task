@@ -221,4 +221,5 @@ test("taskFlow: open tasks + this month's approvals; each column adds up; cancel
   assert.deepEqual([link("new", "doing"), link("new", "waiting"), link("carried", "doing"), link("carried", "approved")], [1, 1, 1, 1]);
   assert.deepEqual([link("doing", "late"), link("doing", "ok"), link("waiting", "late"), link("approved", "late")], [1, 1, 1, 1]);
   assert.deepEqual([f.people, f.buildings, f.fixing, f.longestWait], [2, 2, 1, 6]);
+  assert.deepEqual(f.ids, { new: [1, 3], carried: [2, 5], doing: [1, 2], waiting: [3], approved: [5], ok: [2], late: [1, 3, 5] });
 });

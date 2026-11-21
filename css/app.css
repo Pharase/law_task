@@ -202,25 +202,6 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .person.org { flex-wrap: nowrap; } /* name left, role right, even on phones */
 .person.org .person-id { flex: 1 1 auto; }
 
-/* ---- Home dashboard: donut + legend (the legend doubles as the table view) ---- */
-.dash { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
-.donut { width: 168px; height: 168px; flex: none; filter: drop-shadow(0 0 22px rgba(2, 215, 244, .12)); }
-.donut circle { fill: none; stroke-width: 16; }
-.donut-track { stroke: rgba(255, 255, 255, .06); }
-.donut-seg { transition: opacity .15s; cursor: pointer; }
-.donut-seg.dim { opacity: .2; }
-.donut-num { font-size: 26px; font-weight: 600; text-anchor: middle; fill: var(--ink); font-family: var(--font); }
-.donut-sub { font-size: 9px; text-anchor: middle; fill: var(--ink-2); font-family: var(--font); }
-.donut-empty { width: 168px; text-align: center; }
-.legend { list-style: none; padding: 0; margin: 0; flex: 1 1 220px; }
-.legend li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-top: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: background .15s; }
-.legend li:first-child { border-top: 0; }
-.legend li[tabindex="0"]:hover, .legend li:focus { background: rgba(255, 255, 255, .05); outline: none; }
-.legend li.selected { background: rgba(79, 99, 240, .16); box-shadow: inset 3px 0 0 var(--blue-hi); }
-.legend li.backlog { border-top: 1px dashed var(--line-2); margin-top: 4px; }
-.legend .swatch { width: 12px; height: 12px; border-radius: 4px; flex: none; background: var(--c); box-shadow: 0 0 10px var(--c); }
-.legend .swatch.hollow { background: transparent; box-sizing: border-box; border: 2px dashed var(--c); box-shadow: none; }
-.legend .pct { width: 3em; text-align: right; }
 .tools { flex-wrap: wrap; gap: 8px; }
 .small-note { font-size: 13px; margin-top: -6px; }
 /* a note right under buttons (not under a card title) gets breathing room */
@@ -491,8 +472,6 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   th, td { padding: 7px 6px; }
   .task { padding: 8px 0 8px 8px; }
   .doc-row, .person { padding: 8px 0; }
-  .legend li { padding: 7px 8px; }
-  .donut, .donut-empty { width: 140px; height: 140px; }
   .inv-amount { font-size: 15px; }
   dialog.modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
   /* menu: logo, ☰, account on one row; ☰ opens the page links as a list under it */
@@ -578,7 +557,7 @@ details[open] > summary .due-head { display: none; }
 .sankey .lab { font-size: 10.5px; font-weight: 500; }
 .sankey .node-btn { cursor: pointer; outline: none; }
 .sankey .node-btn:hover rect { filter: drop-shadow(0 0 10px var(--k)) brightness(1.12); }
-.sankey .node-btn:focus-visible rect { stroke: #fff; stroke-width: 2.5; }
+.sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; }
 .flow-sub { text-align: center; margin-top: 6px; }
 @media (max-width: 520px) { .journey li { grid-template-columns: 74px 14px 1fr; } }
 

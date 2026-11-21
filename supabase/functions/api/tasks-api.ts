@@ -169,6 +169,12 @@ export async function memberTaskActions(action: string, body: Row, me: Me): Prom
       return { from, to, rows: visibleRows(rows, me).map((r) => ({ ...r, items: items.get(r.line_user_id) ?? [] })) };
     }
 
+    case "taskFlow": { // the Sankey (Home, admin tasks page): admins see the team, members only their own tasks. Counts + ids, no files.
+      const data = await loadSheet();
+      const tasks = me.role === "admin" ? data.tasks : data.tasks.filter((t) => t.owner === me.line_user_id);
+      return taskFlow(tasks, data.sends, today());
+    }
+
     case "myTasks": // score tags are for admins only: members never get them
       return (await loadTasks((t) => t.owner === me.line_user_id && t.state !== "cancelled")).map((t) => ({ ...t, tags: [] }));
 
@@ -300,10 +306,6 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
     case "sheetWarnings":
       return (await loadSheet()).bad;
 
-    case "taskFlow": { // counts only (no files, no signed links): cheap enough for every page open and refresh
-      const data = await loadSheet();
-      return taskFlow(data.tasks, data.sends, today());
-    }
 
     case "addBuilding": {
       const name = String(body.name ?? "").trim();
