@@ -545,16 +545,17 @@ details[open] > summary .due-head { display: none; }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
 /* F · ภาพรวมงานทีม: top-to-bottom Sankey (js drawFlow); bars carry their count and name, stage bars are buttons */
-.sankey { display: block; width: 100%; max-width: 440px; height: auto; margin: 6px auto 0; font-family: var(--font); }
-.sankey .band { opacity: .42; transition: opacity .15s; }
-.sankey .band:hover { opacity: .7; }
-.sankey .node rect { filter: drop-shadow(0 0 6px var(--k)); }
-.sankey text { text-anchor: middle; fill: #000; pointer-events: none; }
-.sankey .num { font-size: 14px; font-weight: 700; }
-.sankey .lab { font-size: 10.5px; font-weight: 500; }
+.sankey { display: block; width: 100%; max-width: 560px; height: auto; margin: 6px auto 0; font-family: var(--font); }
+.sankey .band { opacity: .55; transition: opacity .15s; }
+.sankey .band:hover { opacity: .85; }
+/* blocks: a tint of their colour with a neon edge, so the bands between them stay the main shapes */
+.sankey .node rect { fill: color-mix(in srgb, var(--k) 22%, #0b0d10); stroke: var(--k); stroke-width: 1.5; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--k) 60%, transparent)); }
+.sankey text { text-anchor: middle; fill: var(--ink); pointer-events: none; }
+.sankey .num { font-size: 15px; font-weight: 700; fill: var(--k); }
+.sankey .lab { font-size: 11px; font-weight: 500; }
 .sankey .node-btn { cursor: pointer; outline: none; }
-.sankey .node-btn:hover rect { filter: drop-shadow(0 0 10px var(--k)) brightness(1.12); }
-.sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; }
+.sankey .node-btn:hover rect { fill: color-mix(in srgb, var(--k) 34%, #0b0d10); }
+.sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; fill: color-mix(in srgb, var(--k) 34%, #0b0d10); }
 .flow-sub { text-align: center; margin-top: 6px; }
 /* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
 .flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

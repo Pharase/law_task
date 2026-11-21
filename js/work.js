@@ -275,7 +275,7 @@ function svgEl(tag, attrs = {}, ...kids) {
   return e;
 }
 
-// ภาพรวมงาน Sankey (Home and admin/tasks.html): nodes per row, top to bottom; the server's taskFlow says which tasks are in each
+// ภาพรวมงาน Sankey (Home): nodes per column, left to right; the server's taskFlow says which tasks are in each
 const FLOW_ROWS = [["new", "carried"], ["doing", "waiting", "approved"], ["ok", "late"]];
 const FLOW_NODE = {
   new: { label: "มอบหมายเดือนนี้", color: "#6b7cff" },
@@ -288,61 +288,61 @@ const FLOW_NODE = {
 };
 
 /**
- * Top-to-bottom Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
- * now → on time or late. A band's width is its number of tasks; bars keep a minimum width so their label fits (a small
- * count is drawn wider than its share; the number on it stays exact). pick(key) makes those bars buttons; `selected`
- * outlines one.
+ * Left-to-right Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
+ * now → on time or late. Nodes are blocks with the count and name inside (readable on phones); a block's height and a
+ * band's width are its number of tasks. Blocks keep a minimum height so their text fits (a small count is drawn taller
+ * than its share; the number on it stays exact). pick(key) makes blocks buttons; `selected` outlines one.
  */
 function sankey(f, { pick = null, canPick = () => !!pick, selected = null } = {}) {
-  const W = 340, BAR = 34, ROW_GAP = 82, GAP = 12, MIN_W = 76;
-  const at = {}; // node -> { x, y, w, n }
-  FLOW_ROWS.forEach((row, r) => {
-    const keys = row.filter((k) => f.nodes[k] > 0);
-    const avail = W - GAP * (keys.length - 1);
-    let w = keys.map((k) => Math.max(MIN_W, (f.nodes[k] / f.total) * avail));
-    const over = w.reduce((a, b) => a + b, 0) - avail, room = w.reduce((a, b) => a + (b - MIN_W), 0);
-    if (over > 0 && room > 0) w = w.map((x) => MIN_W + (x - MIN_W) * (1 - over / room)); // the minimums' extra comes from the big ones
-    let x = (W - w.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
-    keys.forEach((k, i) => { at[k] = { x, y: r * (BAR + ROW_GAP), w: w[i], n: f.nodes[k] }; x += w[i] + GAP; });
+  const BOX = 92, COL_GAP = 60, H = 260, GAP = 10, MIN_H = 40;
+  const W = FLOW_ROWS.length * BOX + (FLOW_ROWS.length - 1) * COL_GAP;
+  const at = {}; // node -> { x, y, h, n }
+  FLOW_ROWS.forEach((col, c) => {
+    const keys = col.filter((k) => f.nodes[k] > 0);
+    const avail = H - GAP * (keys.length - 1);
+    let h = keys.map((k) => Math.max(MIN_H, (f.nodes[k] / f.total) * avail));
+    const over = h.reduce((a, b) => a + b, 0) - avail, room = h.reduce((a, b) => a + (b - MIN_H), 0);
+    if (over > 0 && room > 0) h = h.map((x) => MIN_H + (x - MIN_H) * (1 - over / room)); // the minimums' extra comes from the big ones
+    let y = (H - h.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
+    keys.forEach((k, i) => { at[k] = { x: c * (BOX + COL_GAP), y, h: h[i], n: f.nodes[k] }; y += h[i] + GAP; });
   });
-  const H = (FLOW_ROWS.length - 1) * (BAR + ROW_GAP) + BAR;
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
   const defs = svgEl("defs");
   svg.append(defs);
 
-  // bands: each end takes its share of the bar it touches, in left-to-right order so bands don't cross needlessly
-  const order = (k) => at[k].x;
+  // bands: each end takes its share of the block it touches, top to bottom so bands don't cross needlessly
+  const order = (k) => at[k].y;
   const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
   const port = (side, sortBy) => {
     const used = {}, out = new Map();
     for (const l of [...links].sort(sortBy)) {
-      const k = l[side], p = at[k], w = (l[2] / p.n) * p.w;
-      used[k] = used[k] ?? p.x;
-      out.set(l, [used[k], w]);
-      used[k] += w;
+      const k = l[side], p = at[k], h = (l[2] / p.n) * p.h;
+      used[k] = used[k] ?? p.y;
+      out.set(l, [used[k], h]);
+      used[k] += h;
     }
     return out;
   };
   const from = port(0, (p, q) => order(p[0]) - order(q[0]) || order(p[1]) - order(q[1]));
   const to = port(1, (p, q) => order(p[1]) - order(q[1]) || order(p[0]) - order(q[0]));
   links.forEach((l, i) => {
-    const [xa, wa] = from.get(l), [xb, wb] = to.get(l);
-    const ya = at[l[0]].y + BAR, yb = at[l[1]].y, ym = (ya + yb) / 2;
-    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: 0, y1: ya, x2: 0, y2: yb, gradientUnits: "userSpaceOnUse" },
+    const [ya, ha] = from.get(l), [yb, hb] = to.get(l);
+    const xa = at[l[0]].x + BOX, xb = at[l[1]].x, xm = (xa + xb) / 2;
+    defs.append(svgEl("linearGradient", { id: `flowg${i}`, x1: xa, y1: 0, x2: xb, y2: 0, gradientUnits: "userSpaceOnUse" },
       svgEl("stop", { offset: 0, "stop-color": FLOW_NODE[l[0]].color }), svgEl("stop", { offset: 1, "stop-color": FLOW_NODE[l[1]].color })));
     svg.append(svgEl("path", {
       class: "band", fill: `url(#flowg${i})`,
-      d: `M${xa},${ya} C${xa},${ym} ${xb},${ym} ${xb},${yb} L${xb + wb},${yb} C${xb + wb},${ym} ${xa + wa},${ym} ${xa + wa},${ya} Z`,
+      d: `M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + hb} C${xm},${yb + hb} ${xm},${ya + ha} ${xa},${ya + ha} Z`,
     }, svgEl("title", {}, `${FLOW_NODE[l[0]].label} → ${FLOW_NODE[l[1]].label}: ${l[2]} งาน`)));
   });
 
-  // bars with the count and name inside
+  // blocks with the count and name inside
   for (const [k, p] of Object.entries(at)) {
-    const node = FLOW_NODE[k];
-    const g = svgEl("g", { class: "node" + (k === selected ? " selected" : "") },
-      svgEl("rect", { x: p.x, y: p.y, width: p.w, height: BAR, rx: 7, fill: node.color, style: `--k:${node.color}` }),
-      svgEl("text", { x: p.x + p.w / 2, y: p.y + 15, class: "num" }, String(p.n)),
-      svgEl("text", { x: p.x + p.w / 2, y: p.y + 28, class: "lab" }, node.label));
+    const node = FLOW_NODE[k], mid = p.y + p.h / 2;
+    const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
+      svgEl("rect", { x: p.x, y: p.y, width: BOX, height: p.h, rx: 7 }),
+      svgEl("text", { x: p.x + BOX / 2, y: mid - 1, class: "num" }, String(p.n)),
+      svgEl("text", { x: p.x + BOX / 2, y: mid + 13, class: "lab" }, node.label));
     if (pick && canPick(k)) {
       g.classList.add("node-btn");
       g.setAttribute("role", "button");
