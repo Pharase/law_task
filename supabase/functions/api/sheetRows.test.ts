@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editSendPatch, normDate, parseReply, parseSends, parseTasks, scoredSends, SheetDown, taskCells, toPeople, type Task, writtenTabs } from "./sheetRows.ts";
+import { normDate, parseReply, parseSends, parseTasks, scoredSends, sendLine, SheetDown, taskFromSends, taskCells, toPeople, type Task, writtenTabs } from "./sheetRows.ts";
 
 const people = [
   { line_user_id: "U1", name: "Ann", role: "member" },
@@ -175,14 +175,25 @@ test("a task with no tag is valid (it counts in คะแนนตรงเว�
   assert.deepEqual(tasks[0].tags, []);
 });
 
-test("editSendPatch: sent date not in the future; note and next due only on a มีปรับแก้ send", () => {
+test("sendLine: sent date not in the future, known outcome, มีปรับแก้ needs a new due date", () => {
   const today = "2026-11-21";
-  assert.deepEqual(editSendPatch({ outcome: "pending" }, { sent_on: "2569-11-01", fix_note: "x", next_due_on: "2026-12-01" }, today),
-    { sent_on: "2026-11-01" }); // Buddhist year converted; note / next due ignored
-  assert.deepEqual(editSendPatch({ outcome: "fix" }, { sent_on: "2026-11-21", fix_note: " แก้ข้อ 2 ", next_due_on: "2026-11-30" }, today),
-    { sent_on: "2026-11-21", fix_note: "แก้ข้อ 2", next_due_on: "2026-11-30" });
-  assert.throws(() => editSendPatch({ outcome: "pending" }, { sent_on: "2026-11-22" }, today), /ไม่เกินวันนี้/);
-  assert.throws(() => editSendPatch({ outcome: "pending" }, { sent_on: "" }, today));
-  assert.throws(() => editSendPatch({ outcome: "fix" }, { next_due_on: "" }, today), /กำหนดส่งแก้/);
-  assert.deepEqual(editSendPatch({ outcome: "approved" }, {}, today), {});
+  assert.deepEqual(sendLine({ sent_on: "2569-11-01", outcome: "pending", fix_note: "x", next_due_on: "2026-12-01" }, today),
+    { sent_on: "2026-11-01", outcome: "pending", fix_note: "", next_due_on: "" }); // Buddhist year converted
+  assert.deepEqual(sendLine({ sent_on: "2026-11-21", outcome: "fix", fix_note: " แก้ข้อ 2 ", next_due_on: "2026-11-30" }, today),
+    { sent_on: "2026-11-21", outcome: "fix", fix_note: "แก้ข้อ 2", next_due_on: "2026-11-30" });
+  assert.throws(() => sendLine({ sent_on: "2026-11-22", outcome: "approved" }, today), /ไม่เกินวันนี้/);
+  assert.throws(() => sendLine({ sent_on: "2026-11-01", outcome: "ok" }, today), /ผลการตรวจ/);
+  assert.throws(() => sendLine({ sent_on: "2026-11-01", outcome: "fix" }, today), /กำหนดส่งแก้/);
+});
+
+test("taskFromSends: the last line by date decides; fixes count; only the last may be pending", () => {
+  const s = (id: number, sent_on: string, outcome: string, next_due_on: string | null = null) => ({ id, sent_on, outcome: outcome as "fix", next_due_on });
+  assert.deepEqual(taskFromSends([]), { state: "on_process", fix_round: 0, current_due_on: "" });
+  // line 9 was added later for an earlier day: it sorts before line 2
+  assert.deepEqual(taskFromSends([s(2, "2026-11-10", "pending"), s(9, "2026-11-01", "fix", "2026-11-12")]),
+    { state: "submitted", fix_round: 1, current_due_on: "2026-11-12" });
+  assert.deepEqual(taskFromSends([s(1, "2026-11-01", "fix", "2026-11-12"), s(2, "2026-11-10", "approved")]),
+    { state: "approved", fix_round: 1, current_due_on: "2026-11-12" });
+  assert.deepEqual(taskFromSends([s(1, "2026-11-01", "void")]), { state: "on_process", fix_round: 0, current_due_on: "" });
+  assert.throws(() => taskFromSends([s(1, "2026-11-01", "pending"), s(2, "2026-11-02", "approved")]), /ล่าสุด/);
 });

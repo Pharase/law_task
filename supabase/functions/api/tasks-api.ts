@@ -10,7 +10,7 @@ import { taskFolderName } from "./driveName.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
-import { editSendPatch, normDate, recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
+import { normDate, recentTaskKeys, scoredSends, sendLine, sendOrder, type SendRow, type Task, taskCells, taskFromSends, taskKey } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, MAX_BYTES, type Me, MIME_EXT, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
@@ -36,7 +36,7 @@ async function loadTasks(pred: (t: Task) => boolean, data?: SheetData): Promise<
     : []);
   return picked.map(({ sheetRow: _r, ...t }) => ({
     ...t,
-    sends: mine.filter((s) => s.task_id === t.id).sort((a, b) => a.id - b.id).map((s) => ({ ...s, delivery: how.get(s.id) ?? null })),
+    sends: mine.filter((s) => s.task_id === t.id).sort(sendOrder).map((s) => ({ ...s, delivery: how.get(s.id) ?? null })),
     files: files.filter((f) => f.task_id === t.id)
       .map(({ path: _p, ...f }) => (f.deleted_at ? { ...f, url: f.drive_url } : { ...f, url: urlOf.get(f.id) })),
   }));
@@ -263,6 +263,29 @@ export async function submitTask(id: number, userId: string, delivery: unknown, 
   return task;
 }
 
+/** A history line from an admin's form, or 400 with the reason. */
+function historyLine(body: Row) {
+  try { return sendLine(body, today()); } catch (e) { throw new HttpError(400, (e as Error).message); }
+}
+
+/**
+ * Who reviewed a line an admin set by hand. reviewed_at stays blank so scoring falls back to the sent date (an old
+ * approval lands in its own period, not today's), and member_notified_at is set so the morning summary stays quiet.
+ */
+const reviewCells = (outcome: string, me: Me) => outcome === "pending"
+  ? { reviewed_by: "", reviewed_at: "", member_notified_at: "" }
+  : { reviewed_by: me.line_user_id, reviewed_at: "", member_notified_at: new Date().toISOString() };
+
+/** Writes a history change with the task re-derived from the new history, in one locked batch (task step first). */
+async function saveHistory(task: Task, after: Pick<SendRow, "id" | "sent_on" | "outcome" | "next_due_on">[], steps: Step[]) {
+  let t;
+  try { t = taskFromSends(after); } catch (e) { throw new HttpError(400, (e as Error).message); }
+  const patch = { fix_round: String(t.fix_round), current_due_on: t.current_due_on, ...(task.state === "cancelled" ? {} : { state: t.state }) };
+  const r = await batch([{ op: "update", tab: "Tasks", id: task.id, patch, expect: { state: task.state } }, ...steps]);
+  if (!r) throw new HttpError(409, "the task just changed; reload and try again");
+  return r;
+}
+
 /** Admin-only actions. Returns undefined for actions it doesn't own. */
 export async function adminTaskActions(action: string, body: Row, me: Me): Promise<unknown> {
   switch (action) {
@@ -407,64 +430,67 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
     }
 
     case "editTask": {
+      // full = the admin turned on แก้ไขข้อมูล for this task: any state, after sends too, and an old (past) due date
       const id = taskId(body);
+      const full = body.full === true;
       const data = await loadSheet();
       const task = taskIn(data, id);
-      if (data.sends.some((s) => s.task_id === id)) throw new HttpError(409, "a task can only be edited before its first send");
+      if (!full && data.sends.some((s) => s.task_id === id)) throw new HttpError(409, "a task can only be edited before its first send");
       const patch: Partial<Task> = {};
       if (body.title !== undefined) patch.title = checkTitle(body.title);
       if (body.details !== undefined) patch.details = String(body.details ?? "").trim() || null;
       if (body.tags !== undefined) patch.tags = checkTags(body.tags);
       if (body.building !== undefined) patch.building = checkBuilding(body.building, data.buildings);
-      if (body.due_on !== undefined) patch.due_on = dueDate(body.due_on); // current_due_on stays blank = follows due_on
+      if (body.due_on !== undefined) { // current_due_on is left alone: blank follows due_on, a มีปรับแก้ date stays
+        const d = full ? normDate(String(body.due_on ?? "")) : dueDate(body.due_on);
+        if (!d) throw new HttpError(400, "due date is required");
+        patch.due_on = d;
+      }
       if (!Object.keys(patch).length) return one(id);
-      if (task.state !== "on_process" ||
-        !await batch([{ op: "update", tab: "Tasks", id, patch: taskCells(patch), expect: { state: "on_process" } }])) {
-        throw new HttpError(404, "task not found");
+      if ((!full && task.state !== "on_process") ||
+        !await batch([{ op: "update", tab: "Tasks", id, patch: taskCells(patch), expect: { state: task.state } }])) {
+        throw new HttpError(409, "the task just changed; reload and try again");
       }
       return one(id);
     }
 
-    case "recordSend": {
-      // the member says they sent (paper handed in, or before the app): record it for them on the day they sent;
-      // the task then waits in รอตรวจ and is reviewed as usual
-      const id = taskId(body);
-      const sent_on = normDate(String(body.sent_on ?? ""));
-      if (!sent_on || sent_on > today()) throw new HttpError(400, "วันที่ส่งต้องเป็นวันที่ และไม่เกินวันนี้ · sent date can't be in the future");
+    // History corrections (แก้ไขข้อมูล on): add / change / delete a send line; the task's status, fix round and current
+    // due date are then worked out again from the whole history (taskFromSends).
+    case "addSend": {
+      const data = await loadSheet();
+      const task = taskIn(data, taskId(body));
+      const line = historyLine(body);
       const delivery = body.delivery || null;
       if (delivery && !(DELIVERY as readonly unknown[]).includes(delivery)) throw new HttpError(400, "delivery must be paper or drive");
-      const task = taskIn(await loadSheet(), id);
-      if (task.state !== "on_process") throw new HttpError(409, "บันทึกการส่งได้เฉพาะงานที่กำลังดำเนินการ · only open tasks");
-      const r = await batch([
-        { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
-        { op: "append", tab: "Sends", rows: [{
-          task_id: String(id), sent_on, sent_at: new Date().toISOString(), due_on: task.current_due_on, outcome: "pending",
-        }] },
-      ]);
-      if (!r) throw new HttpError(409, "the task just changed; reload and try again");
+      const mine = data.sends.filter((s) => s.task_id === task.id);
+      // the due date in force that day: the last มีปรับแก้ before it, else the original
+      const due_on = mine.filter((s) => s.outcome === "fix" && s.sent_on <= line.sent_on).sort(sendOrder).at(-1)?.next_due_on ?? task.due_on;
+      const r = await saveHistory(task, [...mine, { id: Number.MAX_SAFE_INTEGER, ...line }], [{ op: "append", tab: "Sends", rows: [{
+        task_id: String(task.id), sent_at: new Date().toISOString(), due_on, ...line, ...reviewCells(line.outcome, me),
+      }] }]);
       if (delivery) {
         const { error } = await db.from("send_delivery").insert({ send_id: Number(r[1][0].id), delivery });
-        if (error) console.error("send_delivery", error); // the send is saved; only its label is missing
+        if (error) console.error("send_delivery", error); // the line is saved; only its label is missing
       }
-      return one(id);
+      return one(task.id);
     }
 
     case "editSend": {
-      const sendId = Number(body.send_id);
-      if (!Number.isInteger(sendId) || sendId <= 0) throw new HttpError(400, "send_id is required");
       const data = await loadSheet();
-      const s = found(data.sends.find((x) => x.id === sendId) ?? null, "send");
-      let patch;
-      try { patch = editSendPatch(s, body, today()); } catch (e) { throw new HttpError(400, (e as Error).message); }
-      if (!Object.keys(patch).length) return one(s.task_id);
-      const steps: Step[] = [{ op: "update", tab: "Sends", id: s.id, patch }];
-      // the task's latest มีปรับแก้ sets its due date while the fix is still open, so keep the two in step
-      const task = taskIn(data, s.task_id);
-      const last = data.sends.filter((x) => x.task_id === s.task_id).sort((a, b) => a.id - b.id).at(-1);
-      if (patch.next_due_on && last?.id === s.id && task.state === "on_process") {
-        steps.push({ op: "update", tab: "Tasks", id: task.id, patch: { current_due_on: patch.next_due_on } });
-      }
-      await batch(steps);
+      const s = found(data.sends.find((x) => x.id === Number(body.send_id)) ?? null, "send");
+      const line = historyLine(body);
+      const mine = data.sends.filter((x) => x.task_id === s.task_id).map((x) => (x.id === s.id ? { ...x, ...line } : x));
+      const patch = { ...line, ...(line.outcome !== s.outcome ? reviewCells(line.outcome, me) : {}) };
+      await saveHistory(taskIn(data, s.task_id), mine, [{ op: "update", tab: "Sends", id: s.id, patch }]);
+      return one(s.task_id);
+    }
+
+    case "deleteSend": {
+      const data = await loadSheet();
+      const s = found(data.sends.find((x) => x.id === Number(body.send_id)) ?? null, "send");
+      await saveHistory(taskIn(data, s.task_id), data.sends.filter((x) => x.task_id === s.task_id && x.id !== s.id), []);
+      // shortcut: the row delete is outside the locked batch (the script's batch can't delete); if it fails the line stays, and the next edit re-derives the task
+      await sheet("deleteRows", { tab: "Sends", key: "id", values: [String(s.id)] });
       return one(s.task_id);
     }
 

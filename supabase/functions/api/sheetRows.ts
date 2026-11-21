@@ -115,34 +115,46 @@ export function parseSends(rows: Row[], taskIds: Set<number>) {
 /** Sends for scoring: round 0 is due on the task's current due_on (hand corrections count); after each มีปรับแก้, its next_due_on. */
 export function scoredSends(task: Pick<Task, "due_on">, sends: SendRow[]): Send[] {
   let due = task.due_on;
-  return [...sends].sort((a, b) => a.id - b.id).map((s) => {
+  return [...sends].sort(sendOrder).map((s) => {
     const out = { sentOn: s.sent_on, dueOn: due, outcome: s.outcome };
     if (s.outcome === "fix" && s.next_due_on) due = s.next_due_on;
     return out;
   });
 }
 
+/** History order: by sent date, then id, so a line an admin adds later for an earlier day sorts into place. */
+export const sendOrder = (a: Pick<SendRow, "sent_on" | "id">, b: Pick<SendRow, "sent_on" | "id">) =>
+  a.sent_on.localeCompare(b.sent_on) || a.id - b.id;
+
 /**
- * Admin correction of one send (old or hand-entered history): the sent date is a real date and never after today; only a
- * มีปรับแก้ send has a note and a next due date. Returns the Sends cells to write; throws a message an admin can read.
+ * One history line as an admin typed it (adding or correcting old records): sent date never after today, a known outcome,
+ * and a มีปรับแก้ needs its new due date. Returns the Sends cells; throws a message an admin can read.
  */
-export function editSendPatch(s: Pick<SendRow, "outcome">, input: { sent_on?: unknown; fix_note?: unknown; next_due_on?: unknown },
-  today: string): Record<string, string> {
-  const patch: Record<string, string> = {};
-  if (input.sent_on !== undefined) {
-    const d = normDate(String(input.sent_on ?? ""));
-    if (!d || d > today) throw new Error("วันที่ส่งต้องเป็นวันที่ และไม่เกินวันนี้ · sent date can't be in the future");
-    patch.sent_on = d;
-  }
-  if (s.outcome === "fix") {
-    if (input.fix_note !== undefined) patch.fix_note = String(input.fix_note ?? "").trim().slice(0, 2000);
-    if (input.next_due_on !== undefined) {
-      const d = normDate(String(input.next_due_on ?? ""));
-      if (!d) throw new Error("กำหนดส่งแก้ต้องเป็นวันที่ · next due date is required");
-      patch.next_due_on = d;
-    }
-  }
-  return patch;
+export function sendLine(input: { sent_on?: unknown; outcome?: unknown; fix_note?: unknown; next_due_on?: unknown }, today: string) {
+  const sent_on = normDate(String(input.sent_on ?? ""));
+  if (!sent_on || sent_on > today) throw new Error("วันที่ส่งต้องเป็นวันที่ และไม่เกินวันนี้ · sent date can't be in the future");
+  const outcome = String(input.outcome ?? "") as Outcome;
+  if (!OUTCOMES.includes(outcome)) throw new Error("เลือกผลการตรวจ · pick an outcome");
+  const next = outcome === "fix" ? normDate(String(input.next_due_on ?? "")) : null;
+  if (outcome === "fix" && !next) throw new Error("มีปรับแก้ ต้องมีกำหนดส่งแก้ · next due date is required");
+  return { sent_on, outcome, fix_note: outcome === "pending" ? "" : String(input.fix_note ?? "").trim().slice(0, 2000), next_due_on: next ?? "" };
+}
+
+/**
+ * The task's status after an admin changed its history, as if every line had been reviewed in order: the last line
+ * decides (รอตรวจ -> submitted, อนุมัติ -> approved, else on process); fix_round counts มีปรับแก้ and the last one's
+ * new due date is the current one ("" = the original). Only the last line may still be รอตรวจ.
+ */
+export function taskFromSends(sends: Pick<SendRow, "id" | "sent_on" | "outcome" | "next_due_on">[]) {
+  const list = [...sends].sort(sendOrder);
+  if (list.slice(0, -1).some((s) => s.outcome === "pending")) throw new Error("รอตรวจ ได้เฉพาะบรรทัดล่าสุด · only the latest line can be pending");
+  const last = list.at(-1)?.outcome;
+  const fixes = list.filter((s) => s.outcome === "fix");
+  return {
+    state: (last === "pending" ? "submitted" : last === "approved" ? "approved" : "on_process") as State,
+    fix_round: fixes.length,
+    current_due_on: fixes.at(-1)?.next_due_on ?? "",
+  };
 }
 
 const TASK_COLS = ["building", "title", "details", "tags", "owner_name", "state", "due_on", "current_due_on", "fix_round",
