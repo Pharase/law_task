@@ -558,15 +558,20 @@ details[open] > summary .due-head { display: none; }
 .sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; fill: color-mix(in srgb, var(--k) 34%, #0b0d10); }
 .flow-sub { text-align: center; margin-top: 6px; }
 /* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
-.flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.flow-box { display: grid; align-content: start; gap: 2px; min-width: 0; text-align: left; padding: 10px 12px; border-radius: 14px; font: inherit; color: var(--ink);
-  cursor: pointer; border: 1px solid var(--k); background: color-mix(in srgb, var(--k) 10%, transparent); }
-.flow-box:hover, .flow-box:focus-visible { background: color-mix(in srgb, var(--k) 20%, transparent); }
-.flow-num { font-size: 1.9em; font-weight: 700; line-height: 1.15; color: var(--k); font-variant-numeric: tabular-nums; }
-.flow-lab { font-size: .88em; font-weight: 500; }
-.flow-sub2 { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: .76em; color: var(--ink-2); }
-.flow-sub2 b { font-weight: 600; color: var(--c, var(--ink)); }
-@media (max-width: 520px) { .flow { grid-template-columns: 1fr 1fr; } }
+.flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; }
+.flow-arrow { align-self: center; color: var(--ink-2); font-size: 1.1em; opacity: .7; }
+.flow-box { display: grid; align-content: start; gap: 4px; min-width: 0; text-align: left; padding: 14px 16px; border-radius: 14px; font: inherit; color: var(--ink);
+  cursor: pointer; border: 1px solid var(--k); background: color-mix(in srgb, var(--k) 12%, #0b0d10); }
+.flow-box:hover, .flow-box:focus-visible { background: color-mix(in srgb, var(--k) 22%, #0b0d10); }
+.flow-num { font-size: 2.3em; font-weight: 700; line-height: 1.05; color: var(--k); font-variant-numeric: tabular-nums; }
+.flow-lab { font-size: .95em; font-weight: 500; }
+.flow-sub2 { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: .8em; color: var(--ink-2); }
+.flow-sub2 > span + span::before { content: "·"; margin-right: 6px; }
+.flow-sub2 b { font-weight: 600; color: var(--c, var(--ink-2)); }
+@media (max-width: 520px) {
+  .flow { grid-template-columns: 1fr; gap: 4px; }
+  .flow-arrow { justify-self: center; transform: rotate(90deg); }
+}
 @media (max-width: 520px) { .journey li { grid-template-columns: 74px 14px 1fr; } }
 
 /* admin edit mode (🔓 แก้ไขข้อมูล): its controls show only on a card that has it on */

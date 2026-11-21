@@ -58,14 +58,16 @@ function drawFlow(f) {
   };
   const red = FLOW_NODE.late.color, green = FLOW_NODE.approved.color;
   $("flow").className = "flow";
-  $("flow").replaceChildren(
+  const boxes = [
     box("ok", f.total, "งานทั้งหมด", [part("ใหม่", f.nodes.new), part("ค้าง", f.nodes.carried)], () => showFlowList(""), "ดูงานทั้งหมด"),
     box("doing", f.nodes.doing, FLOW_NODE.doing.label, [part("เลยกำหนด", link("doing", "late"), red), part("แก้อยู่", f.fixing)],
       () => showFlowList("on_process"), "ดูงานที่กำลังดำเนินการ"),
     box("waiting", f.nodes.waiting, FLOW_NODE.waiting.label, [part("ส่งช้า", link("waiting", "late"), red), f.nodes.waiting ? part("รอนานสุด", `${f.longestWait} วัน`) : null],
       () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }), "ไปที่งานรอตรวจ"),
     box("approved", f.nodes.approved, FLOW_NODE.approved.label, [part("ตรงเวลา", link("approved", "ok"), green), part("ช้า", link("approved", "late"), red)],
-      () => showFlowList("approved"), "ดูงานที่อนุมัติ"));
+      () => showFlowList("approved"), "ดูงานที่อนุมัติ")];
+  // an arrow between blocks: work flows left to right (top to bottom on phones)
+  $("flow").replaceChildren(...boxes.flatMap((b, i) => i ? [el("span", { className: "flow-arrow", ariaHidden: "true", textContent: "→" }), b] : [b]));
 }
 
 /** A stage bar was tapped: show those tasks in the all-tasks list. */
