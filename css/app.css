@@ -542,6 +542,11 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .hero-preview.none { display: grid; place-items: center; background: none; border: 1px dashed var(--line-2); color: var(--ink-3); font-size: 12px; }
 details[open] > summary .due-head { display: none; }
 .due-neon.old { color: #ff4d5e; text-shadow: 0 0 6px rgba(255, 77, 94, .75), 0 0 14px rgba(255, 77, 94, .45); }
+/* history: the send's outcome glows in its own colour */
+.outcome-neon { --c: 255, 240, 31; color: rgb(var(--c)); font-weight: 700; text-shadow: 0 0 6px rgba(var(--c), .75), 0 0 14px rgba(var(--c), .45); }
+.outcome-neon.approved { --c: 57, 255, 20; }
+.outcome-neon.fix { --c: 255, 159, 28; }
+.outcome-neon.void { --c: 255, 77, 94; }
 
 /* performance: emoji column heads (tap = meaning under the table), space between the period picks and the date range */
 #perfTable caption { padding-top: 20px; }

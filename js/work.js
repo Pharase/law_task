@@ -3,6 +3,8 @@ const OUTCOME_TEXT = { pending: "รอตรวจ", approved: "อนุมั
 // how a send was delivered (picked when pressing ส่งงาน); older sends have none
 const DELIVERY_TEXT = { paper: "📄 เอกสารตัวจริง", drive: "☁️ ไฟล์ออนไลน์ (Drive)" };
 const deliveryNote = (s) => (DELIVERY_TEXT[s.delivery] ? " · " + DELIVERY_TEXT[s.delivery] : "");
+// history line's outcome (รอตรวจ / อนุมัติ / ...) in neon, one colour per outcome (css .outcome-neon)
+const outcomeTag = (s) => el("span", { className: "outcome-neon " + s.outcome, textContent: OUTCOME_TEXT[s.outcome] ?? s.outcome });
 const bkkToday =() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 // dd/mm/yyyy in the Buddhist year (same format as the date boxes, see dateText in app.js)
 const thDate = (s) => (s ? dateText(String(s).slice(0, 10)) : "-");
@@ -52,7 +54,7 @@ function taskItem(task, today, onChange, opts = {}) {
   if (task.sends.length) {
     body.append(el("p", { className: "label", textContent: "ประวัติ" }), el("ol", { className: "timeline" },
       ...task.sends.map((s) => el("li", {},
-        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → ${OUTCOME_TEXT[s.outcome] ?? s.outcome}`,
+        `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
         s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null,
       ))));
   }
