@@ -545,7 +545,7 @@ details[open] > summary .due-head { display: none; }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
 /* F · ภาพรวมงานทีม: top-to-bottom Sankey (js drawFlow); bars carry their count and name, stage bars are buttons */
-.sankey { display: block; width: 100%; max-width: 560px; height: auto; margin: 6px auto 0; font-family: var(--font); }
+.sankey { display: block; width: 100%; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
 .sankey .band { opacity: .55; transition: opacity .15s; }
 .sankey .band:hover { opacity: .85; }
 /* blocks: a tint of their colour with a neon edge, so the bands between them stay the main shapes */

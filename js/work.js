@@ -291,11 +291,14 @@ const FLOW_NODE = {
  * Left-to-right Sankey of a taskFlow result: where the tasks came from (มอบหมายเดือนนี้ / ค้างจากก่อนหน้า) → their stage
  * now → on time or late. Nodes are blocks with the count and name inside (readable on phones); a block's height and a
  * band's width are its number of tasks. Blocks keep a minimum height so their text fits (a small count is drawn taller
- * than its share; the number on it stays exact). pick(key) makes blocks buttons; `selected` outlines one.
+ * than its share; the number on it stays exact). pick(key) makes blocks buttons; `selected` outlines one. `width` = the
+ * frame's width in px: drawn 1:1 so it fills the frame with text at its normal size; narrower than MIN_W it scales down.
  */
-function sankey(f, { pick = null, canPick = () => !!pick, selected = null } = {}) {
-  const BOX = 92, COL_GAP = 60, H = 260, GAP = 10, MIN_H = 40;
-  const W = FLOW_ROWS.length * BOX + (FLOW_ROWS.length - 1) * COL_GAP;
+function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width = 0 } = {}) {
+  const MIN_W = 396, GAP = 10, MIN_H = 40;
+  const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 320 : 260;
+  const BOX = Math.min(150, Math.max(92, Math.round(W * 0.14))); // blocks widen with the frame so they keep their weight next to the bands
+  const COL_GAP = (W - FLOW_ROWS.length * BOX) / (FLOW_ROWS.length - 1);
   const at = {}; // node -> { x, y, h, n }
   FLOW_ROWS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
@@ -365,6 +368,9 @@ const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} น
 // turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
 let linkUsed = false;
 let homeKey = null; // the status group being looked at: kept when the list reloads or auto-refreshes
+let homeRedraw = null; // redraws the Sankey at the frame's new width (window resized / phone turned)
+let resizeTimer = 0;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => homeRedraw?.(), 150); });
 
 /** Home tasks: the whole team for admins, your own for members. */
 const homeTasks = (me) => (me.role === "admin" ? api("listTasks", {}) : api("myTasks"));
@@ -400,8 +406,10 @@ async function renderHome(me, data) {
   };
   // every bar opens its tasks below; the tapped one is outlined
   const draw = (selected) => $("dashChart").replaceChildren(...(flow.total
-    ? [sankey(flow, { pick, selected }), el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
+    ? [sankey(flow, { pick, selected, width: $("dashChart").clientWidth }), el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
     : [el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" })]));
+
+  homeRedraw = () => draw(homeKey);
 
   // Open the list people most likely need: work to do, then waiting review, then the rest
   const has = (k) => flow.nodes[k] > 0;
