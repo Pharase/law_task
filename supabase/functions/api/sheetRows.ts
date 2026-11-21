@@ -1,4 +1,5 @@
 // Google Sheet rows <-> typed tasks and sends (spec "Hand edits: how the app copes"). Pure: no Deno or npm imports.
+import { bangkokDate, daysBetween } from "./dates.ts";
 import { TAGS } from "./review.ts";
 import type { Send } from "./scoring.ts";
 
@@ -120,6 +121,41 @@ export function scoredSends(task: Pick<Task, "due_on">, sends: SendRow[]): Send[
     if (s.outcome === "fix" && s.next_due_on) due = s.next_due_on;
     return out;
   });
+}
+
+/** Bangkok day of a sheet timestamp (ISO with a time) or date cell (already a day). */
+const bkkDay = (s: string) => (/T/.test(s) ? bangkokDate(new Date(s)) : s.slice(0, 10));
+
+/**
+ * Team flow at the top of the admin task page: tasks per stage. "This month" = the Bangkok month of `today`:
+ * assigned by created_at, approved by the approving review (reviewed_at, else the send date). Cancelled tasks don't count.
+ */
+export function taskFlow(
+  tasks: Pick<Task, "id" | "state" | "owner" | "building" | "created_at" | "current_due_on" | "fix_round">[],
+  sends: Pick<SendRow, "id" | "task_id" | "outcome" | "sent_on" | "due_on" | "reviewed_at">[],
+  today: string,
+) {
+  const month = today.slice(0, 7);
+  const live = tasks.filter((t) => t.state !== "cancelled");
+  const mine = (id: number, outcome: string) => sends.filter((s) => s.task_id === id && s.outcome === outcome).sort((a, b) => a.id - b.id).at(-1);
+  const assigned = live.filter((t) => bkkDay(String(t.created_at)).slice(0, 7) === month);
+  const doing = live.filter((t) => t.state === "on_process");
+  const waiting = live.filter((t) => t.state === "submitted");
+  const approved = live.filter((t) => t.state === "approved").map((t) => mine(t.id, "approved"))
+    .filter((s) => s && bkkDay(String(s.reviewed_at || s.sent_on)).slice(0, 7) === month);
+  return {
+    month,
+    assigned: assigned.length,
+    people: new Set(assigned.map((t) => t.owner)).size,
+    buildings: new Set(assigned.map((t) => t.building)).size,
+    doing: doing.length,
+    overdue: doing.filter((t) => t.current_due_on < today).length,
+    fixing: doing.filter((t) => t.fix_round > 0).length,
+    waiting: waiting.length,
+    longestWait: Math.max(0, ...waiting.map((t) => daysBetween(mine(t.id, "pending")?.sent_on ?? today, today))),
+    approved: approved.length,
+    approvedLate: approved.filter((s) => s!.due_on && s!.sent_on > s!.due_on).length,
+  };
 }
 
 /** History order: by sent date, then id, so a line an admin adds later for an earlier day sorts into place. */

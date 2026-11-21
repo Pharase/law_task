@@ -10,7 +10,7 @@ import { taskFolderName } from "./driveName.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
-import { normDate, recentTaskKeys, scoredSends, sendLine, sendOrder, type SendRow, type Task, taskCells, taskFromSends, taskKey } from "./sheetRows.ts";
+import { normDate, recentTaskKeys, scoredSends, sendLine, sendOrder, type SendRow, type Task, taskCells, taskFlow, taskFromSends, taskKey } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, MAX_BYTES, type Me, MIME_EXT, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
@@ -299,6 +299,11 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
 
     case "sheetWarnings":
       return (await loadSheet()).bad;
+
+    case "taskFlow": { // counts only (no files, no signed links): cheap enough for every page open and refresh
+      const data = await loadSheet();
+      return taskFlow(data.tasks, data.sends, today());
+    }
 
     case "addBuilding": {
       const name = String(body.name ?? "").trim();

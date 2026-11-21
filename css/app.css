@@ -542,6 +542,44 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .hero-preview.none { display: grid; place-items: center; background: none; border: 1px dashed var(--line-2); color: var(--ink-3); font-size: 12px; }
 details[open] > summary .due-head { display: none; }
 .due-neon.old { color: #ff4d5e; text-shadow: 0 0 6px rgba(255, 77, 94, .75), 0 0 14px rgba(255, 77, 94, .45); }
+/* status colours for the tracking pieces below (C strip, B journey, F flow): each sets --k */
+.k-cyan { --k: #02d7f4; } .k-yellow { --k: #fff01f; } .k-orange { --k: #ff9f1c; } .k-red { --k: #ff4d5e; }
+.k-green { --k: #39ff14; } .k-pink { --k: #ff4fd8; } .k-dim { --k: rgba(240, 243, 242, .42); }
+
+/* C · status strip at the start of a task row: 4-part mini bar + status word */
+.strip { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; vertical-align: 1px; }
+.mini { display: inline-flex; gap: 3px; }
+.mini i { width: 14px; height: 5px; border-radius: 3px; background: var(--line-2); }
+.mini i.on { background: var(--cyan); }
+.mini i.now { background: var(--k); box-shadow: 0 0 7px var(--k); }
+.strip-word { font-size: .82em; font-weight: 600; white-space: nowrap; color: var(--k); text-shadow: 0 0 7px color-mix(in srgb, var(--k) 55%, transparent); }
+
+/* B · journey timeline inside an opened task: date | dot on a rail | what happened */
+.journey { list-style: none; margin: 4px 0 12px; padding: 0; }
+.journey li { display: grid; grid-template-columns: 84px 16px 1fr; gap: 0 10px; }
+.journey .j-date { text-align: right; font-size: .82em; color: var(--ink-2); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.journey .j-dot { position: relative; align-self: stretch; } /* the rail column: the dot (::before) and the line down to the next one (::after) */
+.journey .j-dot::before { content: ""; position: absolute; left: 50%; top: 6px; width: 12px; height: 12px; box-sizing: border-box; transform: translateX(-50%); border-radius: 50%;
+  background: var(--k); box-shadow: 0 0 9px color-mix(in srgb, var(--k) 70%, transparent); }
+.journey .j-dot.ghost::before { background: transparent; border: 2px dashed var(--k); box-shadow: none; }
+.journey .j-dot::after { content: ""; position: absolute; left: 50%; top: 18px; bottom: -6px; width: 2px; transform: translateX(-50%); background: rgba(240, 243, 242, .26); }
+.journey li:last-child .j-dot::after { display: none; }
+.journey .j-text { min-width: 0; padding-bottom: 12px; }
+.journey li.now strong { color: var(--k); }
+.j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
+
+/* F · team flow: one box per stage, tap to see its tasks */
+.flow { display: flex; align-items: stretch; gap: 8px; }
+.flow-box { flex: 1 1 0; min-width: 0; display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 14px; font: inherit; color: var(--ink); cursor: pointer;
+  border: 1px solid var(--k); background: color-mix(in srgb, var(--k) 10%, transparent); }
+.flow-box:hover, .flow-box:focus-visible { background: color-mix(in srgb, var(--k) 20%, transparent); }
+.flow-num { font-size: 1.8em; font-weight: 600; line-height: 1.1; color: var(--k); font-variant-numeric: tabular-nums; }
+.flow-lab { font-size: .88em; font-weight: 500; }
+.flow-sub { font-size: .76em; color: var(--ink-2); }
+.flow-sub b { color: #ff4d5e; font-weight: 600; }
+.flow-to { align-self: center; color: var(--ink-3); }
+@media (max-width: 520px) { .flow { display: grid; grid-template-columns: 1fr 1fr; } .flow-to { display: none; } .journey li { grid-template-columns: 74px 14px 1fr; } }
+
 /* admin edit mode (🔓 แก้ไขข้อมูล): its controls show only on a card that has it on */
 .task:not(.editing) .edit-only { display: none; }
 .task.editing { outline: 1px dashed #ff9f1c; outline-offset: 2px; }

@@ -37,12 +37,97 @@ function adminTaskBody(t) {
     t.details && el("p", { className: "pre", textContent: t.details }),
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
     taskFolderButton(t), // every task, so old (history) tasks' sent files can be opened too
-    t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
-      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
-      s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
+    el("p", { className: "label", textContent: "ความคืบหน้า" }),
+    journey(t),
     files.length > 0 && el("ul", {}, ...files),
   );
 }
+
+const dayDiff = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5); // yyyy-mm-dd strings
+
+/** C · where a task is: step 0-3 of มอบหมาย → ส่งงาน → ตรวจ → อนุมัติ (4 = all done), a colour, and one word with the days that matter. */
+function taskStatus(t) {
+  const today = bkkToday();
+  if (t.state === "cancelled") return { step: -1, k: "dim", word: "ยกเลิก" };
+  if (t.state === "approved") {
+    const ok = t.sends.filter((s) => s.outcome === "approved").at(-1);
+    return { step: 4, k: "green", word: "อนุมัติ" + (ok ? " " + thDate(ok.reviewed_at ? bkkDay(ok.reviewed_at) : ok.sent_on) : "") };
+  }
+  if (t.state === "submitted") return { step: 2, k: "yellow", word: `รอตรวจ ${dayDiff(t.sends.at(-1)?.sent_on ?? today, today)} วัน` };
+  const left = dayDiff(today, t.current_due_on);
+  if (left < 0) return { step: 1, k: "red", word: `เลยกำหนด ${-left} วัน` };
+  return { step: 1, k: t.fix_round ? "orange" : "cyan", word: `${t.fix_round ? "กำลังแก้" : "กำลังทำ"} · ${left ? `อีก ${left} วัน` : "ครบกำหนดวันนี้"}` };
+}
+
+/** C · status strip on every task row: a 4-part mini bar and the status word, in the status colour. */
+function statusStrip(t) {
+  const s = taskStatus(t);
+  const bar = el("span", { className: "mini", ariaHidden: "true" },
+    ...[0, 1, 2, 3].map((i) => el("i", { className: s.step === 4 || i < s.step ? "on" : i === s.step ? "now" : "" })));
+  return el("span", { className: `strip k-${s.k}` }, bar, el("span", { className: "strip-word", textContent: s.word }));
+}
+
+/**
+ * B · the task's story in order: assigned, each send (on time, or N days late against that round's due date), each
+ * review, then the due date still ahead (dashed) or how late it is now.
+ */
+function journey(t) {
+  const today = bkkToday();
+  const ev = [{ d: bkkDay(t.created_at), k: "cyan", main: "มอบหมายงาน", sub: `กำหนดส่ง ${thDate(t.due_on)}` }];
+  t.sends.forEach((s, i) => {
+    const late = s.due_on ? dayDiff(s.due_on, s.sent_on) : null;
+    ev.push({ d: s.sent_on, k: "pink", main: i ? `ส่งงาน ครั้งที่ ${i + 1}` : "ส่งงาน", sub: DELIVERY_TEXT[s.delivery] ?? "",
+      tag: late === null ? null : late > 0 ? ["red", `ช้า ${late} วัน`] : ["green", "ตรงเวลา"] });
+    const on = s.reviewed_at ? bkkDay(s.reviewed_at) : s.sent_on; // lines set by hand have no review time
+    if (s.outcome === "fix") ev.push({ d: on, k: "orange", main: "ส่งกลับแก้ไข", sub: `กำหนดใหม่ ${thDate(s.next_due_on)}`, note: s.fix_note });
+    else if (s.outcome === "void") ev.push({ d: on, k: "dim", main: "กดผิด (ไม่นับการส่งนี้)", note: s.fix_note });
+    else if (s.outcome === "approved") ev.push({ d: on, k: "green", main: "อนุมัติ", note: s.fix_note });
+    else ev.push({ d: today, k: "yellow", now: true, main: "รอตรวจ", sub: `รอมา ${dayDiff(s.sent_on, today)} วัน` });
+  });
+  if (t.state === "on_process") {
+    const left = dayDiff(today, t.current_due_on);
+    ev.push(left < 0
+      ? { d: t.current_due_on, k: "red", now: true, main: `เลยกำหนด ${-left} วัน` }
+      : { d: t.current_due_on, k: "cyan", now: true, ghost: true, main: "กำหนดส่ง", sub: left ? `อีก ${left} วัน` : "วันนี้" });
+  }
+  if (t.state === "cancelled") ev.push({ d: "", k: "dim", main: "ยกเลิกงาน" });
+  return el("ol", { className: "journey" }, ...ev.map((e) => el("li", { className: `k-${e.k}${e.now ? " now" : ""}` },
+    el("span", { className: "j-date", textContent: e.d ? thDate(e.d) : "" }),
+    el("span", { className: "j-dot" + (e.ghost ? " ghost" : ""), ariaHidden: "true" }),
+    el("div", { className: "j-text" },
+      el("strong", { textContent: e.main }),
+      e.tag && el("span", { className: `j-tag k-${e.tag[0]}`, textContent: e.tag[1] }),
+      e.sub && el("span", { className: "muted", textContent: " · " + e.sub }),
+      e.note && el("div", { className: "muted pre", textContent: e.note })))));
+}
+
+/** F · team flow at the top of the page (server taskFlow): tap a box to see its tasks. */
+function drawFlow(f) {
+  const box = (k, num, label, sub, go, hint) => {
+    const b = el("button", { type: "button", className: `flow-box k-${k}`, title: hint },
+      el("span", { className: "flow-num", textContent: num }), el("span", { className: "flow-lab", textContent: label }),
+      el("span", { className: "flow-sub" }, ...sub));
+    b.onclick = go;
+    return b;
+  };
+  const arrow = () => el("span", { className: "flow-to", textContent: "→", ariaHidden: "true" });
+  const showList = (state) => {
+    $("fState").value = state;
+    $("fOverdue").checked = false;
+    allPage = 0;
+    loadList().catch((e) => { $("allList").textContent = "Error: " + e.message; });
+    $("allCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  $("flow").replaceChildren(
+    box("cyan", f.assigned, "มอบหมายเดือนนี้", [`${f.people} คน · ${f.buildings} นิติ`], () => showList(""), "ดูงานทั้งหมด"), arrow(),
+    box("orange", f.doing, "กำลังทำ / แก้ไข", [f.overdue ? el("b", { textContent: `เลยกำหนด ${f.overdue}` }) : "ไม่มีเลยกำหนด", ` · แก้อยู่ ${f.fixing}`],
+      () => showList("on_process"), "ดูงานที่กำลังดำเนินการ"), arrow(),
+    box("yellow", f.waiting, "งานรอตรวจ", [f.waiting ? `รอนานสุด ${f.longestWait} วัน` : "ไม่มีงานค้างตรวจ"],
+      () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }), "ไปที่งานรอตรวจ"), arrow(),
+    box("green", f.approved, "อนุมัติเดือนนี้", [`ตรงเวลา ${f.approved - f.approvedLate} · ช้า ${f.approvedLate}`], () => showList("approved"), "ดูงานที่อนุมัติ"));
+}
+const flowData = () => api("taskFlow");
+async function loadFlow() { drawFlow(await flowData()); }
 
 /** Right side of a task row (this page is admins only): was the new-task LINE card sent, and 📨 to send it again. */
 function notifyStatus(t) {
@@ -63,12 +148,11 @@ function notifyStatus(t) {
 }
 
 function summaryLine(t) {
-  const overdue = t.state === "on_process" && t.current_due_on < bkkToday();
   return el("summary", {},
     notifyStatus(t),
+    statusStrip(t), // C: where it is at a glance (the overdue days are in it, so no separate เลยกำหนด badge)
     el("strong", { textContent: t.title }),
     el("span", { className: "muted", textContent: ` · ${t.building} · ${t.owner_name} · ${thDate(t.current_due_on)}` }),
-    overdue && el("span", { className: "badge late", textContent: "เลยกำหนด" }),
     t.fix_round > 0 && el("span", { className: "badge", textContent: `รอบแก้ ${t.fix_round}` }),
     t.fix_round > 5 && el("span", { className: "badge late", textContent: "เกิน 5 รอบแก้ไข" }));
 }
@@ -452,6 +536,7 @@ async function loadWarnings() {
 
 function loadAll() {
   loadWarnings().catch(() => {}); // the lists below show the error if the sheet is down
+  loadFlow().catch((e) => { $("flow").textContent = "Error: " + e.message; });
   loadReview().catch((e) => { $("reviewList").textContent = "Error: " + e.message; });
   loadList().catch((e) => { $("allList").textContent = "Error: " + e.message; });
 }
@@ -574,6 +659,7 @@ async function initTracking() {
   $("fQ").oninput = () => { allPage = 0; renderAll(); };
   reviewWatch = autoRefresh({ box: $("reviewList").closest(".card"), load: reviewData, draw: drawReview });
   listWatch = autoRefresh({ box: $("allList").closest(".card"), load: listData, draw: drawList });
+  autoRefresh({ box: $("flowCard"), load: flowData, draw: drawFlow });
   $("searchBtn").onclick = () => {
     const on = $("fQ").hidden; // opening
     $("fQ").hidden = !on;

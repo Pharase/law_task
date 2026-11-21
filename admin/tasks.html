@@ -7,25 +7,30 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="../js/app.js?v=20261122"></script>
   <script src="../js/work.js?v=20261141"></script>
-  <script src="../js/admin-tasks.js?v=20261144"></script>
+  <script src="../js/admin-tasks.js?v=20261145"></script>
   <script src="../js/backup.js?v=20261117"></script>
-  <link rel="stylesheet" href="../css/app.css?v=20261144">
+  <link rel="stylesheet" href="../css/app.css?v=20261145">
 </head>
 <body>
   <p id="status" class="loading" role="status"></p>
 
   <div id="page" hidden>
+    <section class="card" id="flowCard">
+      <h2>ภาพรวมงาน · Team flow</h2>
+      <p class="muted small-note">แตะกล่องเพื่อดูงานในขั้นนั้น</p>
+      <div class="flow" id="flow"><p class="muted">กำลังโหลด…</p></div>
+    </section>
     <section class="card" id="warnCard" hidden>
       <h2>ข้อมูลในชีตที่ต้องแก้ · Sheet rows to fix</h2>
       <p class="muted">These rows are hidden from the app until they are fixed in the Google Sheet.</p>
       <ul id="warnList"></ul>
     </section>
-    <section class="card">
+    <section class="card" id="reviewCard">
       <h2>รอตรวจ · Waiting for review <span id="reviewCount" class="badge"></span></h2>
       <div id="reviewList"></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="allCard">
       <div class="row card-head">
         <h2 class="grow">งานทั้งหมด · All tasks <span id="allCount" class="badge"></span></h2>
         <button type="button" class="icon-btn" id="searchBtn" title="ค้นหางาน" aria-label="ค้นหางาน" aria-expanded="false">🔍</button>
