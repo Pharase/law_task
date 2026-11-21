@@ -34,12 +34,9 @@ body::before {
 body::after {
   content: ""; position: fixed; z-index: -1; pointer-events: none; inset: 0;
   background: url("../img/bg-mark.png") center 58% / min(88vw, 620px) auto no-repeat; opacity: .16;
-  /* gold glow around the line art; only opacity animates (cheap on phones), the glow itself is drawn once */
+  /* gold glow around the line art; still (no breathing animation: it read as a blinking background) */
   filter: drop-shadow(0 0 3px rgba(255, 214, 140, .9)) drop-shadow(0 0 14px rgba(226, 184, 102, .7)) drop-shadow(0 0 40px rgba(226, 184, 102, .45));
-  animation: mark-breathe 7s ease-in-out infinite;
 }
-@keyframes mark-breathe { 0%, 100% { opacity: .12; } 50% { opacity: .22; } }
-@media (prefers-reduced-motion: reduce) { body::after { animation: none; } }
 ::selection { background: rgba(2, 215, 244, .35); }
 
 h1 { margin: 0 0 12px; font-weight: 600; font-size: 28px; }
@@ -559,6 +556,16 @@ details[open] > summary .due-head { display: none; }
 .sankey .node-btn:hover rect { filter: drop-shadow(0 0 10px var(--k)) brightness(1.12); }
 .sankey .node-btn:focus-visible rect, .sankey .node.selected rect { stroke: #fff; stroke-width: 2.5; }
 .flow-sub { text-align: center; margin-top: 6px; }
+/* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
+.flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.flow-box { display: grid; align-content: start; gap: 2px; min-width: 0; text-align: left; padding: 10px 12px; border-radius: 14px; font: inherit; color: var(--ink);
+  cursor: pointer; border: 1px solid var(--k); background: color-mix(in srgb, var(--k) 10%, transparent); }
+.flow-box:hover, .flow-box:focus-visible { background: color-mix(in srgb, var(--k) 20%, transparent); }
+.flow-num { font-size: 1.9em; font-weight: 700; line-height: 1.15; color: var(--k); font-variant-numeric: tabular-nums; }
+.flow-lab { font-size: .88em; font-weight: 500; }
+.flow-sub2 { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: .76em; color: var(--ink-2); }
+.flow-sub2 b { font-weight: 600; color: var(--c, var(--ink)); }
+@media (max-width: 520px) { .flow { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 520px) { .journey li { grid-template-columns: 74px 14px 1fr; } }
 
 /* admin edit mode (🔓 แก้ไขข้อมูล): its controls show only on a card that has it on */

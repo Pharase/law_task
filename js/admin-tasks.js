@@ -46,10 +46,26 @@ function adminTaskBody(t) {
 /** F · ภาพรวมงานทีม on the tasks page: tap กำลังทำ / อนุมัติ to filter the list, รอตรวจ to jump to the review list. */
 function drawFlow(f) {
   if (!f.total) return void $("flow").replaceChildren(el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" }));
-  const go = { doing: () => showFlowList("on_process"), approved: () => showFlowList("approved"),
-    waiting: () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }) };
-  $("flow").replaceChildren(sankey(f, { pick: (k) => go[k](), canPick: (k) => !!go[k] }),
-    el("p", { className: "muted small-note flow-sub", textContent: flowNote(f, true) }));
+  // blocks, not a Sankey here; the numbers are the Sankey's (taskFlow), so every block's split adds up to its number
+  const link = (a, b) => f.links.find(([x, y]) => x === a && y === b)?.[2] ?? 0;
+  const part = (label, n, color) => el("span", {}, label + " ", el("b", { textContent: n, style: color ? `--c:${color}` : "" }));
+  const box = (k, n, label, parts, go, hint) => {
+    const b = el("button", { type: "button", className: "flow-box", title: hint, style: `--k:${FLOW_NODE[k]?.color ?? "#02d7f4"}` },
+      el("span", { className: "flow-num", textContent: n }), el("span", { className: "flow-lab", textContent: label }),
+      el("span", { className: "flow-sub2" }, ...parts));
+    b.onclick = go;
+    return b;
+  };
+  const red = FLOW_NODE.late.color, green = FLOW_NODE.approved.color;
+  $("flow").className = "flow";
+  $("flow").replaceChildren(
+    box("ok", f.total, "งานทั้งหมด", [part("ใหม่", f.nodes.new), part("ค้าง", f.nodes.carried)], () => showFlowList(""), "ดูงานทั้งหมด"),
+    box("doing", f.nodes.doing, FLOW_NODE.doing.label, [part("เลยกำหนด", link("doing", "late"), red), part("แก้อยู่", f.fixing)],
+      () => showFlowList("on_process"), "ดูงานที่กำลังดำเนินการ"),
+    box("waiting", f.nodes.waiting, FLOW_NODE.waiting.label, [part("ส่งช้า", link("waiting", "late"), red), f.nodes.waiting ? part("รอนานสุด", `${f.longestWait} วัน`) : null],
+      () => $("reviewCard").scrollIntoView({ behavior: "smooth", block: "start" }), "ไปที่งานรอตรวจ"),
+    box("approved", f.nodes.approved, FLOW_NODE.approved.label, [part("ตรงเวลา", link("approved", "ok"), green), part("ช้า", link("approved", "late"), red)],
+      () => showFlowList("approved"), "ดูงานที่อนุมัติ"));
 }
 
 /** A stage bar was tapped: show those tasks in the all-tasks list. */
