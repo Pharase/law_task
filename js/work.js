@@ -291,8 +291,8 @@ const PROC_COLS = [["new", "carried"], ["doing"], ["ok", "late"], ["approved", "
 const PROC_NODE = {
   new: FLOW_NODE.new, carried: FLOW_NODE.carried,
   doing: { label: "กำลังทำ", color: "#ff9f1c" },
-  ok: { label: "รอตรวจ · ตรงเวลา", color: "#02d7f4" },
-  late: { label: "รอตรวจ · ช้า", color: "#ff4d5e" },
+  ok: { label: "รอตรวจ · ตรงเวลา", short: "ตรงเวลา", color: "#02d7f4" }, // short: on the narrow (tall) chart
+  late: { label: "รอตรวจ · ช้า", short: "ช้า", color: "#ff4d5e" },
   approved: { label: "อนุมัติ", color: "#39ff14" },
   fix: { label: "แก้ไข", color: "#ff7a45" },
 };
@@ -332,60 +332,94 @@ function processFlow(flow, tasks) {
 }
 
 /**
- * Left-to-right Sankey of processFlow: thin bars whose height is their number of tasks (one scale for the whole chart),
- * pool names on the left, every other step's name and count above its bar. Bands fade from colour to colour; tasks still
- * in a step end in a short grey stub (ยังไม่ส่ง / รอตรวจอยู่). pick(key) makes bar + label a button; `selected` outlines
- * one. `width` = the frame's width in px, drawn 1:1; below MIN_W the frame scrolls sideways so text stays readable.
+ * Sankey of processFlow: thin bars whose length is their number of tasks (one scale for the whole chart), bands that fade
+ * from colour to colour, and a short grey stub for tasks still in a step (ยังไม่ส่ง / รอตรวจอยู่). Wide frames read left
+ * to right (pool names on the left, other steps named above their bar); frames under TALL_BELOW px read top to bottom
+ * (pools named above, the last step below, the steps between on a small card over their bar), so phones need no
+ * sideways scroll. pick(key) makes bar + label a button; `selected` outlines one. `width` = the frame's width, drawn 1:1.
  */
+const TALL_BELOW = 560;
 function sankey(f, { pick = null, selected = null, width = 0 } = {}) {
-  const MIN_W = 600, BAR = 12, TOP = 30, BOT = 12, LEFT = 120, RIGHT = 80, STUB = 40;
-  const W = Math.max(MIN_W, Math.round(width)), PLOT = W > 800 ? 260 : 230;
-  const K = PLOT / f.total; // px per task
-  const GAP = [16, 0, 34, 34]; // room between a column's bars; 34 fits the label above the lower bar
-  const colX = PROC_COLS.map((_, c) => LEFT + (c / (PROC_COLS.length - 1)) * (W - LEFT - RIGHT - BAR));
+  const tall = width > 0 && width < TALL_BELOW;
+  const BAR = 12, STUB = tall ? 30 : 40, last = PROC_COLS.length - 1;
+  // layout along the flow ("main": x when wide, y when tall) and across it ("cross")
+  let W, H, K, mainOf, start, GAP;
+  if (tall) {
+    W = Math.max(300, Math.round(width));
+    GAP = [16, 0, 40, 40];
+    K = (W - 24 - 40) / f.total; // 12px margins, room for one gap in a row
+    mainOf = (c) => 34 + c * 104;
+    start = () => 12;
+    H = mainOf(last) + BAR + 30;
+  } else {
+    W = Math.max(600, Math.round(width));
+    const PLOT = W > 800 ? 260 : 230, LEFT = 120, RIGHT = 80;
+    GAP = [16, 0, 34, 34]; // 34 fits the label above the lower bar
+    K = PLOT / f.total;
+    mainOf = (c) => LEFT + (c / last) * (W - LEFT - RIGHT - BAR);
+    start = () => 30;
+  }
   const at = {};
   PROC_COLS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
     const tot = keys.reduce((a, k) => a + f.nodes[k] * K, 0) + GAP[c] * (keys.length - 1);
-    let y = c === 0 ? TOP + (PLOT - tot) / 2 : TOP; // the pools sit level with กำลังทำ
-    for (const k of keys) { at[k] = { x: colX[c], y, h: f.nodes[k] * K, n: f.nodes[k], c }; y += at[k].h + GAP[c]; }
+    let x = c === 0 ? start() + (f.total * K - tot) / 2 : start(); // the pools sit level with กำลังทำ
+    for (const k of keys) { at[k] = { m: mainOf(c), x, len: f.nodes[k] * K, n: f.nodes[k], c }; x += at[k].len + GAP[c]; }
   });
-  const H = Math.ceil(Math.max(...Object.values(at).map((p) => p.y + p.h))) + BOT;
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
+  if (!tall) H = Math.ceil(Math.max(...Object.values(at).map((p) => p.x + p.len))) + 12;
+  const P = tall ? (m, x) => `${x},${m}` : (m, x) => `${m},${x}`;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey" + (tall ? " tall" : ""), role: "group", "aria-label": "ภาพรวมงาน" });
   const defs = svgEl("defs");
   svg.append(defs);
-  const grad = (id, a, b, x1, x2) => defs.append(svgEl("linearGradient", { id, x1, y1: 0, x2, y2: 0, gradientUnits: "userSpaceOnUse" },
-    svgEl("stop", { offset: 0, "stop-color": a }), svgEl("stop", { offset: 1, "stop-color": b })));
+  const grad = (id, a, b, m1, m2) => defs.append(svgEl("linearGradient", {
+    id, gradientUnits: "userSpaceOnUse", ...(tall ? { x1: 0, x2: 0, y1: m1, y2: m2 } : { x1: m1, x2: m2, y1: 0, y2: 0 }),
+  }, svgEl("stop", { offset: 0, "stop-color": a }), svgEl("stop", { offset: 1, "stop-color": b })));
 
-  // ports are handed out in the order the flows are listed (processFlow keeps them top to bottom), then the stub
+  // ports are handed out in the order the flows are listed (processFlow keeps them in order), then the stub
   const out = {}, inn = {};
   f.links.forEach(([a, b, n], i) => {
-    const A = at[a], B = at[b], h = n * K, ya = out[a] ?? A.y, yb = inn[b] ?? B.y;
-    out[a] = ya + h; inn[b] = yb + h;
-    const xa = A.x + BAR, xb = B.x, xm = (xa + xb) / 2;
-    grad(`flowg${i}`, PROC_NODE[a].color, PROC_NODE[b].color, xa, xb);
+    const A = at[a], B = at[b], h = n * K, xa = out[a] ?? A.x, xb = inn[b] ?? B.x;
+    out[a] = xa + h; inn[b] = xb + h;
+    const ma = A.m + BAR, mb = B.m, mm = (ma + mb) / 2;
+    grad(`flowg${i}`, PROC_NODE[a].color, PROC_NODE[b].color, ma, mb);
     svg.append(svgEl("path", {
       class: "band", fill: `url(#flowg${i})`,
-      d: `M${xa},${ya} C${xm},${ya} ${xm},${yb} ${xb},${yb} L${xb},${yb + h} C${xm},${yb + h} ${xm},${ya + h} ${xa},${ya + h} Z`,
+      d: `M${P(ma, xa)} C${P(mm, xa)} ${P(mm, xb)} ${P(mb, xb)} L${P(mb, xb + h)} C${P(mm, xb + h)} ${P(mm, xa + h)} ${P(ma, xa + h)} Z`,
     }, svgEl("title", {}, `${PROC_NODE[a].label} → ${PROC_NODE[b].label}: ${n} งาน`)));
   });
   for (const [k, n] of Object.entries(f.stays)) {
     if (!n || !at[k]) continue;
-    const h = n * K, y = out[k] ?? at[k].y, x = at[k].x + BAR;
-    grad(`stay${k}`, PROC_NODE[k].color, "rgba(154,163,173,0)", x, x + STUB);
-    svg.append(svgEl("path", { class: "band", fill: `url(#stay${k})`, d: `M${x},${y} h${STUB} v${h} h${-STUB} Z` },
+    const h = n * K, x = out[k] ?? at[k].x, m = at[k].m + BAR;
+    grad(`stay${k}`, PROC_NODE[k].color, "rgba(154,163,173,0)", m, m + STUB);
+    svg.append(svgEl("path", { class: "band", fill: `url(#stay${k})`, d: `M${P(m, x)} L${P(m + STUB, x)} L${P(m + STUB, x + h)} L${P(m, x + h)} Z` },
       svgEl("title", {}, `${PROC_STAY[k]}: ${n} งาน`)),
-      svgEl("text", { x: x + STUB + 6, y: y + h / 2 + 4, class: "stay" }, `${PROC_STAY[k]} ${n}`));
+      tall ? svgEl("text", { x: x + h / 2, y: m + STUB + 12, class: "stay", "text-anchor": "middle" }, `${PROC_STAY[k]} ${n}`)
+        : svgEl("text", { x: m + STUB + 6, y: x + h / 2 + 4, class: "stay" }, `${PROC_STAY[k]} ${n}`));
   }
 
-  // bars; pools named on their left, every other step above its bar
   for (const [k, p] of Object.entries(at)) {
-    const node = PROC_NODE[k];
+    const node = PROC_NODE[k], len = Math.max(2, p.len);
     const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
-      svgEl("rect", { class: "bar", x: p.x, y: p.y, width: BAR, height: Math.max(2, p.h), rx: 2 }));
-    if (p.c === 0) g.append(svgEl("text", { x: p.x - 8, y: p.y + p.h / 2 - 2, class: "lab", "text-anchor": "end" }, node.label),
-      svgEl("text", { x: p.x - 8, y: p.y + p.h / 2 + 14, class: "num", "text-anchor": "end" }, String(p.n)));
-    else g.append(svgEl("text", { x: p.x, y: p.y - 9, class: "lab" }, `${node.label} `, svgEl("tspan", { class: "num" }, String(p.n))));
+      svgEl("rect", { class: "bar", rx: 2, ...(tall ? { x: p.x, y: p.m, width: len, height: BAR } : { x: p.m, y: p.x, width: BAR, height: len }) }));
+    const name = tall ? node.short ?? node.label : node.label;
+    const line = (x, y, anchor) => svgEl("text", { x, y, class: "lab", "text-anchor": anchor }, `${name} `, svgEl("tspan", { class: "num" }, String(p.n)));
+    if (!tall) {
+      // pools named on their left, every other step above its bar
+      if (p.c === 0) g.append(svgEl("text", { x: p.m - 8, y: p.x + p.len / 2 - 2, class: "lab", "text-anchor": "end" }, node.label),
+        svgEl("text", { x: p.m - 8, y: p.x + p.len / 2 + 14, class: "num", "text-anchor": "end" }, String(p.n)));
+      else g.append(line(p.m, p.x - 9, "start"));
+    } else {
+      // pools named above, the last step below, the ones between on a card over their bar (kept inside the frame)
+      const cw = name.length * 6.6 + String(p.n).length * 9 + 20;
+      const cx = Math.min(W - 4 - cw / 2, Math.max(4 + cw / 2, p.x + p.len / 2));
+      // in the first and last rows the first bar's label starts at its left end and the second's ends at its right end
+      const pair = PROC_COLS[p.c].filter((x) => f.nodes[x] > 0), i = pair.length > 1 ? pair.indexOf(k) : -1;
+      const [ex, anchor] = i === 0 ? [p.x, "start"] : i === 1 ? [p.x + p.len, "end"] : [cx, "middle"];
+      const tx = i === 0 ? p.x + cw / 2 : i === 1 ? p.x + p.len - cw / 2 : cx; // a card in a pair lines up the same way
+      if (p.c === 0) g.append(line(ex, p.m - 9, anchor));
+      else if (p.c === last) g.append(line(ex, p.m + BAR + 17, anchor));
+      else g.append(svgEl("rect", { class: "tag", x: tx - cw / 2, y: p.m + BAR / 2 - 12, width: cw, height: 24, rx: 6 }), line(tx, p.m + BAR / 2 + 4, "middle"));
+    }
     if (pick) {
       g.classList.add("node-btn");
       g.setAttribute("role", "button");
