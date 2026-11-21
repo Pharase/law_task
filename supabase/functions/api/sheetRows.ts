@@ -122,6 +122,29 @@ export function scoredSends(task: Pick<Task, "due_on">, sends: SendRow[]): Send[
   });
 }
 
+/**
+ * Admin correction of one send (old or hand-entered history): the sent date is a real date and never after today; only a
+ * มีปรับแก้ send has a note and a next due date. Returns the Sends cells to write; throws a message an admin can read.
+ */
+export function editSendPatch(s: Pick<SendRow, "outcome">, input: { sent_on?: unknown; fix_note?: unknown; next_due_on?: unknown },
+  today: string): Record<string, string> {
+  const patch: Record<string, string> = {};
+  if (input.sent_on !== undefined) {
+    const d = normDate(String(input.sent_on ?? ""));
+    if (!d || d > today) throw new Error("วันที่ส่งต้องเป็นวันที่ และไม่เกินวันนี้ · sent date can't be in the future");
+    patch.sent_on = d;
+  }
+  if (s.outcome === "fix") {
+    if (input.fix_note !== undefined) patch.fix_note = String(input.fix_note ?? "").trim().slice(0, 2000);
+    if (input.next_due_on !== undefined) {
+      const d = normDate(String(input.next_due_on ?? ""));
+      if (!d) throw new Error("กำหนดส่งแก้ต้องเป็นวันที่ · next due date is required");
+      patch.next_due_on = d;
+    }
+  }
+  return patch;
+}
+
 const TASK_COLS = ["building", "title", "details", "tags", "owner_name", "state", "due_on", "current_due_on", "fix_round",
   "created_by", "created_at", "member_notified_at"];
 

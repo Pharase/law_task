@@ -10,7 +10,7 @@ import { taskFolderName } from "./driveName.ts";
 import { driveFileLinks, type DriveFile, dropCopies } from "./driveCopy.ts";
 import { notifyNewTasks } from "./notify-api.ts";
 import type { BubbleTask } from "./linebot.ts";
-import { recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
+import { editSendPatch, normDate, recentTaskKeys, scoredSends, type Task, taskCells, taskKey } from "./sheetRows.ts";
 import { bucket, db, found, HttpError, MAX_BYTES, type Me, MIME_EXT, must } from "./shared.ts";
 
 const today = () => bangkokDate(new Date());
@@ -423,6 +423,49 @@ export async function adminTaskActions(action: string, body: Row, me: Me): Promi
         throw new HttpError(404, "task not found");
       }
       return one(id);
+    }
+
+    case "recordSend": {
+      // the member says they sent (paper handed in, or before the app): record it for them on the day they sent;
+      // the task then waits in รอตรวจ and is reviewed as usual
+      const id = taskId(body);
+      const sent_on = normDate(String(body.sent_on ?? ""));
+      if (!sent_on || sent_on > today()) throw new HttpError(400, "วันที่ส่งต้องเป็นวันที่ และไม่เกินวันนี้ · sent date can't be in the future");
+      const delivery = body.delivery || null;
+      if (delivery && !(DELIVERY as readonly unknown[]).includes(delivery)) throw new HttpError(400, "delivery must be paper or drive");
+      const task = taskIn(await loadSheet(), id);
+      if (task.state !== "on_process") throw new HttpError(409, "บันทึกการส่งได้เฉพาะงานที่กำลังดำเนินการ · only open tasks");
+      const r = await batch([
+        { op: "update", tab: "Tasks", id, patch: { state: "submitted" }, expect: { state: "on_process" } },
+        { op: "append", tab: "Sends", rows: [{
+          task_id: String(id), sent_on, sent_at: new Date().toISOString(), due_on: task.current_due_on, outcome: "pending",
+        }] },
+      ]);
+      if (!r) throw new HttpError(409, "the task just changed; reload and try again");
+      if (delivery) {
+        const { error } = await db.from("send_delivery").insert({ send_id: Number(r[1][0].id), delivery });
+        if (error) console.error("send_delivery", error); // the send is saved; only its label is missing
+      }
+      return one(id);
+    }
+
+    case "editSend": {
+      const sendId = Number(body.send_id);
+      if (!Number.isInteger(sendId) || sendId <= 0) throw new HttpError(400, "send_id is required");
+      const data = await loadSheet();
+      const s = found(data.sends.find((x) => x.id === sendId) ?? null, "send");
+      let patch;
+      try { patch = editSendPatch(s, body, today()); } catch (e) { throw new HttpError(400, (e as Error).message); }
+      if (!Object.keys(patch).length) return one(s.task_id);
+      const steps: Step[] = [{ op: "update", tab: "Sends", id: s.id, patch }];
+      // the task's latest มีปรับแก้ sets its due date while the fix is still open, so keep the two in step
+      const task = taskIn(data, s.task_id);
+      const last = data.sends.filter((x) => x.task_id === s.task_id).sort((a, b) => a.id - b.id).at(-1);
+      if (patch.next_due_on && last?.id === s.id && task.state === "on_process") {
+        steps.push({ op: "update", tab: "Tasks", id: task.id, patch: { current_due_on: patch.next_due_on } });
+      }
+      await batch(steps);
+      return one(s.task_id);
     }
 
     case "resendNotice": {

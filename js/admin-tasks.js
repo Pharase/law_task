@@ -38,7 +38,7 @@ function adminTaskBody(t) {
     el("p", {}, ...t.tags.map((x) => el("span", { className: "tag", textContent: x }))),
     taskFolderButton(t), // every task, so old (history) tasks' sent files can be opened too
     t.sends.length > 0 && el("ol", { className: "timeline" }, ...t.sends.map((s) => el("li", {},
-      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s),
+      `ส่ง ${thDate(s.sent_on)} (กำหนด ${thDate(s.due_on)})${deliveryNote(s)} → `, outcomeTag(s), " ", ...sendEditor(s),
       s.fix_note ? el("div", { className: "muted pre", textContent: s.fix_note }) : null))),
     files.length > 0 && el("ul", {}, ...files),
   );
@@ -146,8 +146,48 @@ function reviewControls(t) {
   return box;
 }
 
+/** ✏️ on a history line: correct the sent date (old / hand-entered records); a มีปรับแก้ also its note and new due date. */
+function sendEditor(s) {
+  const fix = s.outcome === "fix";
+  const date = el("input", { type: "date", value: s.sent_on, max: bkkToday(), required: true });
+  const note = fix && el("textarea", { rows: 2, maxLength: 2000, value: s.fix_note ?? "" });
+  const next = fix && el("input", { type: "date", value: s.next_due_on ?? "", required: true });
+  const form = el("form", { hidden: true }, el("label", { textContent: "วันที่ส่ง" }), date,
+    fix && el("label", { textContent: "สิ่งที่ต้องแก้ไข" }), note, fix && el("label", { textContent: "กำหนดส่งแก้" }), next,
+    el("button", { textContent: "บันทึก" }));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    try { await locked(form, () => api("editSend", { send_id: s.id, sent_on: date.value, ...(fix ? { fix_note: note.value, next_due_on: next.value } : {}) })); loadAll(); }
+    catch (err) { alert(err.message); }
+  };
+  const btn = el("button", { type: "button", className: "icon-btn", textContent: "✏️", title: "แก้ไขประวัติการส่ง", ariaLabel: "แก้ไขประวัติการส่ง" });
+  btn.onclick = () => { form.hidden = !form.hidden; };
+  return [btn, form];
+}
+
+/** The member says they already sent: record it on the day they sent; the task moves to รอตรวจ and is reviewed as usual. */
+function recordSendControls(t, box) {
+  const date = el("input", { type: "date", value: bkkToday(), max: bkkToday(), required: true });
+  const how = el("select", {}, option("", "ไม่ระบุวิธีส่ง"), option("paper", DELIVERY_TEXT.paper), option("drive", DELIVERY_TEXT.drive));
+  const form = el("form", { hidden: true }, el("label", { textContent: "วันที่ผู้รับงานส่งจริง" }), date, el("label", { textContent: "วิธีส่ง" }), how,
+    el("button", { textContent: "บันทึกการส่ง" }), el("p", { className: "muted small-note", textContent: "งานจะย้ายไปที่ รอตรวจ แล้วตรวจตามปกติ" }));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    try { await locked(box, () => api("recordSend", { task_id: t.id, sent_on: date.value, delivery: how.value || null })); loadAll(); }
+    catch (err) { alert(err.message); }
+  };
+  const btn = el("button", { type: "button", className: "small secondary", textContent: "📥 บันทึกว่าส่งแล้ว" });
+  btn.onclick = () => { form.hidden = !form.hidden; };
+  return [btn, form];
+}
+
 function editControls(t) {
-  if (t.sends.length || t.state !== "on_process") return null;
+  if (t.state !== "on_process") return null;
+  const box = el("div", {});
+  if (t.sends.length) { // edit / cancel only before the first send
+    box.append(...recordSendControls(t, box));
+    return box;
+  }
   const title = el("input", { value: t.title, maxLength: 200, required: true });
   const due = el("input", { type: "date", value: t.current_due_on, min: bkkToday(), required: true });
   const form = el("form", { hidden: true }, el("label", { textContent: "หัวข้อ" }), title, el("label", { textContent: "กำหนดส่ง" }), due,
@@ -164,7 +204,7 @@ function editControls(t) {
     if (!confirm(`ยกเลิกงาน "${t.title}"?`)) return;
     try { await locked(box, () => api("cancelTask", { task_id: t.id })); loadAll(); } catch (err) { alert(err.message); }
   };
-  const box = el("div", {}, edit, cancel, form);
+  box.append(edit, cancel, form, ...recordSendControls(t, box));
   return box;
 }
 
