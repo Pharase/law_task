@@ -296,32 +296,36 @@ const FLOW_NODE = {
  * `width` = the frame's width in px: drawn 1:1 so text stays its normal size; narrower than MIN_W it scales down.
  */
 function sankey(f, { pick = null, canPick = () => !!pick, selected = null, width = 0 } = {}) {
-  const MIN_W = 396, GAP = 14, MIN_H = 30, BAR = 12, PAD = 20; // PAD: room above and below for the edge labels
+  const MIN_W = 396, MIN_H = 30, BAR = 12, PAD = 20, SPLIT = 4; // PAD: room above and below for the edge labels
+  const FILL = 0.55; // bars take this share of the height; the rest is open space between them, so the flows branch like roots
   const W = Math.max(MIN_W, Math.round(width)), H = W > 700 ? 340 : 300;
   const LABEL = W > 700 ? 130 : 112; // room for the outer columns' labels
   const colX = [LABEL, (W - BAR) / 2, W - LABEL - BAR];
   const at = {}; // node -> { x, y, h, n, c }
   FLOW_ROWS.forEach((col, c) => {
     const keys = col.filter((k) => f.nodes[k] > 0);
-    const avail = H - 2 * PAD - GAP * (keys.length - 1);
+    const avail = (H - 2 * PAD) * FILL;
     let h = keys.map((k) => Math.max(MIN_H, (f.nodes[k] / f.total) * avail));
     const over = h.reduce((a, b) => a + b, 0) - avail, room = h.reduce((a, b) => a + (b - MIN_H), 0);
     if (over > 0 && room > 0) h = h.map((x) => MIN_H + (x - MIN_H) * (1 - over / room)); // the minimums' extra comes from the big ones
-    let y = (H - h.reduce((a, b) => a + b, 0) - GAP * (keys.length - 1)) / 2;
-    keys.forEach((k, i) => { at[k] = { x: colX[c], y, h: h[i], n: f.nodes[k], c }; y += h[i] + GAP; });
+    const free = H - 2 * PAD - h.reduce((a, b) => a + b, 0), gap = keys.length > 1 ? free / (keys.length - 1) : 0;
+    let y = keys.length > 1 ? PAD : (H - h[0]) / 2; // spread over the height; a lone bar sits in the middle
+    keys.forEach((k, i) => { at[k] = { x: colX[c], y, h: h[i], n: f.nodes[k], c }; y += h[i] + gap; });
   });
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey", role: "group", "aria-label": "ภาพรวมงาน" });
 
-  // bands: each end takes its share of the bar it touches, top to bottom so bands don't cross needlessly
+  // bands: each end takes its share of the bar it touches, top to bottom so bands don't cross needlessly, with a SPLIT
+  // gap between neighbouring bands so they visibly part like roots
   const order = (k) => at[k].y;
   const links = f.links.filter(([a, b, n]) => n > 0 && at[a] && at[b]);
   const port = (side, sortBy) => {
-    const used = {}, out = new Map();
+    const used = {}, out = new Map(), count = {};
+    for (const l of links) count[l[side]] = (count[l[side]] ?? 0) + 1;
     for (const l of [...links].sort(sortBy)) {
-      const k = l[side], p = at[k], h = (l[2] / p.n) * p.h;
+      const k = l[side], p = at[k], h = (l[2] / p.n) * (p.h - SPLIT * (count[k] - 1));
       used[k] = used[k] ?? p.y;
       out.set(l, [used[k], h]);
-      used[k] += h;
+      used[k] += h + SPLIT;
     }
     return out;
   };
