@@ -247,15 +247,18 @@ function taskFilesBox(task) {
 
 
 // ---- Home dashboard (members: own tasks; admins: whole team) ----
-// The chart is the ภาพรวมงาน Sankey (sankey(), counts from the server taskFlow); HOME_STATUS only names each task card's badge.
+// Donut = tasks ASSIGNED this month (Bangkok), by status. Older unfinished tasks sit in "งานคงค้างอื่นๆ"; older finished ones leave Home.
+// Colors checked with the dataviz palette validator (dark glass surface #221d19, ring order incl. the wrap-around pair);
+// all pass 3:1 on the dark surface; the legend still names and counts every status.
 const TAG_LIST = ["ความถูกต้อง", "เสนออนุมัติ/ลงนามกรรมการ", "ติดตามความคืบหน้าคดี", "การประสานงาน"];
 const HOME_STATUS = [
-  { key: "todo", label: "รอดำเนินการ" },
-  { key: "fix", label: "รอแก้ไข" },
-  { key: "review", label: "รอตรวจสอบ" },
-  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา" },
-  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า" },
+  { key: "todo", label: "รอดำเนินการ", color: "#3987e5" },
+  { key: "fix", label: "รอแก้ไข", color: "#d55181" },
+  { key: "review", label: "รอตรวจสอบ", color: "#c98500" },
+  { key: "ontime", label: "เสร็จสิ้น · ส่งตรงเวลา", color: "#199e70" },
+  { key: "late", label: "เสร็จสิ้น · ส่งล่าช้า", color: "#d95926" },
 ];
+const bkkMonth = (iso) => (iso ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date(iso)).slice(0, 7) : "");
 
 /** Status key for Home. "late" = the approved send came after that round's due date. */
 function homeStatus(t) {
@@ -267,12 +270,117 @@ function homeStatus(t) {
   return t.fix_round > 0 ? "fix" : "todo";
 }
 
-/** SVG element with attributes (el() makes HTML elements, which SVG can't use). */
-function svgEl(tag, attrs = {}, ...kids) {
-  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  e.append(...kids.filter(Boolean));
-  return e;
+function donut(parts, total, onPick) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const R = 48, C = 2 * Math.PI * R, GAP = 1.5; // ~2px surface gap between segments at 160px
+  const svg = svgEl("svg", { viewBox: "0 0 120 120", class: "donut", role: "img", "aria-label": `งานเดือนนี้ ${total}` });
+  svg.append(svgEl("circle", { cx: 60, cy: 60, r: R, class: "donut-track" }));
+  const shown = parts.filter((p) => p.n);
+  const segs = new Map();
+  let offset = 0;
+  for (const p of shown) {
+    const len = (p.n / total) * C;
+    const seg = svgEl("circle", {
+      cx: 60, cy: 60, r: R, class: "donut-seg", stroke: p.color, transform: "rotate(-90 60 60)",
+      "stroke-dasharray": `${Math.max(len - (shown.length > 1 ? GAP : 0), 0.5)} ${C}`, "stroke-dashoffset": -offset,
+    });
+    seg.addEventListener("click", () => onPick(p));
+    seg.addEventListener("mouseenter", () => center(p));
+    seg.addEventListener("mouseleave", () => center(null));
+    segs.set(p, seg);
+    svg.append(seg);
+    offset += len;
+  }
+  const big = svgEl("text", { x: 60, y: 58, class: "donut-num" });
+  const small = svgEl("text", { x: 60, y: 76, class: "donut-sub" });
+  svg.append(big, small);
+  function center(p) {
+    big.textContent = p ? p.n : total;
+    small.textContent = p ? `${p.label.split(" · ").at(-1)} ${Math.round((p.n / total) * 100)}%` : "งานเดือนนี้";
+    for (const [q, seg] of segs) seg.classList.toggle("dim", !!p && q !== p);
+  }
+  center(null);
+  return { svg, center };
+}
+
+// ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
+// turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
+let linkUsed = false;
+let homeKey = null; // the status group being looked at: kept when the list reloads or auto-refreshes
+
+/** Home tasks: the whole team for admins, your own for members. */
+const homeTasks = (me) => (me.role === "admin" ? api("listTasks", {}) : api("myTasks"));
+
+/** Draws Home from `data` (auto refresh) or a fresh load; returns the tasks it drew. */
+async function renderHome(me, data) {
+  const today = bkkToday(), month = today.slice(0, 7);
+  const isAdmin = me.role === "admin";
+  const reload = () => renderHome(me);
+  const raw = data ?? await homeTasks(me);
+  const all = raw.filter((t) => t.state !== "cancelled");
+  if (isAdmin && $("trackDot")) {
+    // red dot on "ติดตามงาน": how many sent tasks wait for review (อนุมัติ / ไม่อนุมัติ)
+    const waiting = all.filter((t) => t.state === "submitted").length;
+    $("trackDot").hidden = !waiting;
+    $("trackDot").textContent = waiting > 99 ? "99+" : waiting;
+    $("trackBtn").setAttribute("aria-label", `ติดตามงาน · Tracking: รอตรวจ ${waiting} งาน`);
+  }
+  const thisMonth = all.filter((t) => bkkMonth(t.created_at) === month);
+  const older = all.filter((t) => bkkMonth(t.created_at) !== month && t.state !== "approved");
+  const parts = HOME_STATUS.map((s) => ({ ...s, tasks: thisMonth.filter((t) => homeStatus(t) === s.key) })).map((p) => ({ ...p, n: p.tasks.length }));
+  const backlog = { key: "older", label: "งานคงค้างอื่นๆ", color: "#9a9a94", tasks: older, n: older.length };
+
+  $("dashTitle").textContent = `${isAdmin ? "ภาพรวมงานทีม" : "ภาพรวมงานของฉัน"} · ${new Date(today + "T00:00:00+07:00").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}`;
+  const statusText = Object.fromEntries(HOME_STATUS.map((s) => [s.key, s.label]));
+  let selected = null;
+  const pick = (p) => {
+    selected = p;
+    homeKey = p.key;
+    for (const row of legend.children) row.classList.toggle("selected", row.dataset.key === p.key);
+    $("dashListTitle").textContent = `${p.label} (${p.n})`;
+    const sorted = [...p.tasks].sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
+    $("dashList").replaceChildren(...(sorted.length
+      ? sorted.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
+      : [el("p", { className: "muted", textContent: "ไม่มีงาน" })]));
+  };
+
+  const chart = thisMonth.length ? donut(parts, thisMonth.length, pick) : null;
+  // The legend is also the table view: every status with its count and share, even when 0, plus the backlog row.
+  const row = (p, share) => {
+    const li = el("li", { tabIndex: 0 },
+      el("span", { className: "swatch" + (p === backlog ? " hollow" : ""), style: `--c:${p.color}` }),
+      el("span", { className: "grow", textContent: p.label }),
+      el("strong", { textContent: p.n }),
+      el("span", { className: "muted pct", textContent: share }));
+    li.dataset.key = p.key;
+    li.onclick = () => pick(p);
+    li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(p); } };
+    if (chart && p !== backlog) { li.onmouseenter = li.onfocus = () => chart.center(p); li.onmouseleave = li.onblur = () => chart.center(null); }
+    return li;
+  };
+  const legend = el("ul", { className: "legend" },
+    ...parts.map((p) => row(p, thisMonth.length ? `${Math.round((p.n / thisMonth.length) * 100)}%` : "-")),
+    row(backlog, ""));
+  legend.lastChild.classList.add("backlog");
+  $("dashChart").replaceChildren(chart ? chart.svg : el("p", { className: "muted donut-empty", textContent: "ยังไม่มีงานที่มอบหมายเดือนนี้" }), legend);
+
+  // Open the list people most likely need: work to fix or do first, then waiting review, then the backlog.
+  const before = homeKey && [...parts, backlog].find((p) => p.key === homeKey);
+  pick(before ?? [parts[1], parts[0], parts[2], backlog].find((p) => p.n) ?? parts[0]);
+
+  const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
+  linkUsed = true;
+  if (linkedId) history.replaceState(null, "", location.pathname);
+  const linked = linkedId && all.find((t) => t.id === linkedId);
+  const group = linked && [...parts, backlog].find((p) => p.tasks.includes(linked));
+  if (group) {
+    pick(group);
+    const item = $("dashList").querySelector(`[data-task="${linked.id}"]`);
+    item.open = true;
+    item.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  return raw;
 }
 
 // Tasks page blocks (admin/tasks.html drawFlow) name and colour their stages from here
@@ -286,225 +394,6 @@ const FLOW_NODE = {
   late: { label: "ช้า / เลยกำหนด", color: "#ff4d5e" },
 };
 
-// Home ภาพรวมงาน: the work process, left to right, each task placed by its latest status
-const PROC_COLS = [["new", "carried"], ["doing"], ["ok", "late"], ["approved", "fix"]];
-const PROC_NODE = {
-  new: FLOW_NODE.new, carried: FLOW_NODE.carried,
-  doing: { label: "กำลังทำ", color: "#ff9f1c" },
-  ok: { label: "รอตรวจ · ตรงเวลา", short: "ตรงเวลา", color: "#02d7f4" }, // short: on the narrow (tall) chart
-  late: { label: "รอตรวจ · ช้า", short: "ช้า", color: "#ff4d5e" },
-  approved: { label: "อนุมัติ", color: "#39ff14" },
-  fix: { label: "แก้ไข", color: "#ff7a45" },
-};
-const PROC_STAY = { doing: "ยังไม่ส่ง", ok: "รอตรวจอยู่", late: "รอตรวจอยู่" }; // tasks whose latest status is this step
-
-/**
- * The process of the tasks in taskFlow's two pools (open tasks + approved this month), by each task's latest status:
- * every task enters กำลังทำ; one never sent (or only กดผิด) stays there; its latest send is on time or late against that
- * send's due date (else the task's current one) and stays there while pending, or goes on to อนุมัติ / แก้ไข.
- * Returns { total, nodes, links: [from, to, n] in drawing order, stays: { node: n }, ids: { node | "stay_"+node: id[] } }.
- */
-function processFlow(flow, tasks) {
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const ids = {}, add = (k, id) => (ids[k] ??= []).push(id);
-  const count = new Map(), link = (a, b) => count.set(`${a}>${b}`, (count.get(`${a}>${b}`) ?? 0) + 1);
-  for (const origin of ["new", "carried"]) for (const id of flow.ids[origin] ?? []) {
-    const t = byId.get(id);
-    if (!t) continue;
-    add(origin, id); add("doing", id); link(origin, "doing");
-    const s = (t.sends ?? []).filter((x) => x.outcome !== "void").at(-1);
-    if (!s) { add("stay_doing", id); continue; }
-    const timing = s.sent_on > (s.due_on || t.current_due_on) ? "late" : "ok";
-    add(timing, id); link("doing", timing);
-    if (s.outcome === "pending") { add("stay_" + timing, id); continue; }
-    const end = s.outcome === "approved" ? "approved" : "fix";
-    add(end, id); link(timing, end);
-  }
-  const n = (k) => ids[k]?.length ?? 0;
-  const order = [["new", "doing"], ["carried", "doing"], ["doing", "ok"], ["doing", "late"], ["ok", "approved"], ["ok", "fix"], ["late", "approved"], ["late", "fix"]];
-  return {
-    total: n("doing"),
-    nodes: Object.fromEntries(Object.keys(PROC_NODE).map((k) => [k, n(k)])),
-    links: order.map(([a, b]) => [a, b, count.get(`${a}>${b}`) ?? 0]).filter((l) => l[2] > 0),
-    stays: Object.fromEntries(Object.keys(PROC_STAY).map((k) => [k, n("stay_" + k)])),
-    ids,
-  };
-}
-
-/**
- * Sankey of processFlow: thin bars whose length is their number of tasks (one scale for the whole chart), bands that fade
- * from colour to colour, and a short grey stub for tasks still in a step (ยังไม่ส่ง / รอตรวจอยู่). Wide frames read left
- * to right (pool names on the left, other steps named above their bar); frames under TALL_BELOW px read top to bottom
- * (pools named above, the last step below, the steps between on a small card over their bar), so phones need no
- * sideways scroll. pick(key) makes bar + label a button; `selected` outlines one. `width` = the frame's width, drawn 1:1.
- */
-const TALL_BELOW = 560;
-function sankey(f, { pick = null, selected = null, width = 0 } = {}) {
-  const tall = width > 0 && width < TALL_BELOW;
-  const BAR = 12, STUB = tall ? 30 : 40, last = PROC_COLS.length - 1;
-  // layout along the flow ("main": x when wide, y when tall) and across it ("cross")
-  let W, H, K, mainOf, start, GAP;
-  if (tall) {
-    W = Math.max(300, Math.round(width));
-    GAP = [16, 0, 40, 40];
-    K = (W - 24 - 40) / f.total; // 12px margins, room for one gap in a row
-    mainOf = (c) => 34 + c * 104;
-    start = () => 12;
-    H = mainOf(last) + BAR + 30;
-  } else {
-    W = Math.max(600, Math.round(width));
-    const PLOT = W > 800 ? 260 : 230, LEFT = 120, RIGHT = 80;
-    GAP = [16, 0, 34, 34]; // 34 fits the label above the lower bar
-    K = PLOT / f.total;
-    mainOf = (c) => LEFT + (c / last) * (W - LEFT - RIGHT - BAR);
-    start = () => 30;
-  }
-  const at = {};
-  PROC_COLS.forEach((col, c) => {
-    const keys = col.filter((k) => f.nodes[k] > 0);
-    const tot = keys.reduce((a, k) => a + f.nodes[k] * K, 0) + GAP[c] * (keys.length - 1);
-    let x = c === 0 ? start() + (f.total * K - tot) / 2 : start(); // the pools sit level with กำลังทำ
-    for (const k of keys) { at[k] = { m: mainOf(c), x, len: f.nodes[k] * K, n: f.nodes[k], c }; x += at[k].len + GAP[c]; }
-  });
-  if (!tall) H = Math.ceil(Math.max(...Object.values(at).map((p) => p.x + p.len))) + 12;
-  const P = tall ? (m, x) => `${x},${m}` : (m, x) => `${m},${x}`;
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "sankey" + (tall ? " tall" : ""), role: "group", "aria-label": "ภาพรวมงาน" });
-  const defs = svgEl("defs");
-  svg.append(defs);
-  const grad = (id, a, b, m1, m2) => defs.append(svgEl("linearGradient", {
-    id, gradientUnits: "userSpaceOnUse", ...(tall ? { x1: 0, x2: 0, y1: m1, y2: m2 } : { x1: m1, x2: m2, y1: 0, y2: 0 }),
-  }, svgEl("stop", { offset: 0, "stop-color": a }), svgEl("stop", { offset: 1, "stop-color": b })));
-
-  // ports are handed out in the order the flows are listed (processFlow keeps them in order), then the stub
-  const out = {}, inn = {};
-  f.links.forEach(([a, b, n], i) => {
-    const A = at[a], B = at[b], h = n * K, xa = out[a] ?? A.x, xb = inn[b] ?? B.x;
-    out[a] = xa + h; inn[b] = xb + h;
-    const ma = A.m + BAR, mb = B.m, mm = (ma + mb) / 2;
-    grad(`flowg${i}`, PROC_NODE[a].color, PROC_NODE[b].color, ma, mb);
-    svg.append(svgEl("path", {
-      class: "band", fill: `url(#flowg${i})`,
-      d: `M${P(ma, xa)} C${P(mm, xa)} ${P(mm, xb)} ${P(mb, xb)} L${P(mb, xb + h)} C${P(mm, xb + h)} ${P(mm, xa + h)} ${P(ma, xa + h)} Z`,
-    }, svgEl("title", {}, `${PROC_NODE[a].label} → ${PROC_NODE[b].label}: ${n} งาน`)));
-  });
-  for (const [k, n] of Object.entries(f.stays)) {
-    if (!n || !at[k]) continue;
-    const h = n * K, x = out[k] ?? at[k].x, m = at[k].m + BAR;
-    grad(`stay${k}`, PROC_NODE[k].color, "rgba(154,163,173,0)", m, m + STUB);
-    svg.append(svgEl("path", { class: "band", fill: `url(#stay${k})`, d: `M${P(m, x)} L${P(m + STUB, x)} L${P(m + STUB, x + h)} L${P(m, x + h)} Z` },
-      svgEl("title", {}, `${PROC_STAY[k]}: ${n} งาน`)),
-      tall ? svgEl("text", { x: x + h / 2, y: m + STUB + 12, class: "stay", "text-anchor": "middle" }, `${PROC_STAY[k]} ${n}`)
-        : svgEl("text", { x: m + STUB + 6, y: x + h / 2 + 4, class: "stay" }, `${PROC_STAY[k]} ${n}`));
-  }
-
-  for (const [k, p] of Object.entries(at)) {
-    const node = PROC_NODE[k], len = Math.max(2, p.len);
-    const g = svgEl("g", { class: "node" + (k === selected ? " selected" : ""), style: `--k:${node.color}` },
-      svgEl("rect", { class: "bar", rx: 2, ...(tall ? { x: p.x, y: p.m, width: len, height: BAR } : { x: p.m, y: p.x, width: BAR, height: len }) }));
-    const name = tall ? node.short ?? node.label : node.label;
-    const line = (x, y, anchor) => svgEl("text", { x, y, class: "lab", "text-anchor": anchor }, `${name} `, svgEl("tspan", { class: "num" }, String(p.n)));
-    if (!tall) {
-      // pools named on their left, every other step above its bar
-      if (p.c === 0) g.append(svgEl("text", { x: p.m - 8, y: p.x + p.len / 2 - 2, class: "lab", "text-anchor": "end" }, node.label),
-        svgEl("text", { x: p.m - 8, y: p.x + p.len / 2 + 14, class: "num", "text-anchor": "end" }, String(p.n)));
-      else g.append(line(p.m, p.x - 9, "start"));
-    } else {
-      // pools named above, the last step below, the ones between on a card over their bar (kept inside the frame)
-      const cw = name.length * 6.6 + String(p.n).length * 9 + 20;
-      const cx = Math.min(W - 4 - cw / 2, Math.max(4 + cw / 2, p.x + p.len / 2));
-      // in the first and last rows the first bar's label starts at its left end and the second's ends at its right end
-      const pair = PROC_COLS[p.c].filter((x) => f.nodes[x] > 0), i = pair.length > 1 ? pair.indexOf(k) : -1;
-      const [ex, anchor] = i === 0 ? [p.x, "start"] : i === 1 ? [p.x + p.len, "end"] : [cx, "middle"];
-      const tx = i === 0 ? p.x + cw / 2 : i === 1 ? p.x + p.len - cw / 2 : cx; // a card in a pair lines up the same way
-      if (p.c === 0) g.append(line(ex, p.m - 9, anchor));
-      else if (p.c === last) g.append(line(ex, p.m + BAR + 17, anchor));
-      else g.append(svgEl("rect", { class: "tag", x: tx - cw / 2, y: p.m + BAR / 2 - 12, width: cw, height: 24, rx: 6 }), line(tx, p.m + BAR / 2 + 4, "middle"));
-    }
-    if (pick) {
-      g.classList.add("node-btn");
-      g.setAttribute("role", "button");
-      g.setAttribute("tabindex", "0");
-      g.setAttribute("aria-label", `${node.label} ${p.n} งาน: ดูรายการ`);
-      if (k === selected) g.setAttribute("aria-pressed", "true");
-      g.addEventListener("click", () => pick(k));
-      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(k); } });
-    }
-    svg.append(g);
-  }
-  return svg;
-}
-
-/** The line under a Sankey: who and what it covers, fix rounds, the longest wait for review. */
-const flowNote = (f, team) => [team && `${f.people} คน · ${f.buildings} นิติ`, `${f.total} งาน`, `แก้อยู่ ${f.fixing}`,
-  f.nodes.waiting && `รอตรวจนานสุด ${f.longestWait} วัน`].filter(Boolean).join(" · ");
-
-// ?task=N: opened from the LINE bubble's ส่งงาน button. Read on the first render (after liff.init has
-// turned liff.state back into ?task=N), then dropped from the URL so later reloads don't jump again.
-let linkUsed = false;
-let homeKey = null; // the step being looked at: kept when the list reloads or auto-refreshes
-let homeRedraw = null; // redraws the Sankey at the frame's new width (window resized / phone turned)
-let resizeTimer = 0;
-addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => homeRedraw?.(), 150); });
-
-/** Home tasks: the whole team for admins, your own for members. */
-const homeTasks = (me) => (me.role === "admin" ? api("listTasks", {}) : api("myTasks"));
-
-/** Draws Home from `data` (auto refresh) or a fresh load; returns the tasks it drew. */
-async function renderHome(me, data) {
-  const today = bkkToday();
-  const isAdmin = me.role === "admin";
-  const reload = () => renderHome(me);
-  // the tasks (with sends, for the cards and each task's latest status) and the pools; the server scopes both for members
-  const [raw, flow] = await Promise.all([data ?? homeTasks(me), api("taskFlow")]);
-  const all = raw.filter((t) => t.state !== "cancelled");
-  if (isAdmin && $("trackDot")) {
-    // red dot on "ติดตามงาน": how many sent tasks wait for review (อนุมัติ / ไม่อนุมัติ)
-    const waiting = all.filter((t) => t.state === "submitted").length;
-    $("trackDot").hidden = !waiting;
-    $("trackDot").textContent = waiting > 99 ? "99+" : waiting;
-    $("trackBtn").setAttribute("aria-label", `ติดตามงาน · Tracking: รอตรวจ ${waiting} งาน`);
-  }
-
-  $("dashTitle").textContent = `${isAdmin ? "ภาพรวมงานทีม" : "ภาพรวมงานของฉัน"} · ${new Date(today + "T00:00:00+07:00").toLocaleDateString("th-TH", { month: "long", year: "numeric" })}`;
-  const proc = processFlow(flow, all);
-  const byId = new Map(all.map((t) => [t.id, t]));
-  // กำลังทำ holds every task, so tapping it lists the ones not sent yet
-  const idsOf = (k) => proc.ids[k === "doing" ? "stay_doing" : k] ?? [];
-  const titleOf = (k) => (k === "doing" ? "กำลังทำ · ยังไม่ส่ง" : PROC_NODE[k].label);
-  const statusText = Object.fromEntries(HOME_STATUS.map((s) => [s.key, s.label]));
-  const pick = (k) => {
-    homeKey = k;
-    const tasks = idsOf(k).map((id) => byId.get(id)).sort((a, b) => a.current_due_on.localeCompare(b.current_due_on));
-    draw(k);
-    $("dashListTitle").textContent = `${titleOf(k)} (${tasks.length})`;
-    $("dashList").replaceChildren(...(tasks.length
-      ? tasks.map((t) => taskItem(t, today, reload, { admin: isAdmin, status: statusText[homeStatus(t)] }))
-      : [el("p", { className: "muted", textContent: "ไม่มีงาน" })]));
-  };
-  // every bar opens its tasks below; the tapped one is outlined
-  const draw = (selected) => $("dashChart").replaceChildren(...(proc.total
-    ? [el("div", { className: "sankey-wrap" }, sankey(proc, { pick, selected, width: $("dashChart").clientWidth })),
-      el("p", { className: "muted small-note flow-sub", textContent: flowNote(flow, isAdmin) })]
-    : [el("p", { className: "muted", textContent: "ยังไม่มีงานที่เปิดอยู่หรืออนุมัติในเดือนนี้" })]));
-
-  homeRedraw = () => draw(homeKey);
-
-  // Open the list people most likely need: not sent yet, sent back, then waiting review, then the rest
-  const has = (k) => !!k && idsOf(k).length > 0;
-  pick(has(homeKey) ? homeKey : ["doing", "fix", "late", "ok", "approved", "new", "carried"].find(has) ?? "doing");
-
-  const linkedId = !linkUsed && Number(new URLSearchParams(location.search).get("task"));
-  linkUsed = true;
-  if (linkedId) history.replaceState(null, "", location.pathname);
-  const stage = linkedId && ["doing", "fix", "approved", "late", "ok"].find((k) => idsOf(k).includes(linkedId));
-  if (stage) {
-    pick(stage);
-    const item = $("dashList").querySelector(`[data-task="${linkedId}"]`);
-    item.open = true;
-    item.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  return raw;
-}
 
 // ---- Ex Doc groups (Button C and admin/exdoc.html) ----
 const NO_GROUP = "อื่นๆ · ไม่มีกลุ่ม";

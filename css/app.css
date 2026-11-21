@@ -199,6 +199,26 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
 .person.org { flex-wrap: nowrap; } /* name left, role right, even on phones */
 .person.org .person-id { flex: 1 1 auto; }
 
+/* ---- Home dashboard: donut + legend (the legend doubles as the table view) ---- */
+.dash { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
+.donut { width: 168px; height: 168px; flex: none; filter: drop-shadow(0 0 22px rgba(2, 215, 244, .12)); }
+.donut circle { fill: none; stroke-width: 16; }
+.donut-track { stroke: rgba(255, 255, 255, .06); }
+.donut-seg { transition: opacity .15s; cursor: pointer; }
+.donut-seg.dim { opacity: .2; }
+.donut-num { font-size: 26px; font-weight: 600; text-anchor: middle; fill: var(--ink); font-family: var(--font); }
+.donut-sub { font-size: 9px; text-anchor: middle; fill: var(--ink-2); font-family: var(--font); }
+.donut-empty { width: 168px; text-align: center; }
+.legend { list-style: none; padding: 0; margin: 0; flex: 1 1 220px; }
+.legend li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-top: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: background .15s; }
+.legend li:first-child { border-top: 0; }
+.legend li[tabindex="0"]:hover, .legend li:focus { background: rgba(255, 255, 255, .05); outline: none; }
+.legend li.selected { background: rgba(79, 99, 240, .16); box-shadow: inset 3px 0 0 var(--blue-hi); }
+.legend li.backlog { border-top: 1px dashed var(--line-2); margin-top: 4px; }
+.legend .swatch { width: 12px; height: 12px; border-radius: 4px; flex: none; background: var(--c); box-shadow: 0 0 10px var(--c); }
+.legend .swatch.hollow { background: transparent; box-sizing: border-box; border: 2px dashed var(--c); box-shadow: none; }
+.legend .pct { width: 3em; text-align: right; }
+
 .tools { flex-wrap: wrap; gap: 8px; }
 .small-note { font-size: 13px; margin-top: -6px; }
 /* a note right under buttons (not under a card title) gets breathing room */
@@ -469,6 +489,8 @@ dialog.modal::backdrop { background: rgba(0, 0, 0, .72); }
   th, td { padding: 7px 6px; }
   .task { padding: 8px 0 8px 8px; }
   .doc-row, .person { padding: 8px 0; }
+  .legend li { padding: 7px 8px; }
+  .donut, .donut-empty { width: 140px; height: 140px; }
   .inv-amount { font-size: 15px; }
   dialog.modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
   /* menu: logo, ☰, account on one row; ☰ opens the page links as a list under it */
@@ -544,24 +566,6 @@ details[open] > summary .due-head { display: none; }
 .journey li.now strong { color: var(--k); }
 .j-tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: .78em; font-weight: 600; color: #000; background: var(--k); }
 
-/* Home ภาพรวมงาน: the work process as a left-to-right Sankey (js sankey); phones get it top to bottom (.tall) */
-.sankey-wrap { overflow-x: auto; }
-.sankey { display: block; width: 100%; min-width: 600px; height: auto; margin: 6px 0 0; font-family: var(--font); } /* drawn at the frame width (js sankey) */
-.sankey .band { opacity: .4; transition: opacity .15s; }
-.sankey .band:hover { opacity: .55; }
-.sankey.tall { min-width: 0; }
-.sankey .bar { fill: var(--k); }
-.sankey .tag { fill: rgba(11, 13, 16, .9); stroke: color-mix(in srgb, var(--k) 55%, transparent); stroke-width: 1; }
-.sankey text { fill: var(--ink); pointer-events: none; }
-.sankey .num { font-size: 14px; font-weight: 700; fill: var(--k); }
-.sankey .lab { font-size: 12px; font-weight: 500; }
-.sankey .stay { font-size: 11px; fill: var(--ink-2); } /* ยังไม่ส่ง / รอตรวจอยู่ beside a stub */
-.sankey .node-btn { cursor: pointer; outline: none; }
-.sankey .node-btn text { pointer-events: auto; } /* the label is part of the button, not only the thin bar */
-.sankey .node-btn:hover .lab, .sankey .node.selected .lab { text-decoration: underline; }
-.sankey .node-btn:focus-visible .bar, .sankey .node.selected .bar { stroke: #fff; stroke-width: 2; }
-.sankey .node-btn:focus-visible .tag, .sankey .node.selected .tag { stroke: #fff; }
-.flow-sub { text-align: center; margin-top: 6px; }
 /* ภาพรวมงานทีม on the tasks page: one block per stage, the same counts as the Sankey; tap a block to see its tasks */
 .flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; }
 .flow-arrow { align-self: center; color: var(--ink-2); font-size: 1.1em; opacity: .7; }
