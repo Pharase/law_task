@@ -146,8 +146,14 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
     }
 
     case "deleteInvoice": {
-      // the sheet row only; its Drive folder of files stays (restorable by hand)
+      // its Drive folder goes to the trash first (restorable there for 30 days), then the sheet row
       const inv = await invoiceFor(me, body.id);
+      const files = await driveFiles(inv);
+      await sheet("invoiceFolderDelete", { id: inv.id }).catch((e) => {
+        if (isUnknownOp(e)) throw new HttpError(503, "ยังลบไม่ได้: แอดมินต้อง Deploy → New version ใน Apps Script ก่อน");
+        throw e;
+      });
+      await Promise.all(files.map((f) => dropCopies(f.id)));
       await sheet("deleteRows", { tab: "Invoices", key: "id", values: [String(inv.id)] });
       return withNewFiles(me, await loadInvoices());
     }

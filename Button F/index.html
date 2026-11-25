@@ -311,7 +311,7 @@
     $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
     $("delBtn").onclick = async (e) => {
       const f = $("invForm"), btn = e.currentTarget, id = f.elements.id.value;
-      if (!id || !confirm(`ลบรายการเบิก "${f.subject.value}" ของ ${f.building.value} ?\nลบแล้วกู้คืนไม่ได้`)) return;
+      if (!id || !confirm(`ลบรายการเบิก "${f.subject.value}" ของ ${f.building.value} ?\nลบแล้วกู้คืนไม่ได้ (ไฟล์แนบไปที่ถังขยะของ Google Drive)`)) return;
       btn.disabled = true;
       try { data = await api("deleteInvoice", { id }); render(); f.hidden = true; }
       catch (err) { $("formMsg").textContent = err.message; }

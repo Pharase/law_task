@@ -57,6 +57,11 @@ function dispatch(body) {
     case "invoiceUpload": return folderUpload("inv", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
     case "invoiceFileData": var inf = folderFile("inv", body.id, String(body.fileId || "")); return { name: inf.getName(), base64: Utilities.base64Encode(inf.getBlob().getBytes()) };
     case "invoiceFileDelete": folderFile("inv", body.id, String(body.fileId || "")).setTrashed(true); return { ok: true };
+    case "invoiceFolderDelete": // the invoice was deleted: its folder to Drive's trash (restorable for 30 days)
+      var idir = itemFolder("inv", body.id, "", false);
+      if (idir) idir.setTrashed(true);
+      PROPS.deleteProperty("inv_folder_" + Number(body.id));
+      return { ok: true };
     case "taskFiles": var tdir = itemFolder("task", body.id, String(body.folder || ""), false); return { files: folderFiles(tdir), url: tdir ? tdir.getUrl() : null };
     case "taskUpload": return folderUpload("task", body.id, String(body.folder || ""), String(body.name || "file"), String(body.mime || ""), String(body.base64 || ""));
     case "briefFiles": return { files: folderFiles(briefFolder(body.id, "", false)) };
