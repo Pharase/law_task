@@ -51,6 +51,7 @@
         <div class="row tools">
           <button class="small">บันทึก · Save</button>
           <button type="button" class="small secondary" id="cancelBtn">ยกเลิก</button>
+          <button type="button" class="small danger" id="delBtn" title="ลบรายการ" aria-label="ลบรายการ" style="margin-left:auto" hidden>🗑️</button>
         </div>
         <p id="formMsg" class="error upload-msg" role="alert"></p>
       </form>
@@ -300,6 +301,7 @@
       }
       pickers.forEach((sync) => sync());
       showType();
+      $("delBtn").hidden = !inv; // only when editing an existing invoice
       f.hidden = false;
       f.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -307,6 +309,14 @@
     $("q").oninput = render;
     $("addBtn").onclick = () => openInvForm(null);
     $("cancelBtn").onclick = () => { $("invForm").hidden = true; };
+    $("delBtn").onclick = async (e) => {
+      const f = $("invForm"), btn = e.currentTarget, id = f.elements.id.value;
+      if (!id || !confirm(`ลบรายการเบิก "${f.subject.value}" ของ ${f.building.value} ?\nลบแล้วกู้คืนไม่ได้`)) return;
+      btn.disabled = true;
+      try { data = await api("deleteInvoice", { id }); render(); f.hidden = true; }
+      catch (err) { $("formMsg").textContent = err.message; }
+      btn.disabled = false;
+    };
     $("invForm").onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target, btn = e.submitter;

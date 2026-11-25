@@ -145,6 +145,13 @@ export async function adminInvoiceActions(action: string, body: any, me: Me): Pr
       return { ...await withNewFiles(me, await loadInvoices()), savedId: id, noticeError: noticeError && "บันทึกแล้ว แต่ส่ง LINE ไม่ได้: " + noticeError };
     }
 
+    case "deleteInvoice": {
+      // the sheet row only; its Drive folder of files stays (restorable by hand)
+      const inv = await invoiceFor(me, body.id);
+      await sheet("deleteRows", { tab: "Invoices", key: "id", values: [String(inv.id)] });
+      return withNewFiles(me, await loadInvoices());
+    }
+
     case "deleteInvoiceFile": {
       const inv = await invoiceFor(me, body.id);
       const fileId = String(body.fileId ?? "");
